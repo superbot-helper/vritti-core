@@ -1,7 +1,7 @@
 import { sql } from '@vritti/api-sdk/drizzle-orm';
-import { foreignKey, index, pgPolicy, timestamp, unique, uuid } from '@vritti/api-sdk/drizzle-pg-core';
+import { boolean, foreignKey, index, pgPolicy, timestamp, unique, uuid } from '@vritti/api-sdk/drizzle-pg-core';
 import { commerceSchema } from './commerce-schema';
-import { partyBankAccounts, partyRelationships, partyTaxRegistrations } from './parties';
+import { partyBankAccounts, partyCommunications, partyRelationships, partyTaxRegistrations } from './parties';
 import { paymentTerms } from './payment-terms';
 import { suppliers } from './suppliers';
 import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
@@ -16,9 +16,17 @@ export const supplierSites = commerceSchema.table(
       .notNull()
       .references(() => suppliers.id, { onDelete: 'cascade' }),
     siteId: uuid('site_id').notNull(),
-    partyTaxRegistrationId: uuid('party_tax_registration_id').notNull(),
+    partyTaxRegistrationId: uuid('party_tax_registration_id'),
     partyBankAccountId: uuid('party_bank_account_id'),
     orderRelationshipId: uuid('order_relationship_id'),
+    orderEmailCommunicationId: uuid('order_email_communication_id').notNull(),
+    orderPhoneCommunicationId: uuid('order_phone_communication_id').notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    purchasingBlocked: boolean('purchasing_blocked').notNull().default(false),
+    paymentBlocked: boolean('payment_blocked').notNull().default(false),
+    isSupplierActive: boolean('is_supplier_active').notNull().default(true),
+    isSupplierPurchasingBlocked: boolean('is_supplier_purchasing_blocked').notNull().default(false),
+    isSupplierPaymentBlocked: boolean('is_supplier_payment_blocked').notNull().default(false),
     paymentTermId: uuid('payment_term_id')
       .notNull()
       .references(() => paymentTerms.id, { onDelete: 'restrict' }),
@@ -47,6 +55,16 @@ export const supplierSites = commerceSchema.table(
       foreignColumns: [partyRelationships.id],
       name: 'fk_supplier_sites_order_relationship',
     }).onDelete('set null'),
+    foreignKey({
+      columns: [table.orderEmailCommunicationId],
+      foreignColumns: [partyCommunications.id],
+      name: 'fk_supplier_sites_order_email',
+    }).onDelete('restrict'),
+    foreignKey({
+      columns: [table.orderPhoneCommunicationId],
+      foreignColumns: [partyCommunications.id],
+      name: 'fk_supplier_sites_order_phone',
+    }).onDelete('restrict'),
     orgIsolationPolicy(),
     pgPolicy('le_read', {
       for: 'select',

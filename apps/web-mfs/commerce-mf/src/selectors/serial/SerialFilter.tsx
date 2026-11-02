@@ -1,9 +1,10 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 
 export type SerialFilterParams = { quantId?: string };
 
-export type SerialFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'name' | 'params'> & {
+export type SerialFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'name' | 'params'> & {
   name?: string;
   params?: SerialFilterParams;
 };

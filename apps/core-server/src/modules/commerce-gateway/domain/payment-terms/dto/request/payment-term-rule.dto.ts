@@ -3,7 +3,7 @@ import { IsInt, IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class PaymentTermRuleDto {
   @ApiProperty({ description: 'Share of the invoice this rule makes due', example: 100 })
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Share allows up to 2 decimal places' })
   @Min(0.01)
   @Max(100)
   percent: number;
@@ -15,7 +15,7 @@ export class PaymentTermRuleDto {
 
   @ApiPropertyOptional({ description: 'Early-payment discount percentage', example: 2, nullable: true })
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'Discount allows up to 2 decimal places' })
   @Min(0.01)
   @Max(99.99)
   discountPercent?: number | null;

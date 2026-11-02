@@ -20,4 +20,10 @@ export class AddSupplierSiteDto {
   @IsOptional()
   @IsUUID('7')
   orderRelationshipId?: string | null;
+
+  @IsUUID('7')
+  orderEmailCommunicationId: string;
+
+  @IsUUID('7')
+  orderPhoneCommunicationId: string;
 }

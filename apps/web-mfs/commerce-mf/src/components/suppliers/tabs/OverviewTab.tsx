@@ -23,8 +23,6 @@ export const OverviewTab = ({ supplier, enrollPermission, onEnroll }: OverviewTa
           <DetailField label="Company" type="string" value={supplier.partyName} />
           <DetailField label="Code" type="string" mono value={supplier.code} />
           <DetailField label="Currency" type="string" mono value={supplier.currencyCode} />
-          <DetailField label="Order Email" type="string" value={supplier.orderEmail} />
-          <DetailField label="Order Phone" type="string" value={supplier.orderPhone} />
           <DetailField
             label="Status"
             type="string"
@@ -53,6 +51,8 @@ export const OverviewTab = ({ supplier, enrollPermission, onEnroll }: OverviewTa
             <DetailField label="Payment Term" type="string" value={supplier.paymentTermName} />
             <DetailField label="Tax Registration" type="string" mono value={supplier.registrationNumber} />
             <DetailField label="Bank Account" type="string" value={supplier.bankAccountName} />
+            <DetailField label="Order Email" type="string" value={supplier.orderEmail} />
+            <DetailField label="Order Phone" type="string" value={supplier.orderPhone} />
             <DetailField label="Enrolled" type="dateTime" value={supplier.enrolledAt} />
           </div>
         ) : (

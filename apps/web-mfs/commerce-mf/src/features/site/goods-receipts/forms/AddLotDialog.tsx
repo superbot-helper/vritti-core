@@ -4,7 +4,7 @@ import { CurrencyField } from '@vritti/quantum-ui/CurrencyField';
 import { DatePicker } from '@vritti/quantum-ui/DatePicker';
 import { Dialog, DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form } from '@vritti/quantum-ui/Form';
-import { useBUCurrency, useDialog } from '@vritti/quantum-ui/hooks';
+import { useDialog, useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
@@ -32,7 +32,7 @@ const AddLotForm = ({
     defaultValues: { lotNumber: '', mrp: undefined },
   });
   const mutation = useAddGoodsReceiptLot(goodsReceiptId, itemId, { onSuccess });
-  const buCurrencyCode = useBUCurrency();
+  const workspaceCurrency = useWorkspaceCurrency();
 
   return (
     <Form
@@ -56,7 +56,7 @@ const AddLotForm = ({
           permission={SITE_INVENTORY_ITEMS.mrp.edit}
           label="MRP"
           description="Printed MRP per primary unit for this batch"
-          currencyCode={buCurrencyCode ?? undefined}
+          currencyCode={workspaceCurrency ?? undefined}
         />
       )}
 

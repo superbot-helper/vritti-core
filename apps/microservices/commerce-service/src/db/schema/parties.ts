@@ -258,6 +258,7 @@ export const partyCommunications = commerceSchema.table(
   (table) => [
     uniqueIndex('uq_party_communications_primary').on(table.partyId, table.channel).where(sql`is_primary = true`),
     unique('uq_party_communications_party_channel_value').on(table.partyId, table.channel, table.value),
+    unique('uq_party_communications_party_id').on(table.partyId, table.id),
     index('idx_party_communications_party').on(table.partyId),
     check('party_communications_primary_channel_chk', sql`is_primary = false OR channel IN ('EMAIL', 'PHONE')`),
     index('idx_party_communications_lookup').on(table.organizationId, table.channel, sql`lower(${table.value})`),
@@ -327,6 +328,7 @@ export const partyFunctions = commerceSchema.table(
     function: partyFunctionTypeEnum('function').notNull(),
     partyAddressId: uuid('party_address_id'),
     partyRelationshipId: uuid('party_relationship_id'),
+    partyCommunicationId: uuid('party_communication_id'),
     isPrimary: boolean('is_primary').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -338,7 +340,7 @@ export const partyFunctions = commerceSchema.table(
   (table) => [
     check(
       'party_functions_target_chk',
-      sql`("function" IN ('REGISTERED','BILLING','SHIPPING','ORDERING') AND party_address_id IS NOT NULL AND party_relationship_id IS NULL) OR ("function" IN ('ORDER','ACCOUNTS','LOGISTICS','ESCALATION') AND party_relationship_id IS NOT NULL AND party_address_id IS NULL)`,
+      sql`("function" IN ('REGISTERED','BILLING','SHIPPING','ORDERING') AND party_address_id IS NOT NULL AND party_relationship_id IS NULL AND party_communication_id IS NULL) OR ("function" IN ('ORDER','ACCOUNTS','LOGISTICS','ESCALATION') AND party_relationship_id IS NOT NULL AND party_address_id IS NULL AND party_communication_id IS NULL) OR ("function" = 'ORDERING' AND party_communication_id IS NOT NULL AND party_address_id IS NULL AND party_relationship_id IS NULL)`,
     ),
     foreignKey({
       columns: [table.partyId, table.partyAddressId],
@@ -350,9 +352,17 @@ export const partyFunctions = commerceSchema.table(
       foreignColumns: [partyRelationships.parentPartyId, partyRelationships.id],
       name: 'fk_party_functions_relationship',
     }).onDelete('cascade'),
-    uniqueIndex('uq_party_functions_primary').on(table.partyId, table.function).where(sql`is_primary = true`),
+    foreignKey({
+      columns: [table.partyId, table.partyCommunicationId],
+      foreignColumns: [partyCommunications.partyId, partyCommunications.id],
+      name: 'fk_party_functions_communication',
+    }).onDelete('cascade'),
+    uniqueIndex('uq_party_functions_primary')
+      .on(table.partyId, table.function)
+      .where(sql`is_primary = true AND party_communication_id IS NULL`),
     unique('uq_party_functions_relationship_function').on(table.partyRelationshipId, table.function),
     unique('uq_party_functions_address_function').on(table.partyAddressId, table.function),
+    unique('uq_party_functions_communication_function').on(table.partyCommunicationId, table.function),
     index('idx_party_functions_party_function').on(table.partyId, table.function),
     orgIsolationPolicy(),
   ],

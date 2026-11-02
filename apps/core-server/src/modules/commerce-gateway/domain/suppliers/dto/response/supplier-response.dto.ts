@@ -10,8 +10,8 @@ export class SupplierResponseDto {
   @ApiProperty({ description: 'Display name of the linked party', example: 'Acme Foods Pvt Ltd' })
   partyName: string;
 
-  @ApiPropertyOptional({ description: 'Type of the linked party (COMPANY or PERSON)', nullable: true })
-  partyType?: string | null;
+  @ApiPropertyOptional({ description: 'Type of the linked party (COMPANY or PERSON); on the detail response' })
+  partyType?: string;
 
   @ApiProperty({ description: 'Unique supplier code', example: 'SUP-001' })
   code: string;
@@ -26,11 +26,11 @@ export class SupplierResponseDto {
   })
   currencyCodes: string[];
 
-  @ApiPropertyOptional({ description: 'Payment term new site enrollments start from', nullable: true })
-  defaultPaymentTermId: string | null;
+  @ApiProperty({ description: 'Payment term new site enrollments start from' })
+  defaultPaymentTermId: string;
 
-  @ApiPropertyOptional({ description: 'Name of the default payment term', nullable: true })
-  defaultPaymentTermName?: string | null;
+  @ApiProperty({ description: 'Name of the default payment term' })
+  defaultPaymentTermName: string;
 
   @ApiPropertyOptional({ description: 'Additional notes', nullable: true })
   notes: string | null;

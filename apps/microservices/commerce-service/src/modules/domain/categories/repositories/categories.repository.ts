@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { asc, eq, getColumns, isNull, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, eq, getColumns, isNull, ne, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { ConflictException } from '@vritti/api-sdk/exceptions';
 import { type FindForSelectConfig, type SelectQueryResult } from '@vritti/api-sdk/select';
 import { type Category, categories, inventoryItems, offerings, taxClasses } from '@/db/schema';
 
@@ -15,6 +16,28 @@ export interface CategoryWithCounts extends Category {
 export class CategoriesDomainRepository extends PrimaryBaseRepository<typeof categories> {
   constructor(database: PrimaryDatabaseService) {
     super(database, categories);
+  }
+
+  // Throws when a sibling under the same parent already uses the path label; root siblings share a null parent
+  async assertSiblingLabelFree(
+    parentId: string | null,
+    pathLabel: string,
+    name: string,
+    excludeId?: string,
+  ): Promise<void> {
+    const taken = await this.exists(
+      and(
+        parentId ? eq(categories.parentId, parentId) : isNull(categories.parentId),
+        eq(categories.pathLabel, pathLabel),
+        excludeId ? ne(categories.id, excludeId) : undefined,
+      ) as SQL,
+    );
+    if (taken) {
+      throw new ConflictException({
+        label: 'Duplicate Sibling',
+        detail: `A sibling category with the name "${name}" already exists. Pick a different name.`,
+      });
+    }
   }
 
   // Returns paginated category options for the select component

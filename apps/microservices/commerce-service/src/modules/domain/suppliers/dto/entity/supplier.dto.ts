@@ -4,10 +4,10 @@ import type {
   PartyLicenseType,
   PartyTaxRegistration,
   PartyType,
-  Supplier,
   SupplierItem,
   TaxRegistrationType,
 } from '@/db/schema';
+import type { SupplierDetailRow, SupplierWithParty } from '../../repositories/suppliers.repository';
 
 export type SiteTermsRow = {
   itemSiteId: string | null;
@@ -262,35 +262,28 @@ export class SupplierDto {
   code: string;
   currencyCode: string;
   currencyCodes: string[];
-  defaultPaymentTermId: string | null;
-  defaultPaymentTermName: string | null;
+  defaultPaymentTermId: string;
+  defaultPaymentTermName: string;
   notes: string | null;
   purchasingBlocked: boolean;
   paymentBlocked: boolean;
-  orderEmail: string | null;
-  orderPhone: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 
-  static from(
-    entity: Supplier & { defaultPaymentTermName?: string | null },
-    partyName: string | null = null,
-  ): SupplierDto {
+  static from(entity: SupplierWithParty): SupplierDto {
     const dto = new SupplierDto();
     dto.id = entity.id;
     dto.partyId = entity.partyId;
-    dto.partyName = partyName ?? '';
+    dto.partyName = entity.partyName;
     dto.code = entity.code;
     dto.currencyCode = entity.currencyCode;
     dto.currencyCodes = entity.currencyCodes;
-    dto.defaultPaymentTermId = entity.defaultPaymentTermId ?? null;
-    dto.defaultPaymentTermName = entity.defaultPaymentTermName ?? null;
+    dto.defaultPaymentTermId = entity.defaultPaymentTermId;
+    dto.defaultPaymentTermName = entity.defaultPaymentTermName;
     dto.notes = entity.notes ?? null;
     dto.purchasingBlocked = entity.purchasingBlocked;
     dto.paymentBlocked = entity.paymentBlocked;
-    dto.orderEmail = entity.orderEmail ?? null;
-    dto.orderPhone = entity.orderPhone ?? null;
     dto.isActive = entity.isActive;
     dto.createdAt = entity.createdAt.toISOString();
     dto.updatedAt = entity.updatedAt.toISOString();
@@ -299,30 +292,20 @@ export class SupplierDto {
 }
 
 export class SupplierDetailDto extends SupplierDto {
-  partyType: PartyType | null;
+  partyType: PartyType;
   registrations: SupplierRegistrationDto[];
   licenses: SupplierLicenseDto[];
   enrolledSiteCount: number;
   itemCount: number;
 
-  static fromDetail(
-    entity: Supplier & { defaultPaymentTermName?: string | null },
-    partyName: string | null = null,
-    detail?: {
-      partyType?: PartyType | null;
-      registrations: PartyTaxRegistration[];
-      licenses: PartyLicense[];
-      enrolledSiteCount: number;
-      itemCount: number;
-    },
-  ): SupplierDetailDto {
+  static fromDetail(entity: SupplierDetailRow): SupplierDetailDto {
     const dto = new SupplierDetailDto();
-    Object.assign(dto, SupplierDto.from(entity, partyName));
-    dto.partyType = detail?.partyType ?? null;
-    dto.registrations = (detail?.registrations ?? []).map(SupplierRegistrationDto.from);
-    dto.licenses = (detail?.licenses ?? []).map(SupplierLicenseDto.from);
-    dto.enrolledSiteCount = detail?.enrolledSiteCount ?? 0;
-    dto.itemCount = detail?.itemCount ?? 0;
+    Object.assign(dto, SupplierDto.from(entity));
+    dto.partyType = entity.partyType;
+    dto.registrations = entity.registrations.map(SupplierRegistrationDto.from);
+    dto.licenses = entity.licenses.map(SupplierLicenseDto.from);
+    dto.enrolledSiteCount = entity.enrolledSiteCount;
+    dto.itemCount = entity.itemCount;
     return dto;
   }
 }

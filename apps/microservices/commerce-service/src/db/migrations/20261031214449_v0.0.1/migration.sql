@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_supplier_item_prices_site_open" ON "commerce"."supplier_item_prices" ("supplier_item_id","site_id") WHERE "valid_to" IS NULL;

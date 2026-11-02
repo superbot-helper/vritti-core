@@ -10,13 +10,15 @@ interface FunctionsEditorProps {
   label?: string;
   description?: string;
   options: PartyFunctionOption[];
+  // Off for functions with no primary among the party's values, which shows no star
+  allowPrimary?: boolean;
   value?: PartyFunctionAssignment[];
   onChange?: (value: PartyFunctionAssignment[]) => void;
   error?: string;
 }
 
 export const FunctionsEditor = forwardRef<HTMLDivElement, FunctionsEditorProps>(
-  ({ label, description, options, value, onChange, error }, ref) => {
+  ({ label, description, options, allowPrimary = true, value, onChange, error }, ref) => {
     const assigned = value ?? [];
 
     const setAssigned = (fn: string, next: boolean) => {
@@ -55,7 +57,7 @@ export const FunctionsEditor = forwardRef<HTMLDivElement, FunctionsEditorProps>(
                   checked={checked}
                   onCheckedChange={(next) => setAssigned(option.value, next === true)}
                 />
-                {checked && (
+                {checked && allowPrimary && (
                   <button
                     type="button"
                     aria-label={isPrimary ? `Unset ${option.label} as primary` : `Set ${option.label} as primary`}

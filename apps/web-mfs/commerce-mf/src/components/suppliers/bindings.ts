@@ -32,6 +32,8 @@ export interface SupplierSiteBinding {
   useSupplierRef: UseSupplierRef;
   // The item of a site-item page — its route names the segment differently per workspace
   useItemId: () => string;
+  // A site item's path from the site view (route-relative)
+  siteItemPath: (itemSlug: string) => string;
   useSupplierAtSite: UseSupplierAtSite;
   useEnroll: UseEnroll;
   useUpdateEnrollment: UseUpdateEnrollment;

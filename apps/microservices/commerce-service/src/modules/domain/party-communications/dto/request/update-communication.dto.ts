@@ -1,3 +1,4 @@
+import { PartyFunctionAssignmentInput } from '@domain/party-functions/dto/request/party-function-assignment-input.dto';
 import { Trim } from '@vritti/api-sdk/decorators';
 import { Type } from 'class-transformer';
 import {
@@ -36,4 +37,10 @@ export class UpdateCommunicationDto {
   @ValidateNested({ each: true })
   @Type(() => PartyCommunicationAppInput)
   apps?: PartyCommunicationAppInput[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PartyFunctionAssignmentInput)
+  functions?: PartyFunctionAssignmentInput[];
 }

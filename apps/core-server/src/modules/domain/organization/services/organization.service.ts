@@ -126,6 +126,7 @@ export class OrganizationDomainService {
       name: dto.name,
       subdomain: dto.subdomain,
       size: dto.size,
+      defaultCurrencyCode: dto.defaultCurrencyCode,
       plan: dto.plan,
       logoLightUrl: dto.logoLightUrl,
       logoDarkUrl: dto.logoDarkUrl,
@@ -145,6 +146,7 @@ export class OrganizationDomainService {
     await this.organizationRepository.update(id, {
       ...(dto.name && { name: dto.name }),
       ...(dto.size && { size: dto.size as OrgSize }),
+      ...(dto.defaultCurrencyCode && { defaultCurrencyCode: dto.defaultCurrencyCode }),
       ...(dto.logoLightUrl && { logoLightUrl: dto.logoLightUrl }),
       ...(dto.logoDarkUrl && { logoDarkUrl: dto.logoDarkUrl }),
       // Checked against undefined, not truthiness: `false` is the whole point of this field

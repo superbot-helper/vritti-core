@@ -1,10 +1,16 @@
 import { LE_INVENTORY_ITEMS } from '@vritti/commerce-permissions/inventory-items';
 import { Empty } from '@vritti/quantum-ui/Empty';
-import { Select } from '@vritti/quantum-ui/Select';
+import { SelectFilter } from '@vritti/quantum-ui/Select';
 import { Store } from 'lucide-react';
 import type React from 'react';
+import { Suspense } from 'react';
+import { ContextFilterSkeleton } from '@/components/ContextFilterSkeleton';
 import { ItemSupplierPricesGraph } from '@/components/inventory-items/ItemSupplierPricesGraph';
-import { useInventoryItemPriceGraph, useSaveInventoryItemPriceGraph } from '@/hooks/legal-entity/inventory-items';
+import {
+  useInventoryItemPriceGraph,
+  useInventoryItemPriceGraphSiteId,
+  useSaveInventoryItemPriceGraph,
+} from '@/hooks/legal-entity/inventory-items';
 
 interface PriceGraphTabProps {
   inventoryItemId: string;
@@ -25,21 +31,15 @@ export const PriceGraphTab: React.FC<PriceGraphTabProps> = ({ inventoryItemId })
       optionsEndpointBase={siteId ? `commerce-api/le/inventory-items/${inventoryItemId}/prices/${siteId}` : undefined}
       mrpPermission={LE_INVENTORY_ITEMS.mrp.view}
       filters={
-        <div className="w-64">
-          <Select
-            placeholder="Select site"
-            searchable
-            clearable={false}
-            optionsEndpoint={`commerce-api/le/inventory-items/${inventoryItemId}/prices/sites`}
-            fieldKeys={{ valueKey: 'id', labelKey: 'name', descriptionKey: 'code' }}
-            value={siteId}
-            onChange={(value: unknown) => {
-              if (!graph || !value) return;
+        <Suspense fallback={<ContextFilterSkeleton labelWidth="w-8" valueWidth="w-24" />}>
+          <PriceGraphSiteFilter
+            inventoryItemId={inventoryItemId}
+            onChange={(next) => {
               // Suppliers and MRPs belong to a site, so a new site starts from its own defaults
-              save.mutate({ ...graph.selection, siteId: String(value), supplierIds: [], mrpIds: [] });
+              if (graph) save.mutate({ ...graph.selection, siteId: next, supplierIds: [], mrpIds: [] });
             }}
           />
-        </div>
+        </Suspense>
       }
       emptyState={
         <Empty
@@ -52,6 +52,32 @@ export const PriceGraphTab: React.FC<PriceGraphTabProps> = ({ inventoryItemId })
           }
         />
       }
+    />
+  );
+};
+
+interface PriceGraphSiteFilterProps {
+  inventoryItemId: string;
+  onChange: (siteId: string) => void;
+}
+
+// The site the graph is drawn at. Suspends until the graph loads so it always holds a site, and hides while no site has
+// a price for the item, when there is nothing to pick between.
+const PriceGraphSiteFilter: React.FC<PriceGraphSiteFilterProps> = ({ inventoryItemId, onChange }) => {
+  const { data: siteId } = useInventoryItemPriceGraphSiteId(inventoryItemId);
+  if (!siteId) return null;
+
+  return (
+    <SelectFilter
+      name="siteId"
+      label="Site"
+      placeholder="Select site"
+      mode="context"
+      clearable={false}
+      optionsEndpoint={`commerce-api/le/inventory-items/${inventoryItemId}/prices/sites`}
+      fieldKeys={{ valueKey: 'id', labelKey: 'name', descriptionKey: 'code' }}
+      value={siteId}
+      onChange={(result) => onChange(String(result.value))}
     />
   );
 };

@@ -1,9 +1,10 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 
 export type LotFilterParams = { inventoryItemId?: string };
 
-export type LotFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'name' | 'params'> & {
+export type LotFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'name' | 'params'> & {
   name?: string;
   params?: LotFilterParams;
 };

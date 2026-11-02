@@ -6,5 +6,5 @@ export class PaymentTermsSelectQueryDto extends SelectOptionsQueryDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  includeAll?: boolean;
+  allowUnpublished?: boolean;
 }

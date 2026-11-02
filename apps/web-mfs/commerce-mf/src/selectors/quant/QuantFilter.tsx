@@ -1,7 +1,8 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 
-export type QuantFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'name'> & { name?: string };
+export type QuantFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'name'> & { name?: string };
 
 // Pre-configured SelectFilter for quant filtering; pass params={{ inventoryItemId }} to scope to a specific item
 export const QuantFilter = Object.assign(

@@ -20,7 +20,7 @@ import { SitesTab } from './tabs/SitesTab';
 // `…/suppliers/<supplier>/quotations/<number~id>` — a supplier's quotation: its lines and the sites it is posted to
 export const SupplierQuotationPage = () => {
   const { id: supplierId } = useSlugParams('supplierSlug');
-  const { id: quotationId } = useSlugParams('subDetail');
+  const { id: quotationId } = useSlugParams('quotationId');
   const navigate = useNavigate();
   const { data: supplier } = useSupplier(supplierId);
   const { data: quotation } = useSupplierQuotation(supplierId, quotationId);

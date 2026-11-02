@@ -66,6 +66,16 @@ export function useInventoryItemPriceGraph(inventoryItemId: string) {
   });
 }
 
+// The site the price graph is saved on, from the same cached query — suspends until it loads, so a site filter never
+// renders without its value; null when no site has a price for the item
+export function useInventoryItemPriceGraphSiteId(inventoryItemId: string) {
+  return useSuspenseQuery<InventoryItemPriceGraph, AxiosError, string | null>({
+    queryKey: LE_INVENTORY_ITEM_PRICE_GRAPH_KEY(inventoryItemId),
+    queryFn: () => getLeInventoryItemPriceGraph(inventoryItemId),
+    select: (graph) => graph.selection.siteId,
+  });
+}
+
 // Saves a new graph selection; the controls take it at once, then the graph refetches
 export function useSaveInventoryItemPriceGraph(inventoryItemId: string) {
   const queryClient = useQueryClient();
@@ -87,5 +97,19 @@ export function useInventoryItemPricesTable(inventoryItemId: string, context: Pr
     queryFn: () => getLeInventoryItemPricesTable(inventoryItemId, context),
     placeholderData: keepPreviousData,
     enabled: available && !!inventoryItemId,
+  });
+}
+
+// The prices table's site and the sites it can switch to, from the same cached query — suspends until it loads, so the
+// site filter never renders without its value; siteId is null when no site has a price for the item
+export function useInventoryItemPricesTableSites(inventoryItemId: string, context: PricesTableContext) {
+  return useSuspenseQuery<
+    ItemSupplierPriceComparisonTableResponse,
+    AxiosError,
+    Pick<ItemSupplierPriceComparisonTableResponse, 'siteId' | 'siteIds'>
+  >({
+    queryKey: [...LE_INVENTORY_ITEM_PRICES_TABLE_KEY(inventoryItemId), context.site ?? '', context.asOf],
+    queryFn: () => getLeInventoryItemPricesTable(inventoryItemId, context),
+    select: ({ siteId, siteIds }) => ({ siteId, siteIds }),
   });
 }

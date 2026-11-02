@@ -4,7 +4,7 @@ import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
 
 import { deletePaymentTermRule } from '@/services/organization/payment-terms.service';
-import { PAYMENT_TERM_KEY, PAYMENT_TERMS_TABLE_KEY } from './keys';
+import { PAYMENT_TERM_KEY } from './keys';
 
 export function useDeletePaymentTermRule(
   options?: Omit<
@@ -18,7 +18,6 @@ export function useDeletePaymentTermRule(
     mutationFn: deletePaymentTermRule,
     onSuccess: (...args) => {
       const [, vars] = args;
-      queryClient.invalidateQueries({ queryKey: PAYMENT_TERMS_TABLE_KEY });
       queryClient.invalidateQueries({ queryKey: PAYMENT_TERM_KEY(vars.paymentTermId) });
       options?.onSuccess?.(...args);
     },

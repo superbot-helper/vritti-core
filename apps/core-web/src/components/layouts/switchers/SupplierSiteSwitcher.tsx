@@ -1,11 +1,12 @@
 import { Button } from '@vritti/quantum-ui/Button';
 import { Separator } from '@vritti/quantum-ui/Separator';
+import { buildSlug } from '@vritti/quantum-ui/slug';
 import { ChevronsUpDown, Store } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { SupplierSiteSelector } from '@/utils/RemoteSelectors';
 
 interface SupplierSiteSwitcherProps {
-  // The bare site id breadcrumb segment of an LE supplier site view
+  // The site of an LE supplier site view
   siteId: string;
   // The supplier whose enrolled sites are offered
   supplierId: string;
@@ -58,7 +59,7 @@ export const SupplierSiteSwitcher = ({ siteId, supplierId, basePath, fallbackLab
         // Skip the on-mount initial-resolve fire (same site) — only navigate on a real switch
         if (option && String(option.value) !== siteId) {
           // Lands on the site view rather than an item below it: the item may not be set up at the next site
-          navigate(`${basePath}/${String(option.value)}`);
+          navigate(`${basePath}/sites/${buildSlug(String(option.label), String(option.value))}`);
         }
       }}
     />

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, desc, eq, getColumns, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, desc, eq, exists, getColumns, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
 import {
   inventoryItemMrps,
   inventoryItems,
@@ -58,6 +58,36 @@ export class SupplierQuotationsDomainRepository extends PrimaryBaseRepository<ty
       limit: options.limit,
       offset: options.offset,
     });
+  }
+
+  // Loads a supplier's quotation only when it is posted to the site
+  async findPostedToSite(
+    supplierId: string,
+    quotationId: string,
+    siteId: string,
+  ): Promise<SupplierQuotation | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(supplierQuotations)
+      .where(
+        and(
+          eq(supplierQuotations.id, quotationId),
+          eq(supplierQuotations.supplierId, supplierId),
+          exists(
+            this.db
+              .select({ one: sql`1` })
+              .from(supplierQuotationSites)
+              .where(
+                and(
+                  eq(supplierQuotationSites.quotationId, supplierQuotations.id),
+                  eq(supplierQuotationSites.siteId, siteId),
+                ),
+              ),
+          ),
+        ),
+      )
+      .limit(1);
+    return row as SupplierQuotation | undefined;
   }
 
   async findByNumber(supplierId: string, quotationNumber: string): Promise<SupplierQuotation | undefined> {

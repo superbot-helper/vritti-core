@@ -1,9 +1,19 @@
 import { PartyFunctionsDomainService } from '@domain/party-functions/services/party-functions.service';
 import { Injectable, Logger } from '@nestjs/common';
-import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
-import _ from '@vritti/api-sdk/lodash';
+import { type FieldMap, FilterOperators, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
+import { and, eq, isNotNull, isNull } from '@vritti/api-sdk/drizzle-orm';
+import { BadRequestException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
-import { PartyFunctionTypeValues, PaymentTermStatusValues } from '@/db/schema';
+import {
+  PartyCommunicationChannelValues,
+  PartyFunctionTypeValues,
+  parties,
+  paymentTerms,
+  supplierSites,
+  suppliers,
+} from '@/db/schema';
+import { SiteEnrollmentStatusValues, SiteSupplierListRowDto } from '../dto/entity/site-supplier-list-row.dto';
+import { SupplierAtSiteDto } from '../dto/entity/supplier-at-site.dto';
 import { SupplierSiteDto } from '../dto/entity/supplier-site.dto';
 import { SupplierSitesDomainRepository } from '../repositories/supplier-sites.repository';
 
@@ -12,16 +22,64 @@ export interface EnrollmentPicks {
   partyTaxRegistrationId?: string;
   partyBankAccountId?: string | null;
   orderRelationshipId?: string | null;
+  orderEmailCommunicationId?: string;
+  orderPhoneCommunicationId?: string;
 }
 
 @Injectable()
 export class SupplierSitesDomainService {
   private readonly logger = new Logger(SupplierSitesDomainService.name);
 
+  private static readonly SEARCH_FIELD_MAP: FieldMap = {
+    partyName: { column: parties.displayName, type: 'string' },
+    code: { column: suppliers.code, type: 'string' },
+  };
+
+  private static readonly FILTER_FIELD_MAP: FieldMap = {
+    currencyCode: { column: suppliers.currencyCode, type: 'string' },
+    purchasingBlocked: { column: suppliers.purchasingBlocked, type: 'boolean' },
+    paymentTermName: { column: paymentTerms.name, type: 'string' },
+    enrollmentStatus: {
+      type: 'string',
+      expression: (value, operator) => {
+        const enrolled = (value === SiteEnrollmentStatusValues.ENROLLED) !== (operator === FilterOperators.NOT_EQUALS);
+        return enrolled ? isNotNull(supplierSites.id) : isNull(supplierSites.id);
+      },
+    },
+  };
+
   constructor(
     private readonly repository: SupplierSitesDomainRepository,
     private readonly functionsService: PartyFunctionsDomainService,
   ) {}
+
+  // Returns every active supplier of the legal entity with the site's enrollment status, for the site's suppliers table
+  async findForSiteTable(
+    legalEntityId: string,
+    siteId: string,
+    state: TableViewState,
+  ): Promise<{ result: SiteSupplierListRowDto[]; count: number }> {
+    const { limit = 20, offset = 0 } = state.pagination;
+    const { result, count } = await this.repository.findForSiteList(legalEntityId, siteId, {
+      where: and(
+        eq(suppliers.isActive, true),
+        FilterProcessor.buildWhere(state.filters, SupplierSitesDomainService.FILTER_FIELD_MAP),
+        FilterProcessor.buildSearch(state.search, SupplierSitesDomainService.SEARCH_FIELD_MAP),
+      ),
+      orderBy: FilterProcessor.buildOrderBy(state.sort, {
+        ...SupplierSitesDomainService.SEARCH_FIELD_MAP,
+        ...SupplierSitesDomainService.FILTER_FIELD_MAP,
+      }),
+      limit,
+      offset,
+    });
+    return { result: result.map(SiteSupplierListRowDto.from), count };
+  }
+
+  // Returns a supplier as one site sees it: commercial identity plus that site's enrollment, enrolled or not
+  async findAtSite(legalEntityId: string, siteId: string, supplierId: string): Promise<SupplierAtSiteDto> {
+    return SupplierAtSiteDto.from(await this.repository.findAtSiteOrThrow(legalEntityId, siteId, supplierId));
+  }
 
   // Returns every site enrollment of a supplier; the gateway merges them into the legal entity's site list
   async findAllForSupplier(supplierId: string): Promise<SupplierSiteDto[]> {
@@ -34,7 +92,12 @@ export class SupplierSitesDomainService {
   async enroll(
     supplierId: string,
     siteId: string,
-    picks: EnrollmentPicks & { paymentTermId: string; partyTaxRegistrationId: string },
+    picks: EnrollmentPicks & {
+      paymentTermId: string;
+      partyTaxRegistrationId: string;
+      orderEmailCommunicationId: string;
+      orderPhoneCommunicationId: string;
+    },
   ): Promise<CreateResponseDto<SupplierSiteDto>> {
     const supplier = await this.repository.findSupplier(supplierId);
     if (!supplier) throw new NotFoundException('Supplier not found.');
@@ -52,24 +115,35 @@ export class SupplierSitesDomainService {
     if (orderRelationshipId) {
       await this.assertOrderRelationshipBelongsToParty(orderRelationshipId, supplier.partyId);
     }
+    await this.repository.assertOrderCommunicationUsable(
+      picks.orderEmailCommunicationId,
+      supplier.partyId,
+      PartyCommunicationChannelValues.EMAIL,
+    );
+    await this.repository.assertOrderCommunicationUsable(
+      picks.orderPhoneCommunicationId,
+      supplier.partyId,
+      PartyCommunicationChannelValues.PHONE,
+    );
 
-    try {
-      const entity = await this.repository.create({
-        supplierId,
-        siteId,
-        paymentTermId: picks.paymentTermId,
-        partyTaxRegistrationId,
-        partyBankAccountId,
-        orderRelationshipId,
-      });
-      this.logger.log(`Enrolled supplier ${supplierId} for site ${siteId}`);
-      return { success: true, message: 'Supplier enrolled for this site.', data: SupplierSiteDto.from(entity) };
-    } catch (error: unknown) {
-      if (_.get(error, 'code') === '23505') {
-        throw new ConflictException('Supplier is already enrolled for this site.');
-      }
-      throw error;
-    }
+    await this.repository.assertNotEnrolled(supplierId, siteId);
+    const entity = await this.repository.create({
+      supplierId,
+      siteId,
+      paymentTermId: picks.paymentTermId,
+      partyTaxRegistrationId,
+      partyBankAccountId,
+      orderRelationshipId,
+      orderEmailCommunicationId: picks.orderEmailCommunicationId,
+      orderPhoneCommunicationId: picks.orderPhoneCommunicationId,
+    });
+    const created = await this.repository.findByIdWithPicks(entity.id);
+    this.logger.log(`Enrolled supplier ${supplierId} for site ${siteId}`);
+    return {
+      success: true,
+      message: 'Supplier enrolled for this site.',
+      data: SupplierSiteDto.from(created ?? entity),
+    };
   }
 
   // Updates an enrollment's payment term, registration, bank and order-contact picks
@@ -88,6 +162,20 @@ export class SupplierSitesDomainService {
     }
     if (data.orderRelationshipId) {
       await this.assertOrderRelationshipBelongsToParty(data.orderRelationshipId, existing.partyId ?? '');
+    }
+    if (data.orderEmailCommunicationId) {
+      await this.repository.assertOrderCommunicationUsable(
+        data.orderEmailCommunicationId,
+        existing.partyId ?? '',
+        PartyCommunicationChannelValues.EMAIL,
+      );
+    }
+    if (data.orderPhoneCommunicationId) {
+      await this.repository.assertOrderCommunicationUsable(
+        data.orderPhoneCommunicationId,
+        existing.partyId ?? '',
+        PartyCommunicationChannelValues.PHONE,
+      );
     }
 
     if (Object.keys(data).length > 0) {
@@ -126,21 +214,23 @@ export class SupplierSitesDomainService {
 
   // Loads an enrollment by ID, throwing when it does not exist
   async findById(id: string): Promise<SupplierSiteDto> {
-    const row = await this.repository.findById(id);
+    const row = await this.repository.findByIdWithPicks(id);
     if (!row) throw new NotFoundException('Enrollment not found.');
     return SupplierSiteDto.from(row);
   }
 
-  // Rejects payment-term picks that do not exist or are inactive
+  // Rejects payment-term picks that do not exist or are still drafts
   private async assertPaymentTermUsable(paymentTermId: string): Promise<void> {
     const term = await this.repository.findPaymentTermById(paymentTermId);
-    if (!term || term.status !== PaymentTermStatusValues.ACTIVE) {
+    if (!term?.isPublished) {
       throw new BadRequestException({
         label: 'Invalid Payment Term',
         detail: term
-          ? 'The selected payment term is not active. Pick an active payment term.'
+          ? 'The selected payment term is a draft. Pick a published payment term.'
           : 'The selected payment term does not exist.',
-        errors: [{ field: 'paymentTermId', message: term ? 'Payment term is not active' : 'Payment term not found' }],
+        errors: [
+          { field: 'paymentTermId', message: term ? 'Payment term is not published' : 'Payment term not found' },
+        ],
       });
     }
   }

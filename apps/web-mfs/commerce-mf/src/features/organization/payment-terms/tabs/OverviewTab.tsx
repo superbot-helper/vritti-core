@@ -1,10 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@vritti/quantum-ui/Card';
 import { DetailField } from '@vritti/quantum-ui/DetailField';
-import { PAYMENT_TERM_BASELINE_LABELS, type PaymentTermData } from '@/schemas/payment-terms';
-import { PaymentTermStatusBadge } from '../PaymentTermStatusBadge';
+import { PAYMENT_TERM_BASELINE_LABELS, type PaymentTermDetailData } from '@/schemas/payment-terms';
+import { PaymentTermStatusBadge } from '../components/PaymentTermStatusBadge';
 
 interface OverviewTabProps {
-  paymentTerm: PaymentTermData;
+  paymentTerm: PaymentTermDetailData;
 }
 
 export const OverviewTab = ({ paymentTerm }: OverviewTabProps) => (
@@ -15,15 +15,13 @@ export const OverviewTab = ({ paymentTerm }: OverviewTabProps) => (
     <CardContent>
       <div className="grid grid-cols-2 gap-6">
         <DetailField label="Name" type="string" value={paymentTerm.name} />
-        <DetailField label="Code" type="string" mono value={paymentTerm.code} />
-        <DetailField label="Terms" type="string" value={paymentTerm.summary} />
+        <DetailField label="Baseline" type="string" value={PAYMENT_TERM_BASELINE_LABELS[paymentTerm.baseline]} />
         <DetailField
-          label="Due Days Count From"
+          label="Status"
           type="string"
-          value={PAYMENT_TERM_BASELINE_LABELS[paymentTerm.baseline]}
+          value={<PaymentTermStatusBadge isPublished={paymentTerm.isPublished} />}
         />
-        <DetailField label="Status" type="string" value={<PaymentTermStatusBadge status={paymentTerm.status} />} />
-        <DetailField label="Rules Total" type="string" value={`${paymentTerm.totalPercent}% of the invoice`} />
+        <DetailField label="Rules" type="number" value={paymentTerm.ruleCount} />
         <DetailField label="Created" type="dateTime" value={paymentTerm.createdAt} />
         <DetailField label="Updated" type="dateTime" value={paymentTerm.updatedAt} />
         <div className="col-span-2">

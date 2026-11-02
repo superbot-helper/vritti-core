@@ -1,11 +1,13 @@
 import { Empty } from '@vritti/quantum-ui/Empty';
+import { useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import { pluralize } from '@vritti/quantum-ui/pluralize';
-import { Select } from '@vritti/quantum-ui/Select';
-import { Skeleton } from '@vritti/quantum-ui/Skeleton';
+import { SelectFilter } from '@vritti/quantum-ui/Select';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { LineChart as LineChartIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
+import { PriceChartSkeleton } from '@/components/suppliers/PriceChartSkeleton';
 import { PriceCurrencyFilter } from '@/components/suppliers/PriceCurrencyFilter';
 import { PriceRangePicker } from '@/components/suppliers/PriceRangePicker';
 import { type PriceSeries, PriceSeriesChart } from '@/components/suppliers/PriceSeriesChart';
@@ -43,9 +45,11 @@ export const ItemSupplierPricesGraph: React.FC<ItemSupplierPricesGraphProps> = (
   mrpPermission,
 }) => {
   const { available: canSeeMrp } = usePermission(mrpPermission);
+  const today = isoTodayDate(useWorkspaceTimeZone(graph?.selection.siteId));
   const selection = useMemo<PriceGraphSelection>(
-    () => graph?.selection ?? { siteId: null, ...defaultPriceRange(), supplierIds: [], mrpIds: [], currency: null },
-    [graph],
+    () =>
+      graph?.selection ?? { siteId: null, ...defaultPriceRange(today), supplierIds: [], mrpIds: [], currency: null },
+    [graph, today],
   );
   const change = (next: Partial<PriceGraphSelection>) => onSelectionChange({ ...selection, ...next });
 
@@ -56,7 +60,7 @@ export const ItemSupplierPricesGraph: React.FC<ItemSupplierPricesGraphProps> = (
   const suppliers = useMemo<PriceSeries[]>(
     () =>
       (graph?.suppliers ?? [])
-        .map((supplier) => (currency ? inCurrency(supplier, currency) : supplier))
+        .map((supplier) => (currency ? inCurrency(supplier, currency, today) : supplier))
         .filter((supplier) => supplier.windows.length > 0)
         .map((supplier, _, all) => ({
           ...supplier,
@@ -68,7 +72,7 @@ export const ItemSupplierPricesGraph: React.FC<ItemSupplierPricesGraphProps> = (
               ? `${supplier.supplierName} (${supplier.quotedUomSymbol})`
               : supplier.supplierName,
         })),
-    [graph, currency],
+    [graph, currency, today],
   );
   // The suppliers drawn, which the picker shows whether they were picked or chosen by the server
   const drawnSupplierIds = useMemo(
@@ -97,44 +101,43 @@ export const ItemSupplierPricesGraph: React.FC<ItemSupplierPricesGraphProps> = (
             onChange={(next) => change({ currency: next })}
           />
           {optionsEndpointBase && supplierCount > 1 && (
-            <div className="w-56">
-              <Select
-                multiple
-                searchable
-                placeholder="Suppliers"
-                maxDisplayedItems={1}
-                optionsEndpoint={`${optionsEndpointBase}/suppliers`}
-                params={range}
-                fieldKeys={{ valueKey: 'id', labelKey: 'displayName', descriptionKey: 'code' }}
-                value={selection.supplierIds.length ? selection.supplierIds : drawnSupplierIds}
-                onChange={(values: unknown) =>
-                  change({
-                    supplierIds: (Array.isArray(values) ? values.map(String) : []).slice(0, MAX_CHARTED_SUPPLIERS),
-                  })
-                }
-              />
-            </div>
+            <SelectFilter
+              name="supplierIds"
+              label="Suppliers"
+              mode="context"
+              multiple
+              maxSelected={MAX_CHARTED_SUPPLIERS}
+              clearable={false}
+              optionsEndpoint={`${optionsEndpointBase}/suppliers`}
+              params={range}
+              fieldKeys={{ valueKey: 'id', labelKey: 'displayName', descriptionKey: 'code' }}
+              value={selection.supplierIds.length ? selection.supplierIds : drawnSupplierIds}
+              onChange={(result) =>
+                change({ supplierIds: Array.isArray(result?.value) ? result.value.map(String) : [] })
+              }
+            />
           )}
           {optionsEndpointBase && canSeeMrp && (
-            <div className="w-56">
-              <Select
-                multiple
-                placeholder="Any MRP"
-                maxDisplayedItems={1}
-                optionsEndpoint={`${optionsEndpointBase}/mrps`}
-                params={range}
-                fieldKeys={{ valueKey: 'id' }}
-                value={selection.mrpIds}
-                onChange={(values: unknown) => change({ mrpIds: Array.isArray(values) ? values.map(String) : [] })}
-              />
-            </div>
+            <SelectFilter
+              name="mrpIds"
+              label="MRP"
+              placeholder="Any"
+              mode="context"
+              clearable={false}
+              multiple
+              optionsEndpoint={`${optionsEndpointBase}/mrps`}
+              params={range}
+              fieldKeys={{ valueKey: 'id' }}
+              value={selection.mrpIds}
+              onChange={(result) => change({ mrpIds: Array.isArray(result?.value) ? result.value.map(String) : [] })}
+            />
           )}
           <PriceRangePicker value={range} onChange={(next) => change(next)} />
         </div>
       </div>
 
       {isLoading && !graph ? (
-        <Skeleton className="h-96 w-full" />
+        <PriceChartSkeleton />
       ) : supplierCount === 0 ? (
         emptyState
       ) : suppliers.length === 0 ? (
@@ -144,7 +147,13 @@ export const ItemSupplierPricesGraph: React.FC<ItemSupplierPricesGraphProps> = (
           description="None of the suppliers drawn has prices in this currency at these MRPs. Change the supplier, MRP or currency filter."
         />
       ) : (
-        <PriceSeriesChart series={suppliers} currencyCode={currency ?? ''} noun="supplier" range={range} />
+        <PriceSeriesChart
+          series={suppliers}
+          currencyCode={currency ?? ''}
+          noun="supplier"
+          range={range}
+          today={today}
+        />
       )}
 
       {supplierCount > MAX_CHARTED_SUPPLIERS && (

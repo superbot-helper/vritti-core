@@ -1,8 +1,8 @@
 import type { CurrencyValue } from '@vritti/quantum-ui/currency';
 import type { TableResponse } from '@vritti/quantum-ui/types/api-response';
-import { z, zodCurrencyField, zodNumericField, zodPhoneField } from '@vritti/quantum-ui/zod';
+import { z, zodCurrencyField, zodNumericField } from '@vritti/quantum-ui/zod';
 import type { PartyLicenseType } from './party-licenses';
-import type { SiteEnrollmentStatus } from './site-suppliers';
+import { orderCommunicationFields, type SiteEnrollmentStatus } from './site-suppliers';
 
 const currencyCodeField = z.string({ error: 'Currency is required' }).regex(/^[A-Z]{3}$/, 'Currency is required');
 const currencyCodesField = z
@@ -22,24 +22,20 @@ export const createSupplierSchema = z
     code: z.string().min(1, 'Code is required').max(100),
     currencyCodes: currencyCodesField,
     currencyCode: currencyCodeField,
-    defaultPaymentTermId: z.uuid().optional(),
+    defaultPaymentTermId: z.uuid('Default payment term is required'),
     notes: z.string().optional(),
-    purchasingBlocked: z.boolean().optional(),
-    paymentBlocked: z.boolean().optional(),
-    orderEmail: z.string().email('Invalid email').optional().or(z.literal('')),
-    orderPhone: zodPhoneField({ optional: true }),
+    purchasingBlocked: z.boolean(),
+    paymentBlocked: z.boolean(),
     isActive: z.boolean(),
   })
   .refine(defaultCurrencyListed.check, defaultCurrencyListed.params);
 
 export const updateSupplierSchema = z.object({
   code: z.string().min(1).max(100).optional(),
-  defaultPaymentTermId: z.uuid().nullable().optional(),
+  defaultPaymentTermId: z.uuid('Default payment term is required'),
   notes: z.string().nullable().optional(),
   purchasingBlocked: z.boolean().optional(),
   paymentBlocked: z.boolean().optional(),
-  orderEmail: z.string().email('Invalid email').nullable().optional().or(z.literal('')),
-  orderPhone: z.union([zodPhoneField({ optional: true }), z.null()]).optional(),
 });
 
 const siteIdsField = z.array(z.uuid(), { error: 'Select at least one site' }).min(1, 'Select at least one site');
@@ -103,13 +99,11 @@ export interface SupplierData {
   currencyCode: string;
   // Every currency the supplier trades in, the default included
   currencyCodes: string[];
-  defaultPaymentTermId: string | null;
-  defaultPaymentTermName: string | null;
+  defaultPaymentTermId: string;
+  defaultPaymentTermName: string;
   notes: string | null;
   purchasingBlocked: boolean;
   paymentBlocked: boolean;
-  orderEmail: string | null;
-  orderPhone: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -228,6 +222,10 @@ export interface SupplierSiteRow {
   orderRelationshipId: string | null;
   orderContactLabel: string | null;
   orderContactName: string | null;
+  orderEmailCommunicationId: string | null;
+  orderPhoneCommunicationId: string | null;
+  orderEmail: string | null;
+  orderPhone: string | null;
   createdAt: string | null;
 }
 
@@ -239,6 +237,7 @@ export const addSupplierSiteSchema = z.object({
   partyTaxRegistrationId: z.uuid('Tax registration is required'),
   partyBankAccountId: z.uuid().nullable().optional(),
   orderRelationshipId: z.uuid().nullable().optional(),
+  ...orderCommunicationFields,
 });
 
 export const updateSupplierSiteSchema = z.object({
@@ -246,6 +245,7 @@ export const updateSupplierSiteSchema = z.object({
   partyTaxRegistrationId: z.uuid('Tax registration is required'),
   partyBankAccountId: z.uuid().nullable().optional(),
   orderRelationshipId: z.uuid().nullable().optional(),
+  ...orderCommunicationFields,
 });
 
 export type AddSupplierSiteFormData = z.infer<typeof addSupplierSiteSchema>;

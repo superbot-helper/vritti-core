@@ -1,7 +1,7 @@
 import {
   type SiteEnrollmentStatus,
   SiteEnrollmentStatusValues,
-} from '@domain/suppliers/dto/entity/site-supplier-list-row.dto';
+} from '@domain/supplier-sites/dto/entity/site-supplier-list-row.dto';
 import { SelectOptionsQueryDto } from '@vritti/api-sdk/select';
 import { IsIn, IsOptional, IsUUID } from 'class-validator';
 

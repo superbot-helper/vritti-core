@@ -4,9 +4,11 @@ import { CurrencyField } from '@vritti/quantum-ui/CurrencyField';
 import { DatePicker } from '@vritti/quantum-ui/DatePicker';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form, FormSection } from '@vritti/quantum-ui/Form';
+import { useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import { Switch } from '@vritti/quantum-ui/Switch';
 import { TextField } from '@vritti/quantum-ui/TextField';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
 import { useState } from 'react';
@@ -46,7 +48,7 @@ export const EditSitePriceDialog: React.FC<EditSitePriceDialogProps> = ({
   onSuccess,
   onCancel,
 }) => {
-  const inForce = isPriceInForce(price);
+  const inForce = isPriceInForce(price, isoTodayDate(useWorkspaceTimeZone(supplierRef.siteId)));
   const form = useForm<UpdateSupplierItemPriceFormData>({
     resolver: zodResolver(updateSupplierItemPriceSchema),
     defaultValues: {

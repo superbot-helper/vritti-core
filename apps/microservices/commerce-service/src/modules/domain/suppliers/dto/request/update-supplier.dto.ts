@@ -1,5 +1,5 @@
 import { Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsEmail, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UpdateSupplierDto {
   @IsUUID('7')
@@ -13,7 +13,7 @@ export class UpdateSupplierDto {
 
   @IsOptional()
   @IsUUID('7')
-  defaultPaymentTermId?: string | null;
+  defaultPaymentTermId?: string;
 
   @Trim()
   @IsOptional()
@@ -28,16 +28,4 @@ export class UpdateSupplierDto {
   @IsOptional()
   @IsBoolean()
   paymentBlocked?: boolean;
-
-  @Trim()
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(255)
-  orderEmail?: string | null;
-
-  @Trim()
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  orderPhone?: string | null;
 }

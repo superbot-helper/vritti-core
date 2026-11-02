@@ -10,6 +10,7 @@ import {
   type UpdateSiteEnrollmentFormData,
   updateSiteEnrollmentSchema,
 } from '@/schemas/site-suppliers';
+import { PartyCommunicationSelector } from '@/selectors/party-communication';
 import { PaymentTermSelector } from '@/selectors/payment-term';
 import type { SupplierSiteBinding } from '../bindings';
 import type { SupplierSiteRef } from '../types';
@@ -32,7 +33,7 @@ export const EnrollAtSiteDialog: React.FC<EnrollAtSiteDialogProps> = ({
   const form = useForm<UpdateSiteEnrollmentFormData>({
     resolver: zodResolver(updateSiteEnrollmentSchema),
     defaultValues: {
-      paymentTermId: supplier.defaultPaymentTermId ?? undefined,
+      paymentTermId: supplier.defaultPaymentTermId,
     },
   });
 
@@ -49,6 +50,8 @@ export const EnrollAtSiteDialog: React.FC<EnrollAtSiteDialogProps> = ({
         partyTaxRegistrationId: data.partyTaxRegistrationId,
         partyBankAccountId: data.partyBankAccountId || null,
         orderRelationshipId: data.orderRelationshipId || null,
+        orderEmailCommunicationId: data.orderEmailCommunicationId,
+        orderPhoneCommunicationId: data.orderPhoneCommunicationId,
       })}
     >
       <FormSection title="Enrollment" contentClassName="block">
@@ -78,6 +81,8 @@ export const EnrollAtSiteDialog: React.FC<EnrollAtSiteDialogProps> = ({
             optionsEndpoint="commerce-api/select-api/party-contacts"
             params={{ partyId: supplier.partyId, function: 'ORDER' }}
           />
+          <PartyCommunicationSelector name="orderEmailCommunicationId" partyId={supplier.partyId} channel="EMAIL" />
+          <PartyCommunicationSelector name="orderPhoneCommunicationId" partyId={supplier.partyId} channel="PHONE" />
         </div>
       </FormSection>
       <DialogActions>

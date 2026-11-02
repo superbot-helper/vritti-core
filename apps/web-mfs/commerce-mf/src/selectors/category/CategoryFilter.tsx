@@ -1,8 +1,9 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 import { formatCategoryPath } from './CategorySelector';
 
-export type CategoryFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'name'> & { name?: string };
+export type CategoryFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'name'> & { name?: string };
 
 // Pre-configured SelectFilter for category filtering with async search
 export const CategoryFilter = Object.assign(

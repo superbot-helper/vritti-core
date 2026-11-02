@@ -1,7 +1,7 @@
 {
   "id": "9ebff835-65a1-41bd-a483-508311fd089b",
   "prevIds": [
-    "fb871a1b-054d-42a0-b4b3-3c9f37003151"
+    "0104c611-a032-43be-8d87-1b370f0b12a6"
   ],
   "version": "8",
   "dialect": "postgres",
@@ -22332,6 +22332,18 @@
     {
       "nameExplicit": true,
       "columns": [
+        "payment_term_id",
+        "due_days"
+      ],
+      "nullsNotDistinct": false,
+      "name": "uq_payment_term_lines_term_due_days",
+      "entityType": "uniques",
+      "schema": "commerce",
+      "table": "payment_term_lines"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
         "organization_id",
         "code"
       ],
@@ -26605,47 +26617,6 @@
       "name": "inventory_stock_levels",
       "entityType": "views",
       "schema": "commerce"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "0",
-      "generated": null,
-      "identity": null,
-      "name": "sort_order",
-      "entityType": "columns",
-      "schema": "commerce",
-      "table": "payment_term_lines"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "payment_term_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "sort_order",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_payment_term_lines_term",
-      "entityType": "indexes",
-      "schema": "commerce",
-      "table": "payment_term_lines"
     }
   ],
   "renames": []

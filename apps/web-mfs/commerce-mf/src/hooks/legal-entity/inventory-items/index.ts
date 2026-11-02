@@ -11,7 +11,9 @@ export {
   useInventoryItem,
   useInventoryItemMrp,
   useInventoryItemPriceGraph,
+  useInventoryItemPriceGraphSiteId,
   useInventoryItemPricesTable,
+  useInventoryItemPricesTableSites,
   useInventoryItemSuppliersTable,
   useSaveInventoryItemPriceGraph,
 } from './useInventoryItem';

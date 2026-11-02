@@ -13,6 +13,7 @@ import { LocationsDomainService } from '@domain/locations/services/locations.ser
 import { OfferingVariantsDomainService } from '@domain/offering-variants/services/offering-variants.service';
 import { OfferingsDomainService } from '@domain/offerings/services/offerings.service';
 import { PartiesDomainService } from '@domain/parties/services/parties.service';
+import { PartyCommunicationsDomainService } from '@domain/party-communications/services/party-communications.service';
 import { PartyBankAccountsDomainService } from '@domain/party-bank-accounts/services/party-bank-accounts.service';
 import { PartyRelationshipsDomainService } from '@domain/party-relationships/services/party-relationships.service';
 import { PaymentTermsDomainService } from '@domain/payment-terms/services/payment-terms.service';
@@ -40,6 +41,7 @@ import { InventoryItemsSelectQueryDto } from './dto/request/inventory-items-sele
 import { LocationsSelectQueryDto } from './dto/request/locations-select-query.dto';
 import { OfferingVariantsSelectQueryDto } from './dto/request/offering-variants-select-query.dto';
 import { OfferingsSelectQueryDto } from './dto/request/offerings-select-query.dto';
+import { PartyCommunicationSelectQueryDto } from './dto/request/party-communication-select-query.dto';
 import { PartyContactSelectQueryDto } from './dto/request/party-contact-select-query.dto';
 import { PartySelectQueryDto } from './dto/request/party-select-query.dto';
 import { PaymentTermsSelectQueryDto } from './dto/request/payment-terms-select-query.dto';
@@ -75,6 +77,7 @@ export class SelectController {
     private readonly costCategoriesService: CostCategoriesDomainService,
     private readonly supplierItemsService: SupplierItemsDomainService,
     private readonly suppliersService: SuppliersDomainService,
+    private readonly partyCommunicationsService: PartyCommunicationsDomainService,
     private readonly taxClassesService: TaxClassesDomainService,
     private readonly paymentTermsService: PaymentTermsDomainService,
     private readonly taxComponentsService: TaxComponentsDomainService,
@@ -186,6 +189,14 @@ export class SelectController {
     return this.partyRelationshipsService.findForSelect(query, partyId, functionCode);
   }
 
+  // Returns paginated active email or phone options of a party, optionally only those holding a function
+  @MessagePattern({ cmd: 'select.partyCommunications' })
+  async partyCommunications(@Payload() data: PartyCommunicationSelectQueryDto): Promise<SelectQueryResult> {
+    const { partyId, channel, function: functionCode, ...query } = data;
+    this.logger.log(`select.partyCommunications — partyId: ${partyId}, channel: ${channel}`);
+    return this.partyCommunicationsService.findForSelect(query, partyId, channel, functionCode);
+  }
+
   // Returns paginated customer options for the select component
   @MessagePattern({ cmd: 'select.customers' })
   async customers(@Payload() data: SelectOptionsQueryDto): Promise<SelectQueryResult> {
@@ -288,9 +299,9 @@ export class SelectController {
   // Returns paginated tax class options for the select component
   @MessagePattern({ cmd: 'select.paymentTerms' })
   async paymentTerms(@Payload() data: PaymentTermsSelectQueryDto): Promise<SelectQueryResult> {
-    const { includeAll, ...query } = data;
+    const { allowUnpublished, ...query } = data;
     this.logger.log('select.paymentTerms');
-    return this.paymentTermsService.findForSelect(query, { includeAll });
+    return this.paymentTermsService.findForSelect(query, { allowUnpublished });
   }
 
   @MessagePattern({ cmd: 'select.taxClasses' })

@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@vritti/quantum-ui/Card';
 import { DetailField } from '@vritti/quantum-ui/DetailField';
-import { useBUCurrency } from '@vritti/quantum-ui/hooks';
+import { useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
 import type React from 'react';
 import { useGoodsReceiptItemsCost } from '@/hooks/site/goods-receipts';
 import type { GoodsReceiptData } from '@/schemas/goods-receipts';
@@ -10,7 +10,7 @@ interface OverviewTabProps {
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({ receipt }) => {
-  const buCurrencyCode = useBUCurrency();
+  const workspaceCurrency = useWorkspaceCurrency();
   const supplierCurrencyCode = receipt.supplierCurrencyCode;
   const showExchangeRate = receipt.exchangeRate !== 1;
   const { data: cost } = useGoodsReceiptItemsCost(receipt.id);
@@ -38,9 +38,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ receipt }) => {
                 value={
                   <span>
                     {receipt.exchangeRate}
-                    {supplierCurrencyCode && buCurrencyCode && (
+                    {supplierCurrencyCode && workspaceCurrency && (
                       <span className="ml-2 text-xs text-muted-foreground">
-                        {supplierCurrencyCode} → {buCurrencyCode}
+                        {supplierCurrencyCode} → {workspaceCurrency}
                       </span>
                     )}
                   </span>

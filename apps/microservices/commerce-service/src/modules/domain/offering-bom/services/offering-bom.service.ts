@@ -46,7 +46,14 @@ export class OfferingBomDomainService {
       });
     }
 
-    await this.insertLineOrConflict(data, variant.code);
+    await this.repository.assertLineFree(data.variantId, data.inventoryItemId, data.uomId, variant.code);
+    await this.repository.insertLine({
+      variantId: data.variantId,
+      inventoryItemId: data.inventoryItemId,
+      quantity: data.quantity,
+      uomId: data.uomId,
+      sortOrder: await this.repository.nextSortOrder(data.variantId),
+    });
     return { success: true, message: `Component added to "${variant.code}".` };
   }
 
@@ -144,28 +151,6 @@ export class OfferingBomDomainService {
         { inventoryItemId: suggestion.id, quantity: 1, uomId: suggestion.uomId },
       ],
     });
-  }
-
-  // (item, uom) is unique per variant, so the same item may appear twice only in different units
-  private async insertLineOrConflict(data: AddBomLineDto, code: string): Promise<void> {
-    try {
-      await this.repository.insertLine({
-        variantId: data.variantId,
-        inventoryItemId: data.inventoryItemId,
-        quantity: data.quantity,
-        uomId: data.uomId,
-        sortOrder: await this.repository.nextSortOrder(data.variantId),
-      });
-    } catch (error) {
-      const candidate = error as { code?: string };
-      if (candidate?.code === '23505') {
-        throw new ConflictException({
-          label: 'Already A Component',
-          detail: `"${code}" already draws on that item in that unit. Edit the existing line instead.`,
-        });
-      }
-      throw error;
-    }
   }
 
   // A line is addressed by its own id, so the variant it belongs to is what ownership is checked on

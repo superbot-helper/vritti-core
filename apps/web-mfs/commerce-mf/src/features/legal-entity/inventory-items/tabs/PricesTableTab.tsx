@@ -3,26 +3,25 @@ import { LE_INVENTORY_ITEMS } from '@vritti/commerce-permissions/inventory-items
 import { LE_SUPPLIERS } from '@vritti/commerce-permissions/suppliers';
 import { Badge } from '@vritti/quantum-ui/Badge';
 import type { CurrencyValue } from '@vritti/quantum-ui/currency';
-import {
-  type ColumnDef,
-  CurrencyCell,
-  DataTable,
-  NumberCell,
-  RowActions,
-  useDataTable,
-} from '@vritti/quantum-ui/DataTable';
-import { DATE_FILTER_TODAY, DateFilter } from '@vritti/quantum-ui/DateFilter';
-import { useFormatters } from '@vritti/quantum-ui/hooks';
+import { type ColumnDef, CurrencyCell, DataTable, RowActions, useDataTable } from '@vritti/quantum-ui/DataTable';
+import { DateFilter } from '@vritti/quantum-ui/DateFilter';
+import { useFormatters, useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import { SelectFilter } from '@vritti/quantum-ui/Select';
 import { buildSlug } from '@vritti/quantum-ui/slug';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { Eye, Scale } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { Suspense, startTransition, useCallback, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { ContextFilterSkeleton } from '@/components/ContextFilterSkeleton';
 import { PriceTrendChip } from '@/components/suppliers/PriceTrendChip';
-import { LE_INVENTORY_ITEM_PRICES_TABLE_KEY, useInventoryItemPricesTable } from '@/hooks/legal-entity/inventory-items';
-import type { ItemSupplierPriceComparisonRow } from '@/schemas/suppliers';
+import {
+  LE_INVENTORY_ITEM_PRICES_TABLE_KEY,
+  useInventoryItemPricesTable,
+  useInventoryItemPricesTableSites,
+} from '@/hooks/legal-entity/inventory-items';
+import type { ItemSupplierPriceComparisonRow, PricesTableContext } from '@/schemas/suppliers';
 import { SiteFilter } from '@/selectors/site';
 import { workspaceBase } from '@/utils/workspace';
 
@@ -47,7 +46,8 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
   const fmt = useFormatters();
   // The site and day the table is about — set in its context bar, not saved; the server picks the default site
   const [site, setSite] = useState<string>();
-  const [asOf, setAsOf] = useState<string>(DATE_FILTER_TODAY);
+  const timeZone = useWorkspaceTimeZone(site);
+  const [asOf, setAsOf] = useState(() => isoTodayDate(timeZone));
   const { data: response, isLoading } = useInventoryItemPricesTable(inventoryItemId, { site, asOf });
   const showMrp = usePermission(LE_INVENTORY_ITEMS.mrp.view).available;
 
@@ -75,21 +75,7 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
         accessorKey: 'supplierName',
         header: 'Supplier',
         size: 280,
-        cell: ({ row }) => (
-          <div className="flex flex-col gap-1">
-            <span className="font-medium text-foreground">{row.original.supplierName}</span>
-            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-              <span className="min-w-0 truncate font-mono" title={row.original.supplierCode}>
-                {row.original.supplierCode}
-              </span>
-              {row.original.isPreferred && (
-                <Badge variant="success" className="shrink-0">
-                  Preferred
-                </Badge>
-              )}
-            </div>
-          </div>
-        ),
+        cell: ({ row }) => <span className="font-medium text-foreground">{row.original.supplierName}</span>,
       },
       {
         accessorKey: 'currentPrice',
@@ -154,10 +140,18 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
         },
       },
       {
-        accessorKey: 'priceCount',
-        header: 'Prices',
-        size: 90,
-        cell: ({ row }) => <NumberCell value={row.original.priceCount} />,
+        accessorKey: 'isPreferred',
+        header: 'Preferred',
+        size: 110,
+        cell: ({ row }) => (
+          <div className="flex justify-center">
+            {row.original.isPreferred ? (
+              <Badge variant="success">Preferred</Badge>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </div>
+        ),
       },
       {
         id: 'actions',
@@ -174,7 +168,7 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
                 permission: LE_SUPPLIERS.items.view,
                 onClick: () =>
                   navigate(
-                    `${workspaceBase(pathname)}/suppliers/${buildSlug(row.original.supplierName, row.original.supplierId)}/${buildSlug(itemName, row.original.supplierItemId)}/overview`,
+                    `${workspaceBase(pathname)}/suppliers/${buildSlug(row.original.supplierName, row.original.supplierId)}/items/${buildSlug(itemName, row.original.supplierItemId)}/overview`,
                   ),
               },
             ]}
@@ -203,30 +197,25 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
       isLoading={isLoading}
       permission={LE_INVENTORY_ITEMS.prices.view}
       searchConfig={{
-        columns: [
-          { id: 'supplierName', label: 'Supplier name' },
-          { id: 'supplierCode', label: 'Supplier code' },
-        ],
+        columns: [{ id: 'supplierName', label: 'Supplier name' }],
         searchAll: true,
       }}
       contextBar={
         <>
-          <SiteFilter
-            value={response?.siteId ?? undefined}
-            onChange={(result) => {
-              if (typeof result?.value === 'string') setSite(result.value);
-            }}
-            siteIds={response?.siteIds ?? []}
-            mode="context"
-          />
+          <Suspense fallback={<ContextFilterSkeleton labelWidth="w-8" valueWidth="w-24" />}>
+            <PricesTableSiteFilter
+              inventoryItemId={inventoryItemId}
+              context={{ site, asOf }}
+              onChange={(next) => startTransition(() => setSite(next))}
+            />
+          </Suspense>
           <DateFilter
             name="asOf"
             label="As of"
             mode="context"
+            clearable={false}
             value={{ field: 'asOf', operator: 'equals', value: asOf }}
-            onChange={(condition) =>
-              setAsOf(typeof condition?.value === 'string' ? condition.value : DATE_FILTER_TODAY)
-            }
+            onChange={(condition) => startTransition(() => setAsOf(condition.value))}
           />
         </>
       }
@@ -240,6 +229,31 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
         title: 'No supplier prices',
         description: 'No supplier has priced this item at the selected site. Pick another site in the Site filter.',
       }}
+    />
+  );
+};
+
+interface PricesTableSiteFilterProps {
+  inventoryItemId: string;
+  context: PricesTableContext;
+  onChange: (siteId: string) => void;
+}
+
+// The site the table is about, offering only the sites with prices. Suspends until the table loads so it always holds
+// a site, and hides while no site has a price for the item.
+const PricesTableSiteFilter: React.FC<PricesTableSiteFilterProps> = ({ inventoryItemId, context, onChange }) => {
+  const {
+    data: { siteId, siteIds },
+  } = useInventoryItemPricesTableSites(inventoryItemId, context);
+  if (!siteId) return null;
+
+  return (
+    <SiteFilter
+      value={siteId}
+      onChange={(result) => onChange(String(result.value))}
+      siteIds={siteIds}
+      mode="context"
+      clearable={false}
     />
   );
 };

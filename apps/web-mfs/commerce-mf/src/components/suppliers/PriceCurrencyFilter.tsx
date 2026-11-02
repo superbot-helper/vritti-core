@@ -1,9 +1,9 @@
 import type React from 'react';
-import { CurrencySelector } from '@/selectors/currency';
+import { CurrencyFilter } from '@/selectors/currency';
 
 interface PriceCurrencyFilterProps {
   currencies: string[];
-  value: string | undefined;
+  value: string;
   onChange: (currency: string) => void;
 }
 
@@ -11,16 +11,11 @@ interface PriceCurrencyFilterProps {
 // prices are all in one currency, since there is nothing to choose.
 export const PriceCurrencyFilter: React.FC<PriceCurrencyFilterProps> = ({ currencies, value, onChange }) =>
   currencies.length < 2 ? null : (
-    <div className="w-40">
-      <CurrencySelector
-        label={undefined}
-        placeholder="Currency"
-        includeCodes={currencies}
-        clearable={false}
-        value={value}
-        onChange={(next: unknown) => {
-          if (next) onChange(String(next));
-        }}
-      />
-    </div>
+    <CurrencyFilter
+      mode="context"
+      clearable={false}
+      includeCodes={currencies}
+      value={value}
+      onChange={(result) => onChange(String(result.value))}
+    />
   );

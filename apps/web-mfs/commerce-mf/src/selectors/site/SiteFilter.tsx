@@ -1,7 +1,8 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 
-export type SiteFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'name'> & {
+export type SiteFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'name'> & {
   name?: string;
   // Offers only these sites, e.g. the ones a record has data at; every site of the legal entity when omitted
   siteIds?: string[];

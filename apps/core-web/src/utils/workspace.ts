@@ -7,8 +7,7 @@ export interface ActiveWorkspace {
   id: string | null;
 }
 
-// The URL word for each workspace kind: /site/<id>, /sg/<id>, /le/<id>, /org/<id>. The same words mark an entity
-// inside feature URLs (…/suppliers/<slug>/site/<id>), which is what lets a route tell a site from an item.
+// The URL word for each workspace kind: /site/<id>, /sg/<id>, /le/<id>, /org/<id>
 export const WORKSPACE_SEGMENTS: ReadonlyArray<{ segment: string; kind: WorkspaceKind }> = [
   { segment: 'site', kind: 'site' },
   { segment: 'sg', kind: 'group' },

@@ -31,8 +31,8 @@ export const ItemsTab: React.FC<ItemsTabProps> = ({ binding, supplierRef }) => {
   const { data: response, isLoading } = binding.useSiteItemsTable(supplierRef);
 
   const goToItem = useCallback(
-    (item: SiteSupplierItemData) => navigate(buildSlug(item.inventoryItemName, item.id)),
-    [navigate],
+    (item: SiteSupplierItemData) => navigate(binding.siteItemPath(buildSlug(item.inventoryItemName, item.id))),
+    [navigate, binding],
   );
 
   const columns = useMemo<ColumnDef<SiteSupplierItemData>[]>(

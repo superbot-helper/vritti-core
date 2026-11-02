@@ -1,17 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, eq, inArray, sql } from '@vritti/api-sdk/drizzle-orm';
-import { type FindForSelectConfig, type SelectQueryResult } from '@vritti/api-sdk/select';
-import {
-  type NewPaymentTermLine,
-  type PaymentTerm,
-  type PaymentTermLine,
-  PaymentTermStatusValues,
-  paymentTermLines,
-  paymentTerms,
-  supplierSites,
-  suppliers,
-} from '@/db/schema';
+import { and, eq, getColumns, ne, type SQL, sql, sum } from '@vritti/api-sdk/drizzle-orm';
+import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import { type PaymentTerm, paymentTermLines, paymentTerms, supplierSites, suppliers } from '@/db/schema';
+
+export type PaymentTermDetail = PaymentTerm & {
+  ruleCount: number;
+  totalPercent: string;
+  supplierCount: number;
+  enrollmentCount: number;
+};
 
 @Injectable()
 export class PaymentTermsDomainRepository extends PrimaryBaseRepository<typeof paymentTerms> {
@@ -19,71 +17,66 @@ export class PaymentTermsDomainRepository extends PrimaryBaseRepository<typeof p
     super(database, paymentTerms);
   }
 
-  // Paginated payment-term options — active only unless `includeAll` asks for drafts and inactive terms too
-  override findForSelect(config: FindForSelectConfig, options?: { includeAll?: boolean }): Promise<SelectQueryResult> {
-    if (options?.includeAll) return super.findForSelect(config);
-    return super.findForSelect({ ...config, conditions: [eq(paymentTerms.status, PaymentTermStatusValues.ACTIVE)] });
+  async findByIdOrThrow(id: string): Promise<PaymentTerm> {
+    const entity = await this.findById(id);
+    if (!entity) throw new NotFoundException('Payment term not found.');
+    return entity;
   }
 
-  async findByCode(code: string): Promise<PaymentTerm | undefined> {
-    const [row] = await this.db.select().from(paymentTerms).where(eq(paymentTerms.code, code)).limit(1);
-    return row as PaymentTerm | undefined;
+  async findDetailOrThrow(id: string): Promise<PaymentTermDetail> {
+    const entity = await this.findById<PaymentTermDetail>(id, { select: this.selection() });
+    if (!entity) throw new NotFoundException('Payment term not found.');
+    return entity;
   }
 
-  async findLines(paymentTermIds: string[]): Promise<PaymentTermLine[]> {
-    if (paymentTermIds.length === 0) return [];
-    const rows = await this.db
-      .select()
-      .from(paymentTermLines)
-      .where(inArray(paymentTermLines.paymentTermId, paymentTermIds))
-      .orderBy(asc(paymentTermLines.dueDays), asc(paymentTermLines.sortOrder));
-    return rows as PaymentTermLine[];
+  // A published term is in use or may be picked at any moment; unpublish it to edit
+  async findDraftOrThrow(id: string): Promise<PaymentTerm> {
+    const draft = await this.findById(id, { where: eq(paymentTerms.isPublished, false) });
+    if (!draft) {
+      throw new BadRequestException({
+        label: 'Payment term is published',
+        detail: 'Unpublish the payment term before editing it.',
+      });
+    }
+    return draft;
   }
 
-  async findLine(paymentTermId: string, id: string): Promise<PaymentTermLine | undefined> {
-    const [row] = await this.db
-      .select()
-      .from(paymentTermLines)
-      .where(and(eq(paymentTermLines.id, id), eq(paymentTermLines.paymentTermId, paymentTermId)))
-      .limit(1);
-    return row as PaymentTermLine | undefined;
-  }
-
-  // Appends a rule after the term's existing ones
-  async addLine(
-    paymentTermId: string,
-    line: Omit<NewPaymentTermLine, 'organizationId' | 'paymentTermId' | 'sortOrder'>,
-  ): Promise<void> {
-    await this.db.insert(paymentTermLines).values({
-      ...line,
-      paymentTermId,
-      sortOrder: sql`(SELECT coalesce(max(${paymentTermLines.sortOrder}) + 1, 0) FROM ${paymentTermLines} WHERE ${paymentTermLines.paymentTermId} = ${paymentTermId})`,
+  // Names are unique per org regardless of case — they are what pickers show
+  async assertNameFree(name: string, excludeId?: string): Promise<void> {
+    const taken = await this.exists(
+      and(
+        sql`lower(${paymentTerms.name}) = lower(${name})`,
+        excludeId ? ne(paymentTerms.id, excludeId) : undefined,
+      ) as SQL,
+    );
+    if (!taken) return;
+    throw new ConflictException({
+      label: 'Name already used',
+      detail: `A payment term named "${name}" already exists.`,
+      errors: [{ field: 'name', message: 'Already used by another payment term' }],
     });
   }
 
-  async updateLine(
-    id: string,
-    line: Pick<NewPaymentTermLine, 'percent' | 'dueDays' | 'discountPercent' | 'discountDays'>,
-  ): Promise<void> {
-    await this.db.update(paymentTermLines).set(line).where(eq(paymentTermLines.id, id));
+  // Suppliers depend on a term they use as their default or on a site enrollment; the detail returns both counts
+  assertNotInUse(term: PaymentTermDetail, action: 'delete' | 'unpublish'): void {
+    if (term.supplierCount === 0 && term.enrollmentCount === 0) return;
+    throw new ConflictException({
+      label: 'Payment term in use',
+      detail: `Suppliers use this payment term. Move them to another payment term before you ${action} it.`,
+    });
   }
 
-  async deleteLine(id: string): Promise<void> {
-    await this.db.delete(paymentTermLines).where(eq(paymentTermLines.id, id));
-  }
-
-  // Counts the suppliers and site enrollments that reference a term
-  async countUsage(paymentTermId: string): Promise<{ suppliers: number; enrollments: number }> {
-    const [row] = await this.db
-      .select({
-        suppliers: sql<number>`(
-          SELECT count(*)::int FROM ${suppliers} s WHERE s.default_payment_term_id = ${paymentTermId}
-        )`.mapWith(Number),
-        enrollments: sql<number>`(
-          SELECT count(*)::int FROM ${supplierSites} ss WHERE ss.payment_term_id = ${paymentTermId}
-        )`.mapWith(Number),
-      })
-      .from(sql`(SELECT 1) AS one`);
-    return row ?? { suppliers: 0, enrollments: 0 };
+  private selection() {
+    const ownRules = eq(paymentTermLines.paymentTermId, paymentTerms.id);
+    return {
+      ...getColumns(paymentTerms),
+      ruleCount: this.db.$count(paymentTermLines, ownRules),
+      totalPercent: sql<string>`(${this.db
+        .select({ total: sql`coalesce(${sum(paymentTermLines.percent)}, 0)` })
+        .from(paymentTermLines)
+        .where(ownRules)})`,
+      supplierCount: this.db.$count(suppliers, eq(suppliers.defaultPaymentTermId, paymentTerms.id)),
+      enrollmentCount: this.db.$count(supplierSites, eq(supplierSites.paymentTermId, paymentTerms.id)),
+    };
   }
 }

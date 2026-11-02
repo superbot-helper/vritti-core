@@ -32,12 +32,12 @@ export const suppliers = commerceSchema.table(
     currencyCode: varchar('currency_code', { length: 3 }).notNull(),
     // Every currency the supplier trades in, the default included
     currencyCodes: varchar('currency_codes', { length: 3 }).array().notNull(),
-    defaultPaymentTermId: uuid('default_payment_term_id').references(() => paymentTerms.id, { onDelete: 'restrict' }),
+    defaultPaymentTermId: uuid('default_payment_term_id')
+      .notNull()
+      .references(() => paymentTerms.id, { onDelete: 'restrict' }),
     notes: varchar('notes', { length: 500 }),
     purchasingBlocked: boolean('purchasing_blocked').notNull().default(false),
     paymentBlocked: boolean('payment_blocked').notNull().default(false),
-    orderEmail: varchar('order_email', { length: 255 }),
-    orderPhone: varchar('order_phone', { length: 20 }),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })

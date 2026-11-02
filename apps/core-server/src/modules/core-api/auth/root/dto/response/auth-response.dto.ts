@@ -29,6 +29,8 @@ export class AuthOrgDto {
   @ApiProperty() id: string;
   @ApiProperty() name: string;
   @ApiProperty() subdomain: string;
+  @ApiProperty({ description: 'ISO 4217 currency of org and site-group workspaces', example: 'INR' })
+  defaultCurrencyCode: string;
   @ApiPropertyOptional() logoLightUrl: string | null;
   @ApiPropertyOptional() logoDarkUrl: string | null;
   // Provisioned external services — clients gate service-dependent screens on this instead of calling the provider

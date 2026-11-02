@@ -16,7 +16,7 @@ export class CompanyRegistrationResponseDto {
   @ApiProperty({ description: 'Registration number', example: '22AAAAA0000A1Z5' })
   registrationNumber: string;
 
-  @ApiProperty({ description: 'Registration type', enum: ['GSTIN', 'VAT', 'TIN', 'PAN', 'OTHER'] })
+  @ApiProperty({ description: 'Registration type', enum: ['GSTIN', 'VAT', 'TIN', 'OTHER'] })
   registrationType: string;
 
   @ApiProperty({ description: 'Whether this is the primary registration' })

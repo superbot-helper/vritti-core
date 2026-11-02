@@ -1,8 +1,13 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef, useMemo } from 'react';
 import { useSupplierSitesTable } from '@/hooks/legal-entity/suppliers';
 
-export type SupplierSiteFilterProps = Omit<SelectFilterProps, 'options' | 'name'> & {
+// Always a multi-select, so only the multiple branch of SelectFilterProps applies
+export type SupplierSiteFilterProps = DistributiveOmit<
+  Extract<SelectFilterProps, { multiple: true }>,
+  'options' | 'name' | 'multiple'
+> & {
   name?: string;
   supplierId: string;
 };

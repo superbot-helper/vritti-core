@@ -57,6 +57,17 @@ export class SupplierQuotationsDomainService {
     return SupplierQuotationDetailDto.fromDetail(quotation, items, sites);
   }
 
+  // Returns a supplier's quotation with its lines and sites, only when it is posted to the given site
+  async findDetailAtSite(supplierId: string, quotationId: string, siteId: string): Promise<SupplierQuotationDetailDto> {
+    const quotation = await this.repository.findPostedToSite(supplierId, quotationId, siteId);
+    if (!quotation) throw new NotFoundException('Quotation not found.');
+    const [items, sites] = await Promise.all([
+      this.repository.findItems(quotationId),
+      this.repository.findSites(quotationId),
+    ]);
+    return SupplierQuotationDetailDto.fromDetail(quotation, items, sites);
+  }
+
   async requireQuotation(id: string): Promise<SupplierQuotation> {
     const quotation = await this.repository.findById(id);
     if (!quotation) throw new NotFoundException('Quotation not found.');

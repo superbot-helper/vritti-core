@@ -24,7 +24,7 @@ export const createGoodsReceiptSchema = z.object({
   purchaseOrderId: z.uuid().nullable().optional(),
   receivedDate: z.string({ error: 'Received date is required' }).min(1, 'Received date is required'),
   notes: z.string().optional(),
-  // Required only when supplier currency != BU currency and not inherited from a FIXED PO.
+  // Required only when supplier currency != site currency and not inherited from a FIXED PO.
   exchangeRate: z.number().positive('Exchange rate must be greater than 0').optional(),
 });
 export type CreateGoodsReceiptFormData = z.infer<typeof createGoodsReceiptSchema>;

@@ -1,7 +1,8 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 
-export type UomFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'name'> & { name?: string };
+export type UomFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'name'> & { name?: string };
 
 // Pre-configured SelectFilter for unit of measure filtering with async search
 export const UomFilter = Object.assign(

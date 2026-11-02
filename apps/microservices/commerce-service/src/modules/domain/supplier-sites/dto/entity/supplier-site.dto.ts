@@ -17,6 +17,10 @@ export class SupplierSiteDto {
   orderContactName: string | null;
   orderContactEmail: string | null;
   orderContactPhone: string | null;
+  orderEmailCommunicationId: string;
+  orderPhoneCommunicationId: string;
+  orderEmail: string | null;
+  orderPhone: string | null;
   createdAt: string;
   updatedAt: string;
 
@@ -32,6 +36,8 @@ export class SupplierSiteDto {
       orderContactName?: string | null;
       orderContactEmail?: string | null;
       orderContactPhone?: string | null;
+      orderEmail?: string | null;
+      orderPhone?: string | null;
     },
   ): SupplierSiteDto {
     const dto = new SupplierSiteDto();
@@ -51,6 +57,10 @@ export class SupplierSiteDto {
     dto.orderContactName = entity.orderContactName ?? null;
     dto.orderContactEmail = entity.orderContactEmail ?? null;
     dto.orderContactPhone = entity.orderContactPhone ?? null;
+    dto.orderEmailCommunicationId = entity.orderEmailCommunicationId;
+    dto.orderPhoneCommunicationId = entity.orderPhoneCommunicationId;
+    dto.orderEmail = entity.orderEmail ?? null;
+    dto.orderPhone = entity.orderPhone ?? null;
     dto.createdAt = entity.createdAt.toISOString();
     dto.updatedAt = entity.updatedAt.toISOString();
     return dto;

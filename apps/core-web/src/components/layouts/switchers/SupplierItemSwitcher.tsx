@@ -72,7 +72,7 @@ export const SupplierItemSwitcher = ({ segment, supplierId, basePath, tab }: Sup
         // Skip the on-mount initial-resolve fire (same item) — only navigate on a real switch
         if (option && String(option.value) !== current) {
           const slug = buildSlug(itemLabel(String(option.label), option), String(option.value));
-          navigate(tab ? `${basePath}/${slug}/${tab}` : `${basePath}/${slug}`);
+          navigate(tab ? `${basePath}/items/${slug}/${tab}` : `${basePath}/items/${slug}`);
         }
       }}
     />

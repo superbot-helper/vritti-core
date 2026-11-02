@@ -25,10 +25,8 @@ export const EditSupplierForm: React.FC<EditSupplierFormProps> = ({ supplier, on
       partyId: supplier.partyId,
       currencyCode: supplier.currencyCode,
       code: supplier.code,
-      defaultPaymentTermId: supplier.defaultPaymentTermId ?? undefined,
+      defaultPaymentTermId: supplier.defaultPaymentTermId,
       notes: supplier.notes ?? '',
-      orderEmail: supplier.orderEmail ?? '',
-      orderPhone: supplier.orderPhone ?? '',
       purchasingBlocked: supplier.purchasingBlocked,
       paymentBlocked: supplier.paymentBlocked,
     },
@@ -45,9 +43,7 @@ export const EditSupplierForm: React.FC<EditSupplierFormProps> = ({ supplier, on
         id: supplier.id,
         data: {
           ...data,
-          defaultPaymentTermId: data.defaultPaymentTermId ?? null,
-          orderEmail: data.orderEmail || null,
-          orderPhone: data.orderPhone || null,
+          defaultPaymentTermId: data.defaultPaymentTermId,
         },
       })}
     >
@@ -62,8 +58,6 @@ export const EditSupplierForm: React.FC<EditSupplierFormProps> = ({ supplier, on
           label="Default Payment Term"
           description="Prefilled when a site enrolls this supplier"
         />
-        <TextField name="orderEmail" label="Order Email" placeholder="e.g. orders@acme.com" />
-        <TextField name="orderPhone" label="Order Phone" placeholder="e.g. +91 98765 43210" />
         <TextArea name="notes" label="Notes" placeholder="Optional notes" rows={3} className="w-full sm:col-span-2" />
         <Switch
           name="purchasingBlocked"

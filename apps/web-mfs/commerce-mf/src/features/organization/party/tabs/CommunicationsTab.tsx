@@ -7,9 +7,14 @@ import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
 import { AtSign, Mail, Pencil, Phone, Plus, Star, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
-import { COMMUNICATION_CHANNEL_LABELS, type PartyCommunicationRow } from '@/schemas/party-communications';
+import {
+  COMMUNICATION_CHANNEL_LABELS,
+  COMMUNICATION_FUNCTION_LABELS,
+  type PartyCommunicationRow,
+} from '@/schemas/party-communications';
 import { AppChips } from '../AppChips';
 import type { CommunicationsBinding } from '../bindings';
+import { FunctionChips } from '../FunctionChips';
 import { AddCommunicationDialog } from '../forms/AddCommunicationDialog';
 import { EditCommunicationDialog } from '../forms/EditCommunicationDialog';
 
@@ -60,6 +65,17 @@ export const CommunicationsTab: React.FC<CommunicationsTabProps> = ({ partyId, b
         header: 'Apps',
         enableSorting: false,
         cell: ({ row }) => <AppChips apps={row.original.apps} />,
+      },
+      {
+        accessorKey: 'functions',
+        header: 'Handles',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <FunctionChips
+            functions={row.original.functions.map((fn) => ({ function: fn, isPrimary: false }))}
+            labels={COMMUNICATION_FUNCTION_LABELS}
+          />
+        ),
       },
       {
         accessorKey: 'isPrimary',

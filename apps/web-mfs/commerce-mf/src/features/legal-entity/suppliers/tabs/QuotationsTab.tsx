@@ -40,7 +40,7 @@ interface QuotationsTabProps {
 export const QuotationsTab: React.FC<QuotationsTabProps> = ({ supplierId, siteId, currencyCode, currencyCodes }) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { detail: tab } = useParams();
+  const { tab } = useParams();
   const addDialog = useDialog();
   const supplierTable = useSupplierQuotationsTable(supplierId, { enabled: !siteId });
   const siteTable = useSupplierSiteQuotationsTable(supplierId, siteId);
@@ -48,12 +48,11 @@ export const QuotationsTab: React.FC<QuotationsTabProps> = ({ supplierId, siteId
   const tableKey = siteId
     ? SUPPLIER_SITE_QUOTATIONS_TABLE_KEY(supplierId, siteId)
     : SUPPLIER_QUOTATIONS_TABLE_KEY(supplierId);
-  // From the tab URL (…/<supplier>/quotations) a quotation is one segment deeper, and from a site view
-  // (…/<supplier>/<siteId>) it sits beside the site; its number names the crumb
+  // A quotation sits under the supplier's quotations tab; its number names the crumb
   const quotationPath = useCallback(
     (quotation: Pick<SupplierQuotationData, 'id' | 'quotationNumber'>) => {
       const slug = buildSlug(quotation.quotationNumber, quotation.id);
-      if (siteId) return `../quotations/${slug}`;
+      if (siteId) return `../../quotations/${slug}`;
       return tab === 'quotations' ? slug : `quotations/${slug}`;
     },
     [tab, siteId],
@@ -145,7 +144,7 @@ export const QuotationsTab: React.FC<QuotationsTabProps> = ({ supplierId, siteId
   // which opens the dialog on arrival
   const location = useLocation();
   const openAdd = useCallback(() => {
-    if (siteId) navigate('../quotations', { relative: 'path', state: { addQuotation: true } });
+    if (siteId) navigate('../../quotations', { relative: 'path', state: { addQuotation: true } });
     else addDialog.open();
   }, [siteId, navigate, addDialog]);
   useEffect(() => {

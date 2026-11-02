@@ -22,6 +22,9 @@ export class OrganizationDto {
   })
   size: OrgSize;
 
+  @ApiProperty({ description: 'ISO 4217 currency of org and site-group workspaces', example: 'INR' })
+  defaultCurrencyCode: string;
+
   @ApiPropertyOptional({ description: 'Public logo URL for light surfaces', nullable: true })
   logoLightUrl: string | null;
 
@@ -44,6 +47,7 @@ export class OrganizationDto {
     dto.name = org.name;
     dto.subdomain = org.subdomain;
     dto.size = org.size;
+    dto.defaultCurrencyCode = org.defaultCurrencyCode;
     dto.logoLightUrl = org.logoLightUrl ?? null;
     dto.logoDarkUrl = org.logoDarkUrl ?? null;
     dto.plan = org.plan;

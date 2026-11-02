@@ -1,11 +1,10 @@
 import { SupplierItemsDomainService } from '@domain/supplier-items/services/supplier-items.service';
+import type { SupplierAtSiteDto } from '@domain/supplier-sites/dto/entity/supplier-at-site.dto';
 import type { SupplierSiteDto } from '@domain/supplier-sites/dto/entity/supplier-site.dto';
 import { AddSupplierSiteDto } from '@domain/supplier-sites/dto/request/add-supplier-site.dto';
 import { UpdateSupplierSiteDto } from '@domain/supplier-sites/dto/request/update-supplier-site.dto';
 import { SupplierSitesDomainService } from '@domain/supplier-sites/services/supplier-sites.service';
 import type { SiteSupplierItemDetailDto, SiteSupplierItemDto } from '@domain/suppliers/dto/entity/supplier.dto';
-import type { SupplierAtSiteDto } from '@domain/suppliers/dto/entity/supplier-at-site.dto';
-import { SuppliersDomainService } from '@domain/suppliers/services/suppliers.service';
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import type { TableViewState } from '@vritti/api-sdk/data-table';
@@ -18,7 +17,6 @@ export class SupplierSitesController {
 
   constructor(
     private readonly service: SupplierSitesDomainService,
-    private readonly suppliersService: SuppliersDomainService,
     private readonly supplierItemsService: SupplierItemsDomainService,
   ) {}
 
@@ -36,7 +34,7 @@ export class SupplierSitesController {
     @RpcNatsHeaders() headers: NatsHeaders,
   ): Promise<SupplierAtSiteDto> {
     this.logger.log(`suppliers.findAtSite — supplierId: ${data.supplierId}, siteId: ${data.siteId}`);
-    return this.suppliersService.findAtSite(headers.legalEntityId, data.siteId, data.supplierId);
+    return this.service.findAtSite(headers.legalEntityId, data.siteId, data.supplierId);
   }
 
   // Returns a supplier's items carried by one of the LE's sites, with that site's terms and price in force
@@ -65,6 +63,8 @@ export class SupplierSitesController {
       partyTaxRegistrationId: dto.partyTaxRegistrationId,
       partyBankAccountId: dto.partyBankAccountId ?? null,
       orderRelationshipId: dto.orderRelationshipId ?? null,
+      orderEmailCommunicationId: dto.orderEmailCommunicationId,
+      orderPhoneCommunicationId: dto.orderPhoneCommunicationId,
     });
   }
 

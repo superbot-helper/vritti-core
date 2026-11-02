@@ -10,10 +10,10 @@ export class UpdateSupplierDto {
   @MaxLength(100)
   code?: string;
 
-  @ApiPropertyOptional({ description: 'Payment term new site enrollments start from', nullable: true })
+  @ApiPropertyOptional({ description: 'Payment term new site enrollments start from' })
   @IsOptional()
   @IsUUID('7')
-  defaultPaymentTermId?: string | null;
+  defaultPaymentTermId?: string;
 
   @Trim()
   @ApiPropertyOptional({ description: 'Updated notes' })

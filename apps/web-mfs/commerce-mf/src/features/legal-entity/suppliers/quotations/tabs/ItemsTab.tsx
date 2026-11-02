@@ -36,7 +36,6 @@ export const ItemsTab = ({ supplierId, currencyCode, quotation }: ItemsTabProps)
   const addDialog = useDialog();
   const removeMutation = useRemoveSupplierQuotationItem(supplierId, quotation.id);
   const isDraft = quotation.status === 'DRAFT';
-  const lockedTip = isDraft ? undefined : LOCKED_TIP;
 
   const handleRemove = useCallback(
     async (item: SupplierQuotationItemData) => {
@@ -107,7 +106,7 @@ export const ItemsTab = ({ supplierId, currencyCode, quotation }: ItemsTabProps)
               label: 'Edit',
               permission: LE_SUPPLIERS.quotations.edit,
               disabled: !isDraft,
-              disabledTip: lockedTip,
+              disabledTip: LOCKED_TIP,
               dialog: {
                 title: 'Edit Line',
                 className: 'max-w-2xl',
@@ -131,7 +130,7 @@ export const ItemsTab = ({ supplierId, currencyCode, quotation }: ItemsTabProps)
               variant: 'destructive',
               permission: LE_SUPPLIERS.quotations.edit,
               disabled: !isDraft,
-              disabledTip: lockedTip,
+              disabledTip: LOCKED_TIP,
               onClick: () => handleRemove(item),
             },
           ];
@@ -139,7 +138,7 @@ export const ItemsTab = ({ supplierId, currencyCode, quotation }: ItemsTabProps)
         },
       },
     ],
-    [showMrp, supplierId, currencyCode, quotation.id, isDraft, lockedTip, handleRemove, fmt],
+    [showMrp, supplierId, currencyCode, quotation.id, isDraft, handleRemove, fmt],
   );
 
   const { table } = useDataTable({
@@ -159,7 +158,7 @@ export const ItemsTab = ({ supplierId, currencyCode, quotation }: ItemsTabProps)
       startAdornment={<Plus className="size-4" />}
       onClick={addDialog.open}
       disabled={!isDraft}
-      disabledTip={lockedTip}
+      disabledTip={LOCKED_TIP}
     >
       Add Line
     </Button>

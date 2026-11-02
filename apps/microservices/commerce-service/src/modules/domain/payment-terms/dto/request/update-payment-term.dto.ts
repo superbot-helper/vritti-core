@@ -1,6 +1,5 @@
 import { Trim } from '@vritti/api-sdk/decorators';
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
-import { type PaymentTermBaseline, paymentTermBaselineEnum } from '@/db/schema';
+import { IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class UpdatePaymentTermDto {
   @IsUUID('7')
@@ -12,10 +11,6 @@ export class UpdatePaymentTermDto {
   @MinLength(1)
   @MaxLength(255)
   name?: string;
-
-  @IsOptional()
-  @IsIn(paymentTermBaselineEnum.enumValues)
-  baseline?: PaymentTermBaseline;
 
   @Trim()
   @IsOptional()

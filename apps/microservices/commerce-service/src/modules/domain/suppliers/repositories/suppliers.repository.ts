@@ -1,15 +1,19 @@
+import {
+  type SiteEnrollmentStatus,
+  SiteEnrollmentStatusValues,
+} from '@domain/supplier-sites/dto/entity/site-supplier-list-row.dto';
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import { and, asc, desc, eq, getColumns, inArray, notInArray, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import { pluralize } from '@vritti/api-sdk/pluralize';
 import { type FindForSelectConfig, type SelectQueryResult } from '@vritti/api-sdk/select';
 import {
   type PartyLicense,
   type PartyTaxRegistration,
   type PartyType,
-  PaymentTermStatusValues,
   PurchaseOrderStatusValues,
   parties,
-  partyBankAccounts,
   partyLicenses,
   partyTaxRegistrations,
   paymentTerms,
@@ -21,7 +25,6 @@ import {
   supplierSites,
   suppliers,
 } from '@/db/schema';
-import { type SiteEnrollmentStatus, SiteEnrollmentStatusValues } from '../dto/entity/site-supplier-list-row.dto';
 
 // Narrows a supplier pick list to the suppliers with a price for an inventory item at a site within a date window
 export interface PricedItemAtSite {
@@ -31,25 +34,14 @@ export interface PricedItemAtSite {
   to?: string;
 }
 
-export type SupplierAtSiteRow = Supplier & {
-  partyName: string;
-  enrollmentId: string | null;
-  paymentTermId: string | null;
-  paymentTermName: string | null;
-  partyTaxRegistrationId: string | null;
-  registrationNumber: string | null;
-  partyBankAccountId: string | null;
-  bankAccountName: string | null;
-  orderRelationshipId: string | null;
-  enrolledAt: Date | null;
-};
+export type SupplierWithParty = Supplier & { partyName: string; defaultPaymentTermName: string };
 
-export type SiteSupplierListRow = Supplier & {
-  partyName: string;
-  enrollmentId: string | null;
-  paymentTermId: string | null;
-  paymentTermName: string | null;
-  enrolledAt: Date | null;
+export type SupplierDetailRow = SupplierWithParty & {
+  partyType: PartyType;
+  registrations: PartyTaxRegistration[];
+  licenses: PartyLicense[];
+  enrolledSiteCount: number;
+  itemCount: number;
 };
 
 // Purchase orders that are done with and no longer hold a supplier to their currency
@@ -109,13 +101,15 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
 
   // Returns paginated suppliers joined with their party display name, plus total count
   findAllWithParty(options?: { where?: SQL; orderBy?: SQL[]; limit?: number; offset?: number }): Promise<{
-    result: (Supplier & { partyName: string | null; defaultPaymentTermName: string | null })[];
+    result: SupplierWithParty[];
     count: number;
   }> {
-    return this.findAllAndCount<Supplier & { partyName: string | null; defaultPaymentTermName: string | null }>({
+    return this.findAllAndCount<SupplierWithParty>({
       select: { ...getColumns(suppliers), partyName: parties.displayName, defaultPaymentTermName: paymentTerms.name },
-      innerJoins: [{ table: parties, on: eq(parties.id, suppliers.partyId) }],
-      leftJoins: [{ table: paymentTerms, on: eq(paymentTerms.id, suppliers.defaultPaymentTermId) }],
+      innerJoins: [
+        { table: parties, on: eq(parties.id, suppliers.partyId) },
+        { table: paymentTerms, on: eq(paymentTerms.id, suppliers.defaultPaymentTermId) },
+      ],
       where: options?.where,
       orderBy: options?.orderBy,
       limit: options?.limit,
@@ -124,26 +118,27 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
   }
 
   // Loads a supplier by id joined with its party display name
-  async findByIdWithParty(
-    id: string,
-  ): Promise<(Supplier & { partyName: string | null; defaultPaymentTermName: string | null }) | undefined> {
+  async findByIdWithParty(id: string): Promise<SupplierWithParty | undefined> {
     const { result } = await this.findAllWithParty({ where: eq(suppliers.id, id), limit: 1, offset: 0 });
     return result[0];
   }
 
+  // Loads a supplier by id, throwing when it does not exist
+  async findByIdOrThrow(id: string): Promise<Supplier> {
+    const entity = await this.findById(id);
+    if (!entity) throw new NotFoundException('Supplier not found.');
+    return entity;
+  }
+
+  // Loads a supplier joined with its party display name, throwing when it does not exist
+  async findWithPartyOrThrow(id: string): Promise<SupplierWithParty> {
+    const entity = await this.findByIdWithParty(id);
+    if (!entity) throw new NotFoundException('Supplier not found.');
+    return entity;
+  }
+
   // Loads a supplier with party name, the party's registrations and licenses, and its enrollment and item counts
-  async findDetailById(id: string): Promise<
-    | (Supplier & {
-        partyName: string | null;
-        partyType: PartyType | null;
-        defaultPaymentTermName: string | null;
-        registrations: PartyTaxRegistration[];
-        licenses: PartyLicense[];
-        enrolledSiteCount: number;
-        itemCount: number;
-      })
-    | undefined
-  > {
+  async findDetailOrThrow(id: string): Promise<SupplierDetailRow> {
     const [row] = await this.db
       .select({
         ...getColumns(suppliers),
@@ -161,18 +156,12 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
       })
       .from(suppliers)
       .innerJoin(parties, eq(parties.id, suppliers.partyId))
-      .leftJoin(paymentTerms, eq(paymentTerms.id, suppliers.defaultPaymentTermId))
+      .innerJoin(paymentTerms, eq(paymentTerms.id, suppliers.defaultPaymentTermId))
       .where(eq(suppliers.id, id))
       .limit(1);
-    if (!row) return undefined;
+    if (!row) throw new NotFoundException('Supplier not found.');
 
-    const supplier = row as Supplier & {
-      partyName: string | null;
-      partyType: PartyType | null;
-      defaultPaymentTermName: string | null;
-      enrolledSiteCount: number;
-      itemCount: number;
-    };
+    const supplier = row as Omit<SupplierDetailRow, 'registrations' | 'licenses'>;
     const [registrations, licenses] = await Promise.all([
       this.db
         .select()
@@ -193,18 +182,73 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
     };
   }
 
-  // Returns true when the payment term is visible to the caller's organization and active
-  async isPaymentTermUsable(id: string): Promise<boolean> {
+  // Rejects a default payment term that is not a published term of the caller's organization
+  async assertPaymentTermUsable(id: string | null | undefined): Promise<void> {
+    if (!id) return;
     const [term] = await this.db
-      .select({ status: paymentTerms.status })
+      .select({ isPublished: paymentTerms.isPublished })
       .from(paymentTerms)
       .where(eq(paymentTerms.id, id))
       .limit(1);
-    return term?.status === PaymentTermStatusValues.ACTIVE;
+    if (term?.isPublished === true) return;
+    throw new BadRequestException({
+      label: 'Invalid Payment Term',
+      detail: 'The selected default payment term does not exist or is still a draft.',
+      errors: [{ field: 'defaultPaymentTermId', message: 'Pick a published payment term' }],
+    });
   }
 
-  // Counts non-cascading references to this supplier
-  // What keeps a supplier from being deleted: its purchase orders, its quotations and its items' price history
+  // Rejects a party that is already a supplier of the caller's legal entity
+  async assertPartyFree(partyId: string): Promise<void> {
+    if (!(await this.exists(eq(suppliers.partyId, partyId)))) return;
+    throw new ConflictException({
+      label: 'Already A Supplier',
+      detail: 'This company is already a supplier for this legal entity.',
+      errors: [{ field: 'partyId', message: 'Already a supplier' }],
+    });
+  }
+
+  // Rejects deleting a supplier that purchase orders, quotations or item prices still reference
+  async assertNotReferenced(supplier: SupplierWithParty): Promise<void> {
+    const refs = await this.countReferences(supplier.id);
+    const parts = (
+      [
+        [refs.purchaseOrders, 'purchase order'],
+        [refs.quotations, 'quotation'],
+        [refs.prices, 'item price'],
+      ] as const
+    )
+      .filter(([n]) => n > 0)
+      .map(([n, label]) => `${n} ${pluralize(label, n)}`);
+    if (parts.length === 0) return;
+    throw new ConflictException({
+      label: 'Supplier In Use',
+      detail: `Cannot delete "${supplier.partyName}" — it is referenced by ${parts.join(', ')}. Remove those references first.`,
+    });
+  }
+
+  // Rejects dropping currencies still used by the supplier's prices, quotations or open purchase orders
+  async assertCurrenciesUnused(id: string, dropped: string[]): Promise<void> {
+    if (dropped.length === 0) return;
+    const usage = await this.countCurrencyUsage(id, dropped);
+    const uses = (
+      [
+        ['price', usage.prices],
+        ['quotation', usage.quotations],
+        ['open purchase order', usage.purchaseOrders],
+      ] as const
+    )
+      .filter(([, count]) => count > 0)
+      .map(([noun, count]) => pluralize(noun, count, true));
+    if (uses.length === 0) return;
+    throw new ConflictException({
+      label: 'Currency In Use',
+      detail: `${dropped.join(', ')} cannot be removed while ${uses.join(', ')} of this supplier use it.`,
+      errors: [{ field: 'currencyCodes', message: `${dropped.join(', ')} is still in use` }],
+    });
+  }
+
+  // Counts the purchase orders, quotations and item prices that keep a supplier from being deleted
   async countReferences(id: string): Promise<{ purchaseOrders: number; quotations: number; prices: number }> {
     const count = sql<number>`count(*)::int`.mapWith(Number);
     const [[orders], [quotations], [prices]] = await Promise.all([
@@ -261,73 +305,5 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
       .where(inArray(suppliers.id, ids))
       .returning({ id: suppliers.id });
     return rows.length;
-  }
-
-  // Every supplier of the legal entity with the site's enrollment when there is one — the site's suppliers list
-  findForSiteList(
-    legalEntityId: string,
-    siteId: string,
-    options: { where?: SQL; orderBy?: SQL[]; limit?: number; offset?: number },
-  ): Promise<{ result: SiteSupplierListRow[]; count: number }> {
-    const scope = eq(suppliers.legalEntityId, legalEntityId);
-    return this.findAllAndCount<SiteSupplierListRow>({
-      select: {
-        ...getColumns(suppliers),
-        partyName: parties.displayName,
-        enrollmentId: supplierSites.id,
-        paymentTermId: supplierSites.paymentTermId,
-        paymentTermName: paymentTerms.name,
-        enrolledAt: supplierSites.createdAt,
-      },
-      innerJoins: [{ table: parties, on: eq(parties.id, suppliers.partyId) }],
-      leftJoins: [
-        {
-          table: supplierSites,
-          on: and(eq(supplierSites.supplierId, suppliers.id), eq(supplierSites.siteId, siteId)),
-        },
-        { table: paymentTerms, on: eq(paymentTerms.id, supplierSites.paymentTermId) },
-      ],
-      where: options.where ? and(scope, options.where) : scope,
-      orderBy: options.orderBy?.length ? options.orderBy : [sql`${supplierSites.id} IS NULL`, asc(parties.displayName)],
-      limit: options.limit,
-      offset: options.offset,
-    });
-  }
-
-  findAtSite(
-    legalEntityId: string,
-    siteId: string,
-    options: { where?: SQL; orderBy?: SQL[]; limit?: number; offset?: number },
-  ): Promise<{ result: SupplierAtSiteRow[]; count: number }> {
-    const scope = eq(suppliers.legalEntityId, legalEntityId);
-    return this.findAllAndCount<SupplierAtSiteRow>({
-      select: {
-        ...getColumns(suppliers),
-        partyName: parties.displayName,
-        enrollmentId: supplierSites.id,
-        paymentTermId: supplierSites.paymentTermId,
-        paymentTermName: paymentTerms.name,
-        partyTaxRegistrationId: supplierSites.partyTaxRegistrationId,
-        registrationNumber: partyTaxRegistrations.registrationNumber,
-        partyBankAccountId: supplierSites.partyBankAccountId,
-        bankAccountName: partyBankAccounts.accountName,
-        orderRelationshipId: supplierSites.orderRelationshipId,
-        enrolledAt: supplierSites.createdAt,
-      },
-      innerJoins: [{ table: parties, on: eq(parties.id, suppliers.partyId) }],
-      leftJoins: [
-        {
-          table: supplierSites,
-          on: and(eq(supplierSites.supplierId, suppliers.id), eq(supplierSites.siteId, siteId)),
-        },
-        { table: paymentTerms, on: eq(paymentTerms.id, supplierSites.paymentTermId) },
-        { table: partyTaxRegistrations, on: eq(partyTaxRegistrations.id, supplierSites.partyTaxRegistrationId) },
-        { table: partyBankAccounts, on: eq(partyBankAccounts.id, supplierSites.partyBankAccountId) },
-      ],
-      where: options.where ? and(scope, options.where) : scope,
-      orderBy: options.orderBy?.length ? options.orderBy : [asc(parties.displayName)],
-      limit: options.limit,
-      offset: options.offset,
-    });
   }
 }

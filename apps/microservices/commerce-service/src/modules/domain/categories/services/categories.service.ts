@@ -134,18 +134,17 @@ export class CategoriesDomainService {
     const pathLabel = this.toPathLabel(data.name);
     const path = this.buildPath(parent?.path ?? null, pathLabel);
 
-    const entity = await this.withDuplicateGuard(data.name, () =>
-      this.categoriesRepository.create({
-        name: data.name,
-        parentId: parent?.id ?? null,
-        categoryRole: role,
-        pathLabel,
-        path,
-        sortOrder: data.sortOrder ?? 1,
-        isActive: data.isActive ?? true,
-        defaultTaxClassId: data.defaultTaxClassId ?? null,
-      }),
-    );
+    await this.categoriesRepository.assertSiblingLabelFree(parent?.id ?? null, pathLabel, data.name);
+    const entity = await this.categoriesRepository.create({
+      name: data.name,
+      parentId: parent?.id ?? null,
+      categoryRole: role,
+      pathLabel,
+      path,
+      sortOrder: data.sortOrder ?? 1,
+      isActive: data.isActive ?? true,
+      defaultTaxClassId: data.defaultTaxClassId ?? null,
+    });
 
     this.logger.log(`Created category: ${entity.name} (${entity.id}) path=${path}`);
     return {
@@ -188,14 +187,15 @@ export class CategoriesDomainService {
 
       const nextPathLabel = nameChanged ? this.toPathLabel(nextName) : existing.pathLabel;
 
-      const updated = await this.withDuplicateGuard(nextName, () =>
-        this.categoriesRepository.update(id, {
-          ...data,
-          parentId: data.parentId === undefined ? undefined : data.parentId || null,
-          pathLabel: nameChanged ? nextPathLabel : undefined,
-          defaultTaxClassId: data.defaultTaxClassId === undefined ? undefined : data.defaultTaxClassId || null,
-        }),
-      );
+      if (parentChanged || nameChanged) {
+        await this.categoriesRepository.assertSiblingLabelFree(nextParentId, nextPathLabel, nextName, id);
+      }
+      const updated = await this.categoriesRepository.update(id, {
+        ...data,
+        parentId: data.parentId === undefined ? undefined : data.parentId || null,
+        pathLabel: nameChanged ? nextPathLabel : undefined,
+        defaultTaxClassId: data.defaultTaxClassId === undefined ? undefined : data.defaultTaxClassId || null,
+      });
 
       if (parentChanged || nameChanged) {
         const nextPath = this.buildPath(nextParent?.path ?? null, nextPathLabel);
@@ -364,24 +364,5 @@ export class CategoriesDomainService {
       await walk(node.parentId, new Set([...visited, currentId]));
     };
     await walk(proposedParentId, new Set());
-  }
-
-  // Wraps a write that may collide on (parent_id, path_label); translates 23505 → ConflictException
-  private async withDuplicateGuard<T>(name: string, write: () => Promise<T>): Promise<T> {
-    try {
-      return await write();
-    } catch (error: unknown) {
-      if (this.isUniqueViolation(error)) {
-        throw new ConflictException({
-          label: 'Duplicate Sibling',
-          detail: `A sibling category with the name "${name}" already exists. Pick a different name.`,
-        });
-      }
-      throw error;
-    }
-  }
-
-  private isUniqueViolation(error: unknown): boolean {
-    return _.get(error, 'code') === '23505';
   }
 }

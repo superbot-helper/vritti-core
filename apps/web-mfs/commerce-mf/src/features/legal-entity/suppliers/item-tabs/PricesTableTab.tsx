@@ -2,8 +2,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { LE_INVENTORY_ITEMS } from '@vritti/commerce-permissions/inventory-items';
 import { LE_SUPPLIERS } from '@vritti/commerce-permissions/suppliers';
 import { type ColumnDef, DataTable, RowActions, useDataTable } from '@vritti/quantum-ui/DataTable';
-import { useConfirm } from '@vritti/quantum-ui/hooks';
+import { useConfirm, useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { CalendarClock, Pencil, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
@@ -43,6 +44,7 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({
   const { data: response, isLoading } = useSupplierItemPricesTable(supplierId, itemId);
   const deleteMutation = useDeleteSupplierSiteItemPrice(supplierRef, itemId);
   const showMrp = usePermission(LE_INVENTORY_ITEMS.mrp.view).available;
+  const today = isoTodayDate(useWorkspaceTimeZone());
 
   const handleDelete = useCallback(
     async (row: SupplierItemPriceRow) => {
@@ -81,7 +83,7 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({
                   disabledTip: quotationTip,
                   dialog: {
                     title: 'Edit Price',
-                    description: isPriceInForce(row.original)
+                    description: isPriceInForce(row.original, today)
                       ? 'Change the end date of this price.'
                       : 'Update this scheduled price.',
                     content: (close) => (
@@ -105,7 +107,7 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({
                   label: 'Delete',
                   variant: 'destructive',
                   permission: LE_SUPPLIERS.items.prices.delete,
-                  hidden: isPriceInForce(row.original),
+                  hidden: isPriceInForce(row.original, today),
                   disabled: !!quotationTip,
                   disabledTip: quotationTip,
                   onClick: () => handleDelete(row.original),
@@ -116,7 +118,7 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({
         },
       },
     ],
-    [showMrp, supplierRef, itemId, inventoryItemId, uomId, currencyCodes, handleDelete],
+    [showMrp, today, supplierRef, itemId, inventoryItemId, uomId, currencyCodes, handleDelete],
   );
 
   const { table } = useDataTable({

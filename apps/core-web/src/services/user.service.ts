@@ -20,6 +20,8 @@ export interface AuthOrg {
   id: string;
   name: string;
   subdomain: string;
+  // ISO 4217 — the currency of the org and site-group workspaces
+  defaultCurrencyCode: string;
   logoLightUrl: string | null;
   logoDarkUrl: string | null;
   // Provisioned external services — gates service-dependent features without calling the provider

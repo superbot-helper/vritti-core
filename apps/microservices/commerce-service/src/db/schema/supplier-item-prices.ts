@@ -50,6 +50,9 @@ export const supplierItemPrices = commerceSchema.table(
   },
   (table) => [
     uniqueIndex('uq_supplier_item_prices_site_from').on(table.supplierItemId, table.siteId, table.validFrom),
+    uniqueIndex('uq_supplier_item_prices_site_open')
+      .on(table.supplierItemId, table.siteId)
+      .where(sql`${table.validTo} IS NULL`),
     index('idx_supplier_item_prices_item').on(table.supplierItemId, table.validFrom),
     index('idx_supplier_item_prices_site').on(table.siteId),
     index('idx_supplier_item_prices_le').on(table.legalEntityId),

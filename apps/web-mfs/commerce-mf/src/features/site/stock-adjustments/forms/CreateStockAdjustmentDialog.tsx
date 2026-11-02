@@ -2,7 +2,7 @@ import { Button } from '@vritti/quantum-ui/Button';
 import { CurrencyField } from '@vritti/quantum-ui/CurrencyField';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form } from '@vritti/quantum-ui/Form';
-import { useBUCurrency } from '@vritti/quantum-ui/hooks';
+import { useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
 import { Select } from '@vritti/quantum-ui/Select';
 import { TextArea } from '@vritti/quantum-ui/TextArea';
 import { zodResolver } from '@vritti/quantum-ui/zod';
@@ -29,7 +29,7 @@ const adjustmentTypeOptions = [
 ];
 
 export const CreateStockAdjustmentDialog: React.FC<CreateStockAdjustmentDialogProps> = ({ onSuccess, onCancel }) => {
-  const buCurrencyCode = useBUCurrency();
+  const workspaceCurrency = useWorkspaceCurrency();
   const form = useForm<CreateStockAdjustmentFormData>({
     resolver: zodResolver(createStockAdjustmentSchema),
     defaultValues: {
@@ -71,7 +71,7 @@ export const CreateStockAdjustmentDialog: React.FC<CreateStockAdjustmentDialogPr
           name="unitCost"
           label="Unit Cost"
           description="Cost per primary unit, in your base currency. Used to value the opening stock."
-          currencyCode={buCurrencyCode ?? undefined}
+          currencyCode={workspaceCurrency ?? undefined}
         />
       )}
       <TextArea name="reason" label="Reason" placeholder="Enter reason for adjustment" />

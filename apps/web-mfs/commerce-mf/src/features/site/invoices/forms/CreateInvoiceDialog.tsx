@@ -2,9 +2,11 @@ import { Button } from '@vritti/quantum-ui/Button';
 import { DatePicker } from '@vritti/quantum-ui/DatePicker';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form } from '@vritti/quantum-ui/Form';
+import { useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { Select } from '@vritti/quantum-ui/Select';
 import { TextArea } from '@vritti/quantum-ui/TextArea';
 import { TextField } from '@vritti/quantum-ui/TextField';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
 import { useForm } from 'react-hook-form';
@@ -17,6 +19,7 @@ interface CreateInvoiceDialogProps {
 }
 
 export const CreateInvoiceDialog: React.FC<CreateInvoiceDialogProps> = ({ onSuccess, onCancel }) => {
+  const timeZone = useWorkspaceTimeZone();
   const form = useForm<CreateInvoiceFormData>({
     resolver: zodResolver(createInvoiceSchema),
     defaultValues: {
@@ -24,7 +27,7 @@ export const CreateInvoiceDialog: React.FC<CreateInvoiceDialogProps> = ({ onSucc
       invoiceNumber: '',
       partyType: undefined,
       partyName: '',
-      issuedDate: new Date().toISOString().split('T')[0],
+      issuedDate: isoTodayDate(timeZone),
       paymentTerms: '',
       notes: '',
     },

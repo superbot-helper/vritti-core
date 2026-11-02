@@ -10,7 +10,6 @@ import { useSlugParams } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import { useParams } from 'react-router-dom';
 import type {
   EnrollmentPayload,
   SupplierSiteRef,
@@ -51,12 +50,10 @@ import {
   SUPPLIER_SITE_KEY,
 } from './keys';
 
-// The supplier and site of an LE supplier-site page — `…/<supplier>/<siteId>` names the site `detail`, the item
-// page under it `siteId`
+// The supplier and site of an LE supplier-site page
 export function useSupplierSiteRef(): SupplierSiteRef {
-  const { id: supplierId } = useSlugParams('supplierSlug');
-  const { siteId, detail } = useParams();
-  return { supplierId, siteId: siteId ?? detail };
+  const { supplierSlug, siteSlug } = useSlugParams('supplierSlug', 'siteSlug');
+  return { supplierId: supplierSlug.id, siteId: siteSlug.id };
 }
 
 function siteOf(ref: SupplierSiteRef): string {

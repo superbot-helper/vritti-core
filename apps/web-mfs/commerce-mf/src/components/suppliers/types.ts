@@ -38,6 +38,8 @@ export interface EnrollmentPayload {
   partyTaxRegistrationId: string;
   partyBankAccountId: string | null;
   orderRelationshipId: string | null;
+  orderEmailCommunicationId: string;
+  orderPhoneCommunicationId: string;
 }
 
 export interface UpdateEnrollmentVars {

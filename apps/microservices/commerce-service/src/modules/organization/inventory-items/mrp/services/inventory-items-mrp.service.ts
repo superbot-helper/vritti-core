@@ -3,8 +3,7 @@ import type { AddInventoryItemMrpDto } from '@domain/inventory-item-mrps/dto/req
 import type { UpdateInventoryItemMrpDto } from '@domain/inventory-item-mrps/dto/request/update-inventory-item-mrp.dto';
 import { InventoryItemMrpsDomainService } from '@domain/inventory-item-mrps/services/inventory-item-mrps.service';
 import { Injectable, Logger } from '@nestjs/common';
-import { ConflictException, NotFoundException, ValidationException } from '@vritti/api-sdk/exceptions';
-import _ from '@vritti/api-sdk/lodash';
+import { NotFoundException, ValidationException } from '@vritti/api-sdk/exceptions';
 import type { SuccessResponseDto } from '@vritti/api-sdk/responses';
 
 // Org-scope service for the manual suggested-MRP table: reads the per-currency MRPs and adds/edits/removes them,
@@ -34,18 +33,8 @@ export class InventoryItemsMrpService {
         errors: [{ field: 'uomId', message: "Pick a unit in the item's unit family." }],
       });
     }
-    try {
-      const row = await this.mrpsService.create(dto);
-      return InventoryItemMrpDto.from(row);
-    } catch (error: unknown) {
-      if (this.isUniqueViolation(error)) {
-        throw new ConflictException({
-          label: 'Duplicate MRP',
-          detail: 'This unit, currency and amount is already recorded — set it current instead.',
-        });
-      }
-      throw error;
-    }
+    const row = await this.mrpsService.create(dto);
+    return InventoryItemMrpDto.from(row);
   }
 
   // Updates an existing MRP row's amount by id; the unit is fixed on edit
@@ -76,10 +65,5 @@ export class InventoryItemsMrpService {
       throw new NotFoundException({ label: 'MRP Not Found', detail: 'MRP not found.' });
     }
     return { success: true, message: 'MRP deleted successfully.' };
-  }
-
-  // Returns true when the pg error is a unique-constraint violation
-  private isUniqueViolation(error: unknown): boolean {
-    return _.get(error, 'code') === '23505';
   }
 }

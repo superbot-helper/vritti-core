@@ -1,7 +1,10 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 
-export type InventoryItemFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'name'> & { name?: string };
+export type InventoryItemFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'name'> & {
+  name?: string;
+};
 
 // Pre-configured SelectFilter for inventory item filtering with async search
 export const InventoryItemFilter = Object.assign(

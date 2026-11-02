@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import { and, asc, eq, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { ConflictException } from '@vritti/api-sdk/exceptions';
 import type { FindForSelectConfig } from '@vritti/api-sdk/select';
 import {
   catalogListings,
@@ -198,6 +199,24 @@ export class InventoryItemMrpsDomainRepository extends PrimaryBaseRepository<typ
   }
 
   // Inserts a new MRP row for an (item, uom, currency) triple; the unique constraint surfaces conflicts
+  // Throws when the item already records this amount in the unit and currency
+  async assertAmountFree(inventoryItemId: string, uomId: string, currencyCode: string, amount: bigint): Promise<void> {
+    const taken = await this.exists(
+      and(
+        eq(inventoryItemMrps.inventoryItemId, inventoryItemId),
+        eq(inventoryItemMrps.uomId, uomId),
+        eq(inventoryItemMrps.currencyCode, currencyCode),
+        eq(inventoryItemMrps.amount, amount),
+      ) as SQL,
+    );
+    if (taken) {
+      throw new ConflictException({
+        label: 'Duplicate MRP',
+        detail: 'This unit, currency and amount is already recorded — set it current instead.',
+      });
+    }
+  }
+
   async createMrp(
     inventoryItemId: string,
     uomId: string,

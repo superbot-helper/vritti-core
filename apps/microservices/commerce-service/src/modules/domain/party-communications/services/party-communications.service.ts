@@ -1,20 +1,45 @@
+import type { PartyFunctionAssignmentInput } from '@domain/party-functions/dto/request/party-function-assignment-input.dto';
+import { PartyFunctionsDomainService } from '@domain/party-functions/services/party-functions.service';
 import { Injectable, Logger } from '@nestjs/common';
 import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
 import { PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import { and, asc, desc, eq } from '@vritti/api-sdk/drizzle-orm';
-import { ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import type { SelectOptionsQueryDto, SelectQueryResult } from '@vritti/api-sdk/select';
 import {
   CONTACTABLE_CHANNELS,
   type PartyCommunication,
   type PartyCommunicationChannel,
   PartyCommunicationChannelValues,
+  type PartyFunctionType,
+  PartyFunctionTypeValues,
   partyCommunications,
 } from '@/db/schema';
-import { PartyCommunicationDto } from '../dto/entity/party-communication.dto';
+import { type PartyCommunicationFunction, PartyCommunicationDto } from '../dto/entity/party-communication.dto';
 import type { PartyCommunicationInputDto } from '../dto/request/party-communication-input.dto';
 import type { UpdateCommunicationDto } from '../dto/request/update-communication.dto';
 import { PartyCommunicationsDomainRepository } from '../repositories/party-communications.repository';
+
+// Rejects function assignments a communication cannot hold: only ORDERING, and only on an email or phone
+function assertFunctionsAllowed(channel: PartyCommunicationChannel, functions?: PartyFunctionAssignmentInput[]): void {
+  if (!functions?.length) return;
+  const invalid = functions.find((assignment) => assignment.function !== PartyFunctionTypeValues.ORDERING);
+  if (invalid) {
+    throw new BadRequestException({
+      label: 'Invalid Function',
+      detail: `"${invalid.function}" cannot be assigned to a communication. Only ORDERING is allowed.`,
+      errors: [{ field: 'functions', message: 'Only ordering is allowed' }],
+    });
+  }
+  if (!CONTACTABLE_CHANNELS.includes(channel as (typeof CONTACTABLE_CHANNELS)[number])) {
+    throw new BadRequestException({
+      label: 'Invalid Function',
+      detail: 'Only an email address or phone number can be marked for ordering.',
+      errors: [{ field: 'functions', message: 'Email or phone only' }],
+    });
+  }
+}
 
 @Injectable()
 export class PartyCommunicationsDomainService {
@@ -30,6 +55,7 @@ export class PartyCommunicationsDomainService {
   constructor(
     private readonly database: PrimaryDatabaseService,
     private readonly repository: PartyCommunicationsDomainRepository,
+    private readonly functionsService: PartyFunctionsDomainService,
   ) {}
 
   // Resolves the parties reachable at a presented email or phone, oldest party first
@@ -63,7 +89,17 @@ export class PartyCommunicationsDomainService {
       offset,
     });
 
-    return { result: rows.map((row) => PartyCommunicationDto.from(row, row.apps)), count };
+    return { result: rows.map((row) => PartyCommunicationDto.from(row, row.apps, row.functions)), count };
+  }
+
+  // Returns a party's active communications on one channel as select options, optionally only holders of a function
+  findForSelect(
+    query: SelectOptionsQueryDto,
+    partyId: string,
+    channel: PartyCommunicationChannel,
+    functionCode?: PartyFunctionType,
+  ): Promise<SelectQueryResult> {
+    return this.repository.findOptionsForSelect(partyId, channel, query, functionCode);
   }
 
   // Returns all communications of a party
@@ -122,6 +158,7 @@ export class PartyCommunicationsDomainService {
         detail: 'Messaging apps can only be added to a phone number.',
       });
     }
+    assertFunctionsAllowed(data.channel, data.functions);
 
     const entity = await this.database.runInTransaction(async () => {
       const isPrimary = data.isPrimary ?? (await this.claimsEmptyPrimarySlot(partyId, data.channel, isActive));
@@ -136,15 +173,23 @@ export class PartyCommunicationsDomainService {
         isActive,
       });
       if (data.apps) await this.repository.replaceApps(created.id, data.apps);
+      if (data.functions?.length) {
+        await this.functionsService.syncEntityFunctions({
+          partyId,
+          target: { communicationId: created.id },
+          functions: data.functions,
+        });
+      }
       return created;
     });
 
     const apps = (data.apps ?? []).map((a) => ({ app: a.app, handle: a.handle ?? null }));
+    const functions = [...new Set((data.functions ?? []).map((a) => a.function as PartyCommunicationFunction))];
     this.logger.log(`Created ${data.channel} communication for party ${partyId}`);
     return {
       success: true,
       message: 'Communication added successfully.',
-      data: PartyCommunicationDto.from(entity, apps),
+      data: PartyCommunicationDto.from(entity, apps, functions),
     };
   }
 
@@ -195,15 +240,34 @@ export class PartyCommunicationsDomainService {
         detail: 'Messaging apps can only be added to a phone number.',
       });
     }
+    assertFunctionsAllowed(existing.channel, data.functions);
 
-    const { apps, ...rest } = data;
-    if (Object.keys(rest).length > 0 || apps !== undefined) {
+    const { apps, functions, ...rest } = data;
+    const dropsOrdering =
+      functions !== undefined && !functions.some((a) => a.function === PartyFunctionTypeValues.ORDERING);
+    const deactivates = rest.isActive === false && existing.isActive;
+    if ((dropsOrdering || deactivates) && (await this.repository.isUsedBySupplierSite(id))) {
+      throw new ConflictException({
+        label: 'Communication In Use',
+        detail: 'A supplier site orders through this value. Pick another order email or phone on that site first.',
+        errors: [{ field: dropsOrdering ? 'functions' : 'isActive', message: 'Used by a supplier site' }],
+      });
+    }
+
+    if (Object.keys(rest).length > 0 || apps !== undefined || functions !== undefined) {
       await this.database.runInTransaction(async () => {
         if (rest.isPrimary === true) {
           await this.repository.clearPrimaryForChannel(existing.partyId, existing.channel, id);
         }
         if (Object.keys(rest).length > 0) await this.repository.update(id, rest);
         if (apps !== undefined) await this.repository.replaceApps(id, apps);
+        if (functions !== undefined) {
+          await this.functionsService.syncEntityFunctions({
+            partyId: existing.partyId,
+            target: { communicationId: id },
+            functions,
+          });
+        }
       });
     }
 
@@ -215,6 +279,12 @@ export class PartyCommunicationsDomainService {
   async delete(id: string): Promise<SuccessResponseDto> {
     const existing = await this.repository.findById(id);
     if (!existing) throw new NotFoundException('Communication not found.');
+    if (await this.repository.isUsedBySupplierSite(id)) {
+      throw new ConflictException({
+        label: 'Communication In Use',
+        detail: `"${existing.value}" is a supplier site's order contact. Pick another order email or phone on that site first.`,
+      });
+    }
     await this.repository.delete(id);
     this.logger.log(`Deleted communication: ${id}`);
     return { success: true, message: 'Communication removed successfully.' };

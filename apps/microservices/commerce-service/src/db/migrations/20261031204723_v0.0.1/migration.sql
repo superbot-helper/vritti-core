@@ -1,0 +1,1 @@
+ALTER TABLE "commerce"."suppliers" ALTER COLUMN "default_payment_term_id" SET NOT NULL;

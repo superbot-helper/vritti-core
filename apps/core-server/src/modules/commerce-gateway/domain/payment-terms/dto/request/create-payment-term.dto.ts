@@ -1,17 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsCode, Trim } from '@vritti/api-sdk/decorators';
+import { Trim } from '@vritti/api-sdk/decorators';
 import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { PAYMENT_TERM_BASELINES, type PaymentTermBaseline } from '../response/payment-term-response.dto';
 
 export class CreatePaymentTermDto {
-  @Trim({ nullify: false })
-  @ApiProperty({ description: 'Unique code within the org', example: 'net-30' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(50)
-  @IsCode()
-  code: string;
-
   @Trim({ nullify: false })
   @ApiProperty({ description: 'Human-readable name', example: 'Net 30' })
   @IsString()

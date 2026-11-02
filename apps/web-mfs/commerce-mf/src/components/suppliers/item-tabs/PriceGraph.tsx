@@ -1,10 +1,12 @@
 import { Empty } from '@vritti/quantum-ui/Empty';
-import { Skeleton } from '@vritti/quantum-ui/Skeleton';
+import { useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { LineChart as LineChartIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { defaultPriceRange, inCurrency } from '@/utils/supplierPrice';
 import type { SupplierSiteBinding } from '../bindings';
+import { PriceChartSkeleton } from '../PriceChartSkeleton';
 import { PriceCurrencyFilter } from '../PriceCurrencyFilter';
 import { PriceRangePicker } from '../PriceRangePicker';
 import { PriceTimelineCard } from '../PriceTimelineCard';
@@ -19,13 +21,14 @@ interface PriceGraphProps {
 
 // The site's unit price over time in one currency, from the item's price history at that site
 export const PriceGraph: React.FC<PriceGraphProps> = ({ binding, supplierRef, itemId }) => {
-  const [range, setRange] = useState(defaultPriceRange);
+  const today = isoTodayDate(useWorkspaceTimeZone(supplierRef.siteId));
+  const [range, setRange] = useState(() => defaultPriceRange(today));
   const { data: history, isLoading } = binding.useSitePriceHistory(supplierRef, itemId, range);
   const site = history?.sites[0];
   const timelines = useMemo(() => (site ? [site] : []), [site]);
   const { currencies, currency, setCurrency } = usePriceCurrency(timelines);
 
-  if (isLoading) return <Skeleton className="h-96 w-full" />;
+  if (isLoading) return <PriceChartSkeleton lines={1} />;
   if (!site || !currency) {
     return (
       <div className="flex flex-col gap-4">
@@ -44,7 +47,7 @@ export const PriceGraph: React.FC<PriceGraphProps> = ({ binding, supplierRef, it
   return (
     <PriceTimelineCard
       title="Price History"
-      site={inCurrency(site, currency)}
+      site={inCurrency(site, currency, today)}
       currencyCode={currency}
       range={range}
       action={

@@ -1,7 +1,7 @@
 import { Button } from '@vritti/quantum-ui/Button';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form } from '@vritti/quantum-ui/Form';
-import { useBUCurrency } from '@vritti/quantum-ui/hooks';
+import { useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
 import { Select } from '@vritti/quantum-ui/Select';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { z, zodNumericField, zodResolver } from '@vritti/quantum-ui/zod';
@@ -44,7 +44,7 @@ export const ChangePurchaseOrderExchangeRateDialog: React.FC<ChangePurchaseOrder
   onSuccess,
   onCancel,
 }) => {
-  const buCurrencyCode = useBUCurrency();
+  const workspaceCurrency = useWorkspaceCurrency();
 
   const form = useForm<ChangeExchangeRateFormData>({
     resolver: zodResolver(changeExchangeRateSchema),
@@ -79,7 +79,7 @@ export const ChangePurchaseOrderExchangeRateDialog: React.FC<ChangePurchaseOrder
       {exchangeRateType === 'FIXED' ? (
         <TextField
           name="exchangeRate"
-          label={`Exchange Rate (${purchaseOrder.currencyCode} → ${buCurrencyCode ?? 'BU currency'})`}
+          label={`Exchange Rate (${purchaseOrder.currencyCode} → ${workspaceCurrency ?? 'site currency'})`}
           type="number"
           placeholder="e.g. 83.250000"
           positive

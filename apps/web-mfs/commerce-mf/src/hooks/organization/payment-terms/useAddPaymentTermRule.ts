@@ -4,7 +4,7 @@ import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
 import type { PaymentTermRuleFormData } from '@/schemas/payment-terms';
 import { addPaymentTermRule } from '@/services/organization/payment-terms.service';
-import { PAYMENT_TERM_KEY, PAYMENT_TERMS_TABLE_KEY } from './keys';
+import { PAYMENT_TERM_KEY } from './keys';
 
 export function useAddPaymentTermRule(
   options?: Omit<
@@ -18,7 +18,6 @@ export function useAddPaymentTermRule(
     mutationFn: addPaymentTermRule,
     onSuccess: (...args) => {
       const [, vars] = args;
-      queryClient.invalidateQueries({ queryKey: PAYMENT_TERMS_TABLE_KEY });
       queryClient.invalidateQueries({ queryKey: PAYMENT_TERM_KEY(vars.paymentTermId) });
       options?.onSuccess?.(...args);
     },

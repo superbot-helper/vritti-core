@@ -29,8 +29,6 @@ export const AddSupplierDialog: React.FC<AddSupplierDialogProps> = ({ onSuccess,
       notes: '',
       purchasingBlocked: false,
       paymentBlocked: false,
-      orderEmail: '',
-      orderPhone: '',
       isActive: true,
     },
   });
@@ -60,8 +58,6 @@ export const AddSupplierDialog: React.FC<AddSupplierDialogProps> = ({ onSuccess,
         notes: data.notes,
         purchasingBlocked: data.purchasingBlocked,
         paymentBlocked: data.paymentBlocked,
-        orderEmail: data.orderEmail,
-        orderPhone: data.orderPhone,
         isActive: data.isActive,
       })}
     >
@@ -72,7 +68,6 @@ export const AddSupplierDialog: React.FC<AddSupplierDialogProps> = ({ onSuccess,
 
         <FormSection title="Commercial Terms" contentClassName="block">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <TextField name="code" label="Code" placeholder="e.g. SUP-FRESH-001" />
             <CurrencySelector
               name="currencyCodes"
               label="Currencies"
@@ -80,6 +75,7 @@ export const AddSupplierDialog: React.FC<AddSupplierDialogProps> = ({ onSuccess,
               multiple
               description="Every currency this supplier quotes and invoices in"
             />
+            <TextField name="code" label="Code" placeholder="e.g. SUP-FRESH-001" />
             <CurrencySelector
               name="currencyCode"
               label="Default Currency"
@@ -95,14 +91,9 @@ export const AddSupplierDialog: React.FC<AddSupplierDialogProps> = ({ onSuccess,
             <div className="sm:col-span-2">
               <TextArea name="notes" label="Notes" placeholder="Optional notes" />
             </div>
-            <Switch name="isActive" label="Active" description="Inactive suppliers are hidden from procurement" />
-          </div>
-        </FormSection>
-
-        <FormSection title="Ordering" contentClassName="block">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <TextField name="orderEmail" label="Order Email" placeholder="e.g. orders@acme.com" />
-            <TextField name="orderPhone" label="Order Phone" placeholder="e.g. +91 98765 43210" />
+            <div className="sm:col-span-2">
+              <Switch name="isActive" label="Active" description="Inactive suppliers are hidden from procurement" />
+            </div>
           </div>
         </FormSection>
 

@@ -68,4 +68,7 @@ export const SITE_SUPPLIERS = {
       delete: 'site.suppliers.items.prices.delete',
     },
   },
+  quotations: {
+    view: 'site.suppliers.quotations.view',
+  },
 } as const;

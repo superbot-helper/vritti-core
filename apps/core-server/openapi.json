@@ -16565,9 +16565,9 @@
             "name": "asOf",
             "required": false,
             "in": "query",
-            "description": "Day the prices in force are read on: YYYY-MM-DD, or yesterday / today / tomorrow; today when omitted",
+            "description": "Day the prices in force are read on (YYYY-MM-DD); today when omitted",
             "schema": {
-              "example": "today",
+              "example": "2026-11-14",
               "type": "string"
             }
           }
@@ -31821,9 +31821,47 @@
         ]
       }
     },
-    "/commerce-api/payment-terms/{id}/activate": {
+    "/commerce-api/payment-terms/{id}/baseline": {
+      "patch": {
+        "operationId": "PaymentTermsGatewayController_changeBaseline",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePaymentTermBaselineDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Commerce - Payment Terms"
+        ]
+      }
+    },
+    "/commerce-api/payment-terms/{id}/publish": {
       "post": {
-        "operationId": "PaymentTermsGatewayController_activate",
+        "operationId": "PaymentTermsGatewayController_publish",
         "parameters": [
           {
             "name": "id",
@@ -31849,9 +31887,9 @@
         ]
       }
     },
-    "/commerce-api/payment-terms/{id}/deactivate": {
+    "/commerce-api/payment-terms/{id}/unpublish": {
       "post": {
-        "operationId": "PaymentTermsGatewayController_deactivate",
+        "operationId": "PaymentTermsGatewayController_unpublish",
         "parameters": [
           {
             "name": "id",
@@ -31878,6 +31916,32 @@
       }
     },
     "/commerce-api/payment-terms/{id}/rules": {
+      "get": {
+        "operationId": "PaymentTermsGatewayController_findRules",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Commerce - Payment Terms"
+        ]
+      },
       "post": {
         "operationId": "PaymentTermsGatewayController_addRule",
         "parameters": [
@@ -31902,6 +31966,68 @@
         },
         "responses": {
           "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "Commerce - Payment Terms"
+        ]
+      }
+    },
+    "/commerce-api/payment-terms/{id}/schedule": {
+      "get": {
+        "operationId": "PaymentTermsGatewayController_previewSchedule",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "amount",
+            "required": true,
+            "in": "query",
+            "description": "Invoice amount in major units",
+            "schema": {
+              "example": "100000.00",
+              "type": "string"
+            }
+          },
+          {
+            "name": "currency",
+            "required": true,
+            "in": "query",
+            "description": "ISO 4217 currency of the amount",
+            "schema": {
+              "example": "INR",
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "date",
+            "required": true,
+            "in": "query",
+            "description": "Invoice or goods-receipt date the term counts from (YYYY-MM-DD)",
+            "schema": {
+              "example": "2026-11-14",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": ""
           }
         },
@@ -38158,7 +38284,7 @@
     },
     "/commerce-api/select-api/payment-terms": {
       "get": {
-        "description": "Returns paginated active payment term options for the select component.",
+        "description": "Returns paginated published payment term options for the select component.",
         "operationId": "SelectApiController_selectPaymentTerms",
         "parameters": [
           {
@@ -38292,10 +38418,10 @@
             }
           },
           {
-            "name": "includeAll",
+            "name": "allowUnpublished",
             "required": false,
             "in": "query",
-            "description": "When true, draft and inactive terms are returned too (navigation, not picking)",
+            "description": "When true, unpublished (draft) terms are returned too — for navigation, not picking",
             "schema": {
               "type": "boolean"
             }
@@ -44843,6 +44969,11 @@
           "subdomain": {
             "type": "string"
           },
+          "defaultCurrencyCode": {
+            "type": "string",
+            "description": "ISO 4217 currency of org and site-group workspaces",
+            "example": "INR"
+          },
           "logoLightUrl": {
             "type": "object"
           },
@@ -44860,6 +44991,7 @@
           "id",
           "name",
           "subdomain",
+          "defaultCurrencyCode",
           "services"
         ]
       },
@@ -45834,6 +45966,11 @@
             ],
             "example": "0-10"
           },
+          "defaultCurrencyCode": {
+            "type": "string",
+            "description": "ISO 4217 currency of org and site-group workspaces",
+            "example": "INR"
+          },
           "plan": {
             "type": "string",
             "description": "Subscription plan",
@@ -45866,6 +46003,7 @@
           "name",
           "subdomain",
           "size",
+          "defaultCurrencyCode",
           "storage"
         ]
       },
@@ -45929,6 +46067,11 @@
             ],
             "example": "0-10"
           },
+          "defaultCurrencyCode": {
+            "type": "string",
+            "description": "ISO 4217 currency of org and site-group workspaces",
+            "example": "INR"
+          },
           "logoLightUrl": {
             "type": "object",
             "description": "Public logo URL for light surfaces",
@@ -45967,6 +46110,7 @@
           "name",
           "subdomain",
           "size",
+          "defaultCurrencyCode",
           "plan",
           "services",
           "createdAt"
@@ -46017,6 +46161,11 @@
               "100-500",
               "500+"
             ]
+          },
+          "defaultCurrencyCode": {
+            "type": "string",
+            "description": "ISO 4217 currency of org and site-group workspaces",
+            "example": "INR"
           },
           "logoLightUrl": {
             "type": "string",
@@ -46315,7 +46464,6 @@
               "GSTIN",
               "VAT",
               "TIN",
-              "PAN",
               "OTHER"
             ]
           },
@@ -46988,7 +47136,6 @@
               "GSTIN",
               "VAT",
               "TIN",
-              "PAN",
               "OTHER"
             ]
           },
@@ -47019,7 +47166,6 @@
               "GSTIN",
               "VAT",
               "TIN",
-              "PAN",
               "OTHER"
             ]
           },
@@ -53701,8 +53847,9 @@
             "example": "INR"
           },
           "currencyCodes": {
-            "description": "Further currencies the supplier trades in; the default is always included",
+            "description": "Every currency the supplier trades in; must include the default currency",
             "example": [
+              "INR",
               "USD"
             ],
             "type": "array",
@@ -53711,9 +53858,8 @@
             }
           },
           "defaultPaymentTermId": {
-            "type": "object",
-            "description": "Payment term new site enrollments start from",
-            "nullable": true
+            "type": "string",
+            "description": "Payment term new site enrollments start from"
           },
           "notes": {
             "type": "object",
@@ -53722,12 +53868,12 @@
           "purchasingBlocked": {
             "type": "boolean",
             "description": "Block new purchase orders for this supplier",
-            "default": false
+            "example": false
           },
           "paymentBlocked": {
             "type": "boolean",
             "description": "Block payments to this supplier",
-            "default": false
+            "example": false
           },
           "orderEmail": {
             "type": "object",
@@ -53742,13 +53888,18 @@
           "isActive": {
             "type": "boolean",
             "description": "Whether supplier is active",
-            "default": true
+            "example": true
           }
         },
         "required": [
           "partyId",
           "code",
-          "currencyCode"
+          "currencyCode",
+          "currencyCodes",
+          "defaultPaymentTermId",
+          "purchasingBlocked",
+          "paymentBlocked",
+          "isActive"
         ]
       },
       "UpdateSupplierDto": {
@@ -53759,9 +53910,8 @@
             "description": "Updated supplier code"
           },
           "defaultPaymentTermId": {
-            "type": "object",
-            "description": "Payment term new site enrollments start from",
-            "nullable": true
+            "type": "string",
+            "description": "Payment term new site enrollments start from"
           },
           "notes": {
             "type": "object",
@@ -54524,7 +54674,6 @@
               "GSTIN",
               "VAT",
               "TIN",
-              "PAN",
               "OTHER"
             ]
           },
@@ -54562,7 +54711,6 @@
               "GSTIN",
               "VAT",
               "TIN",
-              "PAN",
               "OTHER"
             ]
           },
@@ -55113,7 +55261,6 @@
               "GSTIN",
               "VAT",
               "TIN",
-              "PAN",
               "OTHER"
             ]
           },
@@ -55146,7 +55293,6 @@
               "GSTIN",
               "VAT",
               "TIN",
-              "PAN",
               "OTHER"
             ]
           },
@@ -55598,11 +55744,6 @@
       "CreatePaymentTermDto": {
         "type": "object",
         "properties": {
-          "code": {
-            "type": "string",
-            "description": "Unique code within the org",
-            "example": "net-30"
-          },
           "name": {
             "type": "string",
             "description": "Human-readable name",
@@ -55624,7 +55765,6 @@
           }
         },
         "required": [
-          "code",
           "name",
           "baseline"
         ]
@@ -55636,21 +55776,29 @@
             "type": "string",
             "description": "Human-readable name"
           },
-          "baseline": {
-            "type": "string",
-            "description": "Date the due days count from; only a draft may change it",
-            "enum": [
-              "INVOICE_DATE",
-              "GOODS_RECEIPT_DATE",
-              "END_OF_MONTH"
-            ]
-          },
           "description": {
             "type": "object",
             "description": "Internal description",
             "nullable": true
           }
         }
+      },
+      "ChangePaymentTermBaselineDto": {
+        "type": "object",
+        "properties": {
+          "baseline": {
+            "type": "string",
+            "description": "Date the due days count from",
+            "enum": [
+              "INVOICE_DATE",
+              "GOODS_RECEIPT_DATE",
+              "END_OF_MONTH"
+            ]
+          }
+        },
+        "required": [
+          "baseline"
+        ]
       },
       "PaymentTermRuleDto": {
         "type": "object",

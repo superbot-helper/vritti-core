@@ -12,6 +12,7 @@ import {
   type CreatePaymentTermFormData,
   createPaymentTermSchema,
   PAYMENT_TERM_BASELINE_OPTIONS,
+  PaymentTermBaselineValues,
   type PaymentTermData,
 } from '@/schemas/payment-terms';
 
@@ -23,7 +24,7 @@ interface AddPaymentTermDialogProps {
 export const AddPaymentTermDialog: React.FC<AddPaymentTermDialogProps> = ({ onSuccess, onCancel }) => {
   const form = useForm<CreatePaymentTermFormData>({
     resolver: zodResolver(createPaymentTermSchema),
-    defaultValues: { code: '', name: '', baseline: 'INVOICE_DATE', description: '' },
+    defaultValues: { name: '', baseline: PaymentTermBaselineValues.INVOICE_DATE, description: '' },
   });
 
   const createMutation = useCreatePaymentTerm({ onSuccess });
@@ -37,14 +38,12 @@ export const AddPaymentTermDialog: React.FC<AddPaymentTermDialogProps> = ({ onSu
       transformSubmit={(data) => ({ ...data, description: data.description || null })}
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <TextField name="code" label="Code" placeholder="e.g. net-30" />
-          <TextField name="name" label="Name" placeholder="e.g. Net 30" />
-        </div>
+        <TextField name="name" label="Name" placeholder="e.g. Net 30" />
         <Select
           name="baseline"
-          label="Due days count from"
+          label="Baseline"
           placeholder="Select baseline"
+          description="The date the due days count from"
           options={PAYMENT_TERM_BASELINE_OPTIONS}
         />
         <TextArea name="description" label="Description" placeholder="Optional notes for buyers and accounts" />

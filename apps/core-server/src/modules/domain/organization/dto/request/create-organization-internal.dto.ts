@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsCurrencyCode } from '@vritti/api-sdk/money';
 import { IsEnum, IsInt, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 import type { OrgPlan, OrgSize, OrgStorage } from '@/db/schema';
 import { OrgPlanValues, OrgSizeValues } from '@/db/schema';
@@ -21,6 +22,10 @@ export class CreateOrganizationInternalDto {
   })
   @IsEnum(OrgSizeValues)
   size: OrgSize;
+
+  @ApiProperty({ description: 'ISO 4217 currency of org and site-group workspaces', example: 'INR' })
+  @IsCurrencyCode()
+  defaultCurrencyCode: string;
 
   @ApiPropertyOptional({
     description: 'Subscription plan',

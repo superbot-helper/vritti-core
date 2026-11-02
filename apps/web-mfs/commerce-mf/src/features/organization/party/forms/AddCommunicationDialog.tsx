@@ -9,12 +9,14 @@ import type React from 'react';
 import { useForm } from 'react-hook-form';
 import {
   COMMUNICATION_CHANNEL_OPTIONS,
+  COMMUNICATION_FUNCTION_OPTIONS,
   type CommunicationFormData,
   communicationSchema,
   MESSAGING_APP_OPTIONS,
 } from '@/schemas/party-communications';
 import type { CommunicationsBinding } from '../bindings';
 import { AppsEditor } from './AppsEditor';
+import { FunctionsEditor } from './FunctionsEditor';
 
 interface AddCommunicationDialogProps {
   partyId: string;
@@ -37,6 +39,7 @@ export const AddCommunicationDialog: React.FC<AddCommunicationDialogProps> = ({
       isPrimary: false,
       isActive: true,
       apps: [],
+      functions: [],
     },
   });
 
@@ -55,6 +58,7 @@ export const AddCommunicationDialog: React.FC<AddCommunicationDialogProps> = ({
         isPrimary: data.isPrimary,
         isActive: data.isActive,
         apps: (data.channel === 'PHONE' ? data.apps : []).map((a) => ({ app: a.app, handle: a.handle ?? null })),
+        functions: data.functions.map((f) => ({ function: f.function })),
       })}
     >
       <div className="flex flex-col gap-6">
@@ -71,6 +75,15 @@ export const AddCommunicationDialog: React.FC<AddCommunicationDialogProps> = ({
             />
           </FormSection>
         )}
+        <FormSection title="Handles" contentClassName="block">
+          <FunctionsEditor
+            name="functions"
+            label="Communication Functions"
+            description="Ordering values can be picked as a site's order email or phone"
+            options={COMMUNICATION_FUNCTION_OPTIONS}
+            allowPrimary={false}
+          />
+        </FormSection>
         <FormSection title="Status" contentClassName="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Switch name="isPrimary" label="Primary" description="Default value for its channel" />
           <Switch name="isActive" label="Active" description="Inactive values are hidden from pickers" />

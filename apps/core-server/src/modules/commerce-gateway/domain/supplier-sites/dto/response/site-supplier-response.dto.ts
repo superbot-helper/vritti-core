@@ -32,8 +32,8 @@ export class SiteSupplierResponseDto {
   @ApiProperty({ description: 'Whether the supplier is active' })
   isActive: boolean;
 
-  @ApiPropertyOptional({ description: 'Payment term new enrollments start from', nullable: true })
-  defaultPaymentTermId: string | null;
+  @ApiProperty({ description: 'Payment term new enrollments start from' })
+  defaultPaymentTermId: string;
 
   @ApiProperty({ description: 'Whether the supplier is enrolled at the site', enum: SITE_ENROLLMENT_STATUSES })
   enrollmentStatus: SiteEnrollmentStatus;

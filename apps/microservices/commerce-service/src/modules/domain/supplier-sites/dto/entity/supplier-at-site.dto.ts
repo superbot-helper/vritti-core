@@ -1,4 +1,4 @@
-import type { SupplierAtSiteRow } from '../../repositories/suppliers.repository';
+import type { SupplierAtSiteRow } from '../../repositories/supplier-sites.repository';
 import { type SiteEnrollmentStatus, SiteEnrollmentStatusValues } from './site-supplier-list-row.dto';
 
 export class SupplierAtSiteDto {
@@ -12,7 +12,7 @@ export class SupplierAtSiteDto {
   orderEmail: string | null;
   orderPhone: string | null;
   isActive: boolean;
-  defaultPaymentTermId: string | null;
+  defaultPaymentTermId: string;
   enrollmentStatus: SiteEnrollmentStatus;
   enrollmentId: string | null;
   paymentTermId: string | null;
@@ -22,6 +22,8 @@ export class SupplierAtSiteDto {
   partyBankAccountId: string | null;
   bankAccountName: string | null;
   orderRelationshipId: string | null;
+  orderEmailCommunicationId: string | null;
+  orderPhoneCommunicationId: string | null;
   enrolledAt: string | null;
 
   static from(row: SupplierAtSiteRow): SupplierAtSiteDto {
@@ -36,7 +38,7 @@ export class SupplierAtSiteDto {
     dto.orderEmail = row.orderEmail ?? null;
     dto.orderPhone = row.orderPhone ?? null;
     dto.isActive = row.isActive;
-    dto.defaultPaymentTermId = row.defaultPaymentTermId ?? null;
+    dto.defaultPaymentTermId = row.defaultPaymentTermId;
     dto.enrollmentStatus = row.enrollmentId
       ? SiteEnrollmentStatusValues.ENROLLED
       : SiteEnrollmentStatusValues.NOT_ENROLLED;
@@ -48,6 +50,8 @@ export class SupplierAtSiteDto {
     dto.partyBankAccountId = row.partyBankAccountId ?? null;
     dto.bankAccountName = row.bankAccountName ?? null;
     dto.orderRelationshipId = row.orderRelationshipId ?? null;
+    dto.orderEmailCommunicationId = row.orderEmailCommunicationId ?? null;
+    dto.orderPhoneCommunicationId = row.orderPhoneCommunicationId ?? null;
     dto.enrolledAt = row.enrolledAt ? new Date(row.enrolledAt).toISOString() : null;
     return dto;
   }

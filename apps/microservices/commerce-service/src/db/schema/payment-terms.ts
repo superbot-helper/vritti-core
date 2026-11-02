@@ -1,17 +1,18 @@
 import { sql } from '@vritti/api-sdk/drizzle-orm';
 import {
+  boolean,
   check,
-  codeCheck,
   decimal,
   index,
   integer,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from '@vritti/api-sdk/drizzle-pg-core';
 import { commerceSchema } from './commerce-schema';
-import { paymentTermBaselineEnum, paymentTermStatusEnum } from './enums';
+import { PaymentTermBaselineValues, paymentTermBaselineEnum } from './enums';
 import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
 
 export const paymentTerms = commerceSchema.table(
@@ -19,11 +20,10 @@ export const paymentTerms = commerceSchema.table(
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     organizationId: organizationIdColumn,
-    code: varchar('code', { length: 50 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
-    baseline: paymentTermBaselineEnum('baseline').notNull().default('INVOICE_DATE'),
+    baseline: paymentTermBaselineEnum('baseline').notNull().default(PaymentTermBaselineValues.INVOICE_DATE),
     description: varchar('description', { length: 500 }),
-    status: paymentTermStatusEnum('status').notNull().default('DRAFT'),
+    isPublished: boolean('is_published').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -31,10 +31,9 @@ export const paymentTerms = commerceSchema.table(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    unique('uq_payment_terms_org_code').on(table.organizationId, table.code),
     index('idx_payment_terms_org').on(table.organizationId),
-    index('idx_payment_terms_org_status').on(table.organizationId, table.status),
-    codeCheck('payment_terms_code_chk', table.code),
+    uniqueIndex('uq_payment_terms_org_name').on(table.organizationId, sql`lower(${table.name})`),
+    index('idx_payment_terms_org_published').on(table.organizationId, table.isPublished),
     orgIsolationPolicy(),
   ],
 );
@@ -50,7 +49,6 @@ export const paymentTermLines = commerceSchema.table(
     paymentTermId: uuid('payment_term_id')
       .notNull()
       .references(() => paymentTerms.id, { onDelete: 'cascade' }),
-    sortOrder: integer('sort_order').notNull().default(0),
     percent: decimal('percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
     dueDays: integer('due_days').notNull(),
     discountPercent: decimal('discount_percent', { precision: 5, scale: 2, mode: 'number' }),
@@ -62,7 +60,7 @@ export const paymentTermLines = commerceSchema.table(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    index('idx_payment_term_lines_term').on(table.paymentTermId, table.sortOrder),
+    unique('uq_payment_term_lines_term_due_days').on(table.paymentTermId, table.dueDays),
     check('payment_term_lines_percent_chk', sql`${table.percent} > 0 AND ${table.percent} <= 100`),
     check('payment_term_lines_due_days_chk', sql`${table.dueDays} >= 0`),
     check(

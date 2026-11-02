@@ -1,14 +1,14 @@
 import type { AssignedLegalEntity, AssignedRole, AssignedSite, AssignedSiteGroup } from '@services/permissions.service';
 import { type ActiveWorkspace, extractWorkspaceFromPath, type WorkspaceKind } from '@utils/workspace';
 import { OrgContextProvider, type OrgContextValue } from '@vritti/quantum-ui/context';
-import { setBusinessUnitCurrency } from '@vritti/quantum-ui/currency';
+import { setWorkspaceCurrency } from '@vritti/quantum-ui/currency';
 import { useTheme } from '@vritti/quantum-ui/hooks';
 import {
   type PermissionGateFn,
   PermissionGateProvider,
   type PermissionGateResult,
 } from '@vritti/quantum-ui/PermissionGate';
-import { setBusinessUnitTimeZone } from '@vritti/quantum-ui/timezone';
+import { setWorkspaceTimeZone } from '@vritti/quantum-ui/timezone';
 import type { PermissionFeature, ScopeType, ServiceCode } from '@vritti/quantum-ui/types/catalog-resolver';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -195,19 +195,29 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return featuresByLeId[workspace.id] ?? [];
   }, [workspace, featuresBySiteId, featuresByGroupId, featuresByLeId, orgFeatures]);
 
+  // A site's currencyCode is its legal entity's, resolved server-side
   useEffect(() => {
     for (const site of sites) {
-      setBusinessUnitTimeZone(site.id, site.timezone);
-      setBusinessUnitCurrency(site.id, site.currencyCode);
+      setWorkspaceTimeZone(site.id, site.timezone);
+      setWorkspaceCurrency(site.id, site.currencyCode);
     }
   }, [sites]);
 
-  // LEs carry a currency but no timezone — their timezone falls back to the user's
+  // LEs carry a currency but no timezone — LE, site-group and org workspaces use the user's timezone
   useEffect(() => {
     for (const le of legalEntities) {
-      setBusinessUnitCurrency(le.id, le.currencyCode);
+      setWorkspaceCurrency(le.id, le.currencyCode);
     }
   }, [legalEntities]);
+
+  // The org and its site groups hold no ledger, so both price in the org's default currency
+  useEffect(() => {
+    if (!org) return;
+    setWorkspaceCurrency(org.id, org.defaultCurrencyCode);
+    for (const group of siteGroups) {
+      setWorkspaceCurrency(group.id, org.defaultCurrencyCode);
+    }
+  }, [org, siteGroups]);
 
   const selectWorkspace = useCallback((next: ActiveWorkspace) => {
     setWorkspace(next);

@@ -35,8 +35,8 @@ interface ItemsTabProps {
 export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { detail: tab } = useParams();
-  // A tab URL (…/<supplier>/items) has a segment to climb out of before a child path; the bare detail URL has none
+  const { tab } = useParams();
+  // Climbs out of the tab segment before a child path
   const fromTab = useCallback((target: string) => (tab ? `../${target}` : target), [tab]);
   const addItemDialog = useDialog();
   const setPreferredDialog = useDialog();
@@ -107,7 +107,7 @@ export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
                 label: 'View',
                 permission: LE_SUPPLIERS.items.view,
                 onClick: () =>
-                  navigate(fromTab(`${buildSlug(row.original.inventoryItemName, row.original.id)}/overview`), {
+                  navigate(fromTab(`items/${buildSlug(row.original.inventoryItemName, row.original.id)}/overview`), {
                     relative: 'path',
                   }),
               },

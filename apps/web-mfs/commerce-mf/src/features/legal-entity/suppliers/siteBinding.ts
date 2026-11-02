@@ -22,9 +22,8 @@ import {
 } from '@/hooks/legal-entity/suppliers';
 import { QuotationsTab } from './tabs/QuotationsTab';
 
-// The site item route is `…/<supplier>/<siteId>/<subDetail>`
 function useSiteItemId(): string {
-  return useSlugParams('subDetail').id;
+  return useSlugParams('itemSlug').id;
 }
 
 // Back to the Sites tab of the supplier the site view was opened from
@@ -51,6 +50,7 @@ export const siteBinding: SupplierSiteBinding = {
 
   useSupplierRef: useSupplierSiteRef,
   useItemId: useSiteItemId,
+  siteItemPath: (itemSlug) => `items/${itemSlug}`,
   useExitPath: useSupplierExitPath,
   useSupplierAtSite,
   useEnroll: useEnrollSupplierSite,

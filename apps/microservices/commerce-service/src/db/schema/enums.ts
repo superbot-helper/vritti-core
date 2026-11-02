@@ -502,14 +502,12 @@ export const taxRegistrationTypeEnum = commerceSchema.enum('tax_registration_typ
   'GSTIN',
   'VAT',
   'TIN',
-  'PAN',
   'OTHER',
 ]);
 export const TaxRegistrationTypeValues = {
   GSTIN: 'GSTIN' as const,
   VAT: 'VAT' as const,
   TIN: 'TIN' as const,
-  PAN: 'PAN' as const,
   OTHER: 'OTHER' as const,
 };
 export type TaxRegistrationType = (typeof taxRegistrationTypeEnum.enumValues)[number];
@@ -639,11 +637,3 @@ export const PaymentTermBaselineValues = {
   END_OF_MONTH: 'END_OF_MONTH' as const,
 };
 export type PaymentTermBaseline = (typeof paymentTermBaselineEnum.enumValues)[number];
-
-export const paymentTermStatusEnum = commerceSchema.enum('payment_term_status', ['DRAFT', 'ACTIVE', 'INACTIVE']);
-export const PaymentTermStatusValues = {
-  DRAFT: 'DRAFT' as const,
-  ACTIVE: 'ACTIVE' as const,
-  INACTIVE: 'INACTIVE' as const,
-};
-export type PaymentTermStatus = (typeof paymentTermStatusEnum.enumValues)[number];

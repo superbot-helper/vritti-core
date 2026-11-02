@@ -1,7 +1,14 @@
+import type { ChangePaymentTermBaselineDto } from '@commerce/payment-terms/dto/request/change-payment-term-baseline.dto';
 import type { CreatePaymentTermDto } from '@commerce/payment-terms/dto/request/create-payment-term.dto';
+import type { PaymentScheduleQueryDto } from '@commerce/payment-terms/dto/request/payment-schedule-query.dto';
 import type { PaymentTermRuleDto } from '@commerce/payment-terms/dto/request/payment-term-rule.dto';
 import type { UpdatePaymentTermDto } from '@commerce/payment-terms/dto/request/update-payment-term.dto';
-import type { PaymentTermResponseDto } from '@commerce/payment-terms/dto/response/payment-term-response.dto';
+import type { PaymentScheduleResponseDto } from '@commerce/payment-terms/dto/response/payment-schedule-response.dto';
+import type {
+  PaymentTermDetailResponseDto,
+  PaymentTermResponseDto,
+  PaymentTermRulesResponseDto,
+} from '@commerce/payment-terms/dto/response/payment-term-response.dto';
 import type { PaymentTermTableResponseDto } from '@commerce/payment-terms/dto/response/payment-term-table-response.dto';
 import { Injectable, Logger } from '@nestjs/common';
 import { DataTableStateService } from '@vritti/api-sdk/data-table';
@@ -36,12 +43,12 @@ export class PaymentTermsGatewayService {
 
   // Creates a new payment term
   create(dto: CreatePaymentTermDto): Promise<CreateResponseDto<PaymentTermResponseDto>> {
-    this.logger.log(`paymentTerms.create — code: ${dto.code}`);
+    this.logger.log(`paymentTerms.create — name: ${dto.name}`);
     return this.nats.send('commerce', 'org.paymentTerms.create', dto);
   }
 
   // Finds a payment term by ID
-  findById(id: string): Promise<PaymentTermResponseDto> {
+  findById(id: string): Promise<PaymentTermDetailResponseDto> {
     this.logger.log(`paymentTerms.findById — id: ${id}`);
     return this.nats.send('commerce', 'org.paymentTerms.findById', { id });
   }
@@ -58,14 +65,29 @@ export class PaymentTermsGatewayService {
     return this.nats.send('commerce', 'org.paymentTerms.delete', { id });
   }
 
-  activate(id: string): Promise<SuccessResponseDto> {
-    this.logger.log(`paymentTerms.activate — id: ${id}`);
-    return this.nats.send('commerce', 'org.paymentTerms.activate', { id });
+  changeBaseline(id: string, dto: ChangePaymentTermBaselineDto): Promise<SuccessResponseDto> {
+    this.logger.log(`paymentTerms.changeBaseline — id: ${id}, baseline: ${dto.baseline}`);
+    return this.nats.send('commerce', 'org.paymentTerms.changeBaseline', { ...dto, id });
   }
 
-  deactivate(id: string): Promise<SuccessResponseDto> {
-    this.logger.log(`paymentTerms.deactivate — id: ${id}`);
-    return this.nats.send('commerce', 'org.paymentTerms.deactivate', { id });
+  publish(id: string): Promise<SuccessResponseDto> {
+    this.logger.log(`paymentTerms.publish — id: ${id}`);
+    return this.nats.send('commerce', 'org.paymentTerms.publish', { id });
+  }
+
+  unpublish(id: string): Promise<SuccessResponseDto> {
+    this.logger.log(`paymentTerms.unpublish — id: ${id}`);
+    return this.nats.send('commerce', 'org.paymentTerms.unpublish', { id });
+  }
+
+  findRules(paymentTermId: string): Promise<PaymentTermRulesResponseDto> {
+    this.logger.log(`paymentTerms.rules.findAll — paymentTermId: ${paymentTermId}`);
+    return this.nats.send('commerce', 'org.paymentTerms.rules.findAll', { paymentTermId });
+  }
+
+  previewSchedule(paymentTermId: string, query: PaymentScheduleQueryDto): Promise<PaymentScheduleResponseDto> {
+    this.logger.log(`paymentTerms.rules.previewSchedule — paymentTermId: ${paymentTermId}`);
+    return this.nats.send('commerce', 'org.paymentTerms.rules.previewSchedule', { ...query, paymentTermId });
   }
 
   addRule(paymentTermId: string, dto: PaymentTermRuleDto): Promise<SuccessResponseDto> {

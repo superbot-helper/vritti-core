@@ -4,10 +4,11 @@ import { DateTimePicker } from '@vritti/quantum-ui/DateTimePicker';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { parse } from '@vritti/quantum-ui/date-fns';
 import { Form } from '@vritti/quantum-ui/Form';
-import { useBUCurrency } from '@vritti/quantum-ui/hooks';
+import { useWorkspaceCurrency, useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { Select, type SelectOption } from '@vritti/quantum-ui/Select';
 import { TextArea } from '@vritti/quantum-ui/TextArea';
 import { TextField } from '@vritti/quantum-ui/TextField';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
 import { useEffect, useState } from 'react';
@@ -29,15 +30,16 @@ const EXCHANGE_RATE_TYPE_OPTIONS = [
 ];
 
 export const CreatePurchaseOrderDialog: React.FC<CreatePurchaseOrderDialogProps> = ({ onSuccess, onCancel }) => {
-  const buCurrencyCode = useBUCurrency();
+  const workspaceCurrency = useWorkspaceCurrency();
 
   const siteId = useSiteId();
+  const timeZone = useWorkspaceTimeZone();
   const form = useForm<CreatePurchaseOrderFormData>({
     resolver: zodResolver(createPurchaseOrderSchema),
     defaultValues: {
       exchangeRateType: 'FIXED',
       exchangeRate: undefined,
-      orderDate: new Date().toISOString().split('T')[0],
+      orderDate: isoTodayDate(timeZone),
       notes: '',
     },
   });
@@ -48,7 +50,7 @@ export const CreatePurchaseOrderDialog: React.FC<CreatePurchaseOrderDialogProps>
   const currencyCode = form.watch('currencyCode');
   const exchangeRateType = form.watch('exchangeRateType');
   const minExpectedDate = orderDate ? parse(orderDate, 'yyyy-MM-dd', new Date()) : undefined;
-  const needsExchangeRate = !!currencyCode && !!buCurrencyCode && currencyCode !== buCurrencyCode;
+  const needsExchangeRate = !!currencyCode && !!workspaceCurrency && currencyCode !== workspaceCurrency;
 
   const createMutation = useCreatePurchaseOrder({ onSuccess });
 
@@ -107,7 +109,7 @@ export const CreatePurchaseOrderDialog: React.FC<CreatePurchaseOrderDialogProps>
           {exchangeRateType === 'FIXED' ? (
             <TextField
               name="exchangeRate"
-              label={`Exchange Rate (${currencyCode} → ${buCurrencyCode})`}
+              label={`Exchange Rate (${currencyCode} → ${workspaceCurrency})`}
               type="number"
               placeholder="e.g. 83.250000"
               positive

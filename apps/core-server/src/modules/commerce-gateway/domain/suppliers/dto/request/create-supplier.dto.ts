@@ -1,7 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Trim } from '@vritti/api-sdk/decorators';
+import { ArrayIncludesField, Trim } from '@vritti/api-sdk/decorators';
 import { IsCurrencyCode } from '@vritti/api-sdk/money';
-import { IsArray, IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateSupplierDto {
   @ApiProperty({ description: 'The party (COMPANY or PERSON) this supplier represents' })
@@ -20,37 +31,36 @@ export class CreateSupplierDto {
   @IsCurrencyCode()
   currencyCode: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     type: [String],
-    description: 'Further currencies the supplier trades in; the default is always included',
-    example: ['USD'],
+    description: 'Every currency the supplier trades in; must include the default currency',
+    example: ['INR', 'USD'],
   })
-  @IsOptional()
   @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
   @IsCurrencyCode({ each: true })
-  currencyCodes?: string[];
+  @ArrayIncludesField('currencyCode', { message: 'Must include the default currency' })
+  currencyCodes: string[];
 
-  @ApiPropertyOptional({ description: 'Payment term new site enrollments start from', nullable: true })
-  @IsOptional()
+  @ApiProperty({ description: 'Payment term new site enrollments start from' })
   @IsUUID('7')
-  defaultPaymentTermId?: string | null;
+  defaultPaymentTermId: string;
 
-  @Trim()
+  @Trim({ nullify: true })
   @ApiPropertyOptional({ description: 'Additional notes' })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   notes?: string | null;
 
-  @ApiPropertyOptional({ description: 'Block new purchase orders for this supplier', default: false })
-  @IsOptional()
+  @ApiProperty({ description: 'Block new purchase orders for this supplier', example: false })
   @IsBoolean()
-  purchasingBlocked?: boolean;
+  purchasingBlocked: boolean;
 
-  @ApiPropertyOptional({ description: 'Block payments to this supplier', default: false })
-  @IsOptional()
+  @ApiProperty({ description: 'Block payments to this supplier', example: false })
   @IsBoolean()
-  paymentBlocked?: boolean;
+  paymentBlocked: boolean;
 
   @Trim()
   @ApiPropertyOptional({ description: 'Email for sending purchase orders', example: 'orders@acme.com' })
@@ -66,8 +76,7 @@ export class CreateSupplierDto {
   @MaxLength(20)
   orderPhone?: string | null;
 
-  @ApiPropertyOptional({ description: 'Whether supplier is active', default: true })
-  @IsOptional()
+  @ApiProperty({ description: 'Whether supplier is active', example: true })
   @IsBoolean()
-  isActive?: boolean;
+  isActive: boolean;
 }

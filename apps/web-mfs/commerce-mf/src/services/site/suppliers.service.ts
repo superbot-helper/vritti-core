@@ -19,6 +19,8 @@ export interface EnrollSiteSupplierPayload {
   partyTaxRegistrationId: string;
   partyBankAccountId?: string | null;
   orderRelationshipId?: string | null;
+  orderEmailCommunicationId: string;
+  orderPhoneCommunicationId: string;
 }
 
 export interface UpdateSiteEnrollmentPayload {
@@ -26,6 +28,8 @@ export interface UpdateSiteEnrollmentPayload {
   partyTaxRegistrationId?: string;
   partyBankAccountId?: string | null;
   orderRelationshipId?: string | null;
+  orderEmailCommunicationId?: string;
+  orderPhoneCommunicationId?: string;
 }
 
 export interface AddSiteSupplierItemPricePayload {

@@ -1,7 +1,10 @@
 import { SelectFilter, type SelectFilterProps } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 
-export type PaymentTermFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'name'> & { name?: string };
+export type PaymentTermFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'name'> & {
+  name?: string;
+};
 
 // Pre-configured SelectFilter for payment term filtering with async search
 export const PaymentTermFilter = Object.assign(
@@ -12,7 +15,7 @@ export const PaymentTermFilter = Object.assign(
       label="Payment Term"
       placeholder="Select payment term"
       optionsEndpoint="commerce-api/select-api/payment-terms"
-      fieldKeys={{ valueKey: 'id', labelKey: 'name', descriptionKey: 'code' }}
+      fieldKeys={{ valueKey: 'id', labelKey: 'name' }}
       {...props}
     />
   )),

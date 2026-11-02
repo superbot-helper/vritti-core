@@ -6,51 +6,55 @@ import { useConfirm, useDialog, useSlugParams } from '@vritti/quantum-ui/hooks';
 import { PageHeader } from '@vritti/quantum-ui/PageHeader';
 import { pluralize } from '@vritti/quantum-ui/pluralize';
 import { Tabs } from '@vritti/quantum-ui/Tabs';
-import { CalendarClock, CircleCheck, CircleSlash, Pencil } from 'lucide-react';
-import { useCallback } from 'react';
+import { CalendarClock, Pencil, Send, Undo2 } from 'lucide-react';
+import { Suspense, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  useActivatePaymentTerm,
-  useDeactivatePaymentTerm,
   useDeletePaymentTerm,
   usePaymentTerm,
+  usePublishPaymentTerm,
+  useUnpublishPaymentTerm,
 } from '@/hooks/organization/payment-terms';
+import { PaymentTermStatusBadge } from './components/PaymentTermStatusBadge';
+import { ChangeBaselineDialog } from './forms/ChangeBaselineDialog';
 import { EditPaymentTermDialog } from './forms/EditPaymentTermDialog';
-import { PaymentTermStatusBadge } from './PaymentTermStatusBadge';
 import { OverviewTab } from './tabs/OverviewTab';
 import { RulesTab } from './tabs/RulesTab';
+import { RulesTabSkeleton } from './tabs/RulesTabSkeleton';
 
 export const PaymentTermDetailPage = () => {
   const { id } = useSlugParams('paymentTermSlug');
   const navigate = useNavigate();
   const { data: paymentTerm } = usePaymentTerm(id);
   const editDialog = useDialog();
+  const baselineDialog = useDialog();
   const confirm = useConfirm();
-  const activateMutation = useActivatePaymentTerm();
-  const deactivateMutation = useDeactivatePaymentTerm();
+  const publishMutation = usePublishPaymentTerm();
+  const unpublishMutation = useUnpublishPaymentTerm();
+  const usedBy = [
+    paymentTerm.supplierCount > 0 && `${pluralize('supplier', paymentTerm.supplierCount, true)} (as their default)`,
+    paymentTerm.enrollmentCount > 0 && pluralize('site enrollment', paymentTerm.enrollmentCount, true),
+  ].filter(Boolean);
+  const inUseTip = `Used by ${usedBy.join(' and ')}. Move them to another payment term first.`;
   const deleteMutation = useDeletePaymentTerm();
-  const canActivate = paymentTerm.lines.length > 0 && paymentTerm.totalPercent === 100;
 
-  const handleActivate = useCallback(async () => {
+  const handlePublish = useCallback(async () => {
     const ok = await confirm({
-      title: `Activate "${paymentTerm.name}"?`,
-      description:
-        paymentTerm.status === 'DRAFT'
-          ? 'Its rules lock once it is active, and it becomes available to suppliers and site enrollments.'
-          : 'It becomes available to suppliers and site enrollments again.',
-      confirmLabel: 'Activate',
+      title: `Publish "${paymentTerm.name}"?`,
+      description: 'It becomes available to suppliers and site enrollments. Unpublish it to edit it again.',
+      confirmLabel: 'Publish',
     });
-    if (ok) activateMutation.mutate(paymentTerm.id);
-  }, [confirm, activateMutation, paymentTerm]);
+    if (ok) publishMutation.mutate(paymentTerm.id);
+  }, [confirm, publishMutation, paymentTerm]);
 
-  const handleDeactivate = useCallback(async () => {
+  const handleUnpublish = useCallback(async () => {
     const ok = await confirm({
-      title: `Deactivate "${paymentTerm.name}"?`,
-      description: 'It can no longer be picked. Suppliers and site enrollments already on it keep it.',
-      confirmLabel: 'Deactivate',
+      title: `Unpublish "${paymentTerm.name}"?`,
+      description: 'It returns to draft so you can edit it, and can no longer be picked until you publish it again.',
+      confirmLabel: 'Unpublish',
     });
-    if (ok) deactivateMutation.mutate(paymentTerm.id);
-  }, [confirm, deactivateMutation, paymentTerm]);
+    if (ok) unpublishMutation.mutate(paymentTerm.id);
+  }, [confirm, unpublishMutation, paymentTerm]);
 
   const handleDelete = useCallback(async () => {
     const ok = await confirm({
@@ -66,31 +70,33 @@ export const PaymentTermDetailPage = () => {
     <div className="flex flex-col gap-6">
       <PageHeader
         title={paymentTerm.name}
-        titleSlot={<PaymentTermStatusBadge status={paymentTerm.status} />}
-        description={paymentTerm.code}
+        titleSlot={<PaymentTermStatusBadge isPublished={paymentTerm.isPublished} />}
         actions={
           <div className="flex items-center gap-2">
-            {paymentTerm.status === 'ACTIVE' ? (
+            {paymentTerm.isPublished ? (
               <Button
                 variant="outline"
                 size="sm"
-                permission={ORG_PAYMENT_TERMS.edit}
-                startAdornment={<CircleSlash className="size-4" />}
-                onClick={handleDeactivate}
-                isLoading={deactivateMutation.isPending}
+                permission={ORG_PAYMENT_TERMS.publish}
+                startAdornment={<Undo2 className="size-4" />}
+                onClick={handleUnpublish}
+                isLoading={unpublishMutation.isPending}
+                disabled={!paymentTerm.canUnpublish}
+                disabledTip={inUseTip}
               >
-                Deactivate
+                Unpublish
               </Button>
             ) : (
               <Button
                 size="sm"
-                permission={ORG_PAYMENT_TERMS.edit}
-                startAdornment={<CircleCheck className="size-4" />}
-                onClick={handleActivate}
-                isLoading={activateMutation.isPending}
-                disabled={!canActivate}
+                permission={ORG_PAYMENT_TERMS.publish}
+                startAdornment={<Send className="size-4" />}
+                onClick={handlePublish}
+                isLoading={publishMutation.isPending}
+                disabled={!paymentTerm.canPublish}
+                disabledTip="Rules must total exactly 100% to publish"
               >
-                Activate
+                Publish
               </Button>
             )}
             <Button
@@ -99,8 +105,21 @@ export const PaymentTermDetailPage = () => {
               permission={ORG_PAYMENT_TERMS.edit}
               startAdornment={<Pencil className="size-4" />}
               onClick={editDialog.open}
+              disabled={paymentTerm.isPublished}
+              disabledTip="Unpublish the payment term to edit it"
             >
               Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              permission={ORG_PAYMENT_TERMS.baseline.edit}
+              startAdornment={<CalendarClock className="size-4" />}
+              onClick={baselineDialog.open}
+              disabled={paymentTerm.isPublished}
+              disabledTip="Unpublish the payment term to change its baseline"
+            >
+              Change Baseline
             </Button>
           </div>
         }
@@ -117,9 +136,13 @@ export const PaymentTermDetailPage = () => {
           },
           {
             value: 'rules',
-            label: `Rules (${paymentTerm.lines.length})`,
-            permission: ORG_PAYMENT_TERMS.view,
-            content: <RulesTab paymentTerm={paymentTerm} />,
+            label: `Rules (${paymentTerm.ruleCount})`,
+            permission: ORG_PAYMENT_TERMS.rules.view,
+            content: (
+              <Suspense fallback={<RulesTabSkeleton />}>
+                <RulesTab paymentTerm={paymentTerm} />
+              </Suspense>
+            ),
           },
         ]}
       />
@@ -128,18 +151,28 @@ export const PaymentTermDetailPage = () => {
         handle={editDialog}
         icon={CalendarClock}
         title="Edit Payment Term"
-        description={`Update the payment term. It has ${pluralize('rule', paymentTerm.lines.length, true)}.`}
+        description={`Update the payment term. It has ${pluralize('rule', paymentTerm.ruleCount, true)}.`}
         content={(close) => <EditPaymentTermDialog paymentTerm={paymentTerm} onSuccess={close} onCancel={close} />}
+      />
+
+      <Dialog
+        handle={baselineDialog}
+        icon={CalendarClock}
+        title="Change Baseline"
+        description="Move the date the due days count from. Every rule's due date shifts with it."
+        content={(close) => <ChangeBaselineDialog paymentTerm={paymentTerm} onSuccess={close} onCancel={close} />}
       />
 
       <DangerZone
         title="Delete this payment term"
-        description="This action cannot be undone. Terms used by a supplier or site enrollment cannot be deleted — deactivate them instead."
+        description="This action cannot be undone. Terms a supplier uses cannot be deleted."
         buttonText="Delete Payment Term"
         permission={ORG_PAYMENT_TERMS.delete}
         onClick={handleDelete}
         isLoading={deleteMutation.isPending}
-        disabled={deleteMutation.isPending}
+        disabled={!paymentTerm.canDelete || deleteMutation.isPending}
+        warning={inUseTip}
+        showWarning={!paymentTerm.canDelete}
       />
     </div>
   );

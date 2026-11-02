@@ -1,4 +1,4 @@
-import { Breadcrumb, BreadcrumbLink } from '@vritti/quantum-ui/Breadcrumb';
+import { Breadcrumb } from '@vritti/quantum-ui/Breadcrumb';
 import { Button } from '@vritti/quantum-ui/Button';
 import { cn } from '@vritti/quantum-ui/cn';
 import { parseSlug } from '@vritti/quantum-ui/slug';
@@ -92,8 +92,8 @@ export const TopBar = () => {
 
   const identity = resolveWorkspace();
 
-  // An id segment reads as its entity's name — the workspace root (`/<kind>/<uuid>`, its word hidden) and bare
-  // ids inside a feature (`…/suppliers/<supplier>/<siteId>`)
+  // An id segment reads as its entity's name — the workspace root (`/<kind>/<uuid>`, its word hidden) and any bare
+  // entity id inside a feature
   const { pathname } = useLocation();
   const entityLabels = useMemo(() => {
     const nameOf = (id: string): string | undefined =>
@@ -159,27 +159,19 @@ export const TopBar = () => {
                   if (parts.length === 3 && workspaceKindOf(parts[1]) && isUuid(segment.raw)) {
                     return renderWorkspaceIdentity();
                   }
-                  // An LE supplier's site view — `/<kind>/<id>/suppliers/<supplier>/<siteId>` — reads `Sites › <site>`:
-                  // the URL has no sites segment, so the crumb back to the supplier's Sites tab is drawn here, and the
-                  // site switches between those the supplier is enrolled at (its id comes from the crumb above)
-                  if (parts.length === 6 && parts[3] === 'suppliers' && isUuid(segment.raw)) {
+                  // An LE supplier's site view — `/<kind>/<id>/suppliers/<supplier>/sites/<site>` — switches between
+                  // the sites the supplier is enrolled at
+                  if (parts.length === 7 && parts[3] === 'suppliers' && parts[5] === 'sites') {
                     const supplier = parseSlug(parts[4]);
                     if (supplier) {
-                      const supplierPath = parts.slice(0, 5).join('/');
                       return (
-                        <span className="flex items-center gap-1.5">
-                          <BreadcrumbLink asChild>
-                            <Link to={`${supplierPath}/sites`}>Sites</Link>
-                          </BreadcrumbLink>
-                          <ChevronRight className="size-3.5" aria-hidden />
-                          <SupplierSiteSwitcher
-                            key={segment.raw}
-                            siteId={segment.raw}
-                            supplierId={supplier.id}
-                            basePath={supplierPath}
-                            fallbackLabel={entityLabels[segment.path] ?? segment.label}
-                          />
-                        </span>
+                        <SupplierSiteSwitcher
+                          key={segment.raw}
+                          siteId={parseSlug(segment.raw)?.id ?? segment.raw}
+                          supplierId={supplier.id}
+                          basePath={parts.slice(0, 5).join('/')}
+                          fallbackLabel={entityLabels[segment.path] ?? segment.label}
+                        />
                       );
                     }
                   }
@@ -198,27 +190,19 @@ export const TopBar = () => {
                     }
                   }
 
-                  // An LE supplier's item view — `/le/<id>/suppliers/<supplier>/<item>/<tab>` — reads `Items › <item>`:
-                  // the URL has no items segment, so the crumb back to the supplier's Items tab is drawn here, and the
-                  // item's own crumb is a switcher since its bare URL only redirects back to its Overview
-                  if (parts.length === 6 && parts[1] === 'le' && parts[3] === 'suppliers') {
+                  // An LE supplier's item view — `/le/<id>/suppliers/<supplier>/items/<item>/<tab>` — switches between
+                  // the supplier's items, keeping the open tab
+                  if (parts.length === 7 && parts[1] === 'le' && parts[3] === 'suppliers' && parts[5] === 'items') {
                     const supplier = parseSlug(parts[4]);
                     if (supplier) {
-                      const supplierPath = parts.slice(0, 5).join('/');
                       return (
-                        <span className="flex items-center gap-1.5">
-                          <BreadcrumbLink asChild>
-                            <Link to={`${supplierPath}/items`}>Items</Link>
-                          </BreadcrumbLink>
-                          <ChevronRight className="size-3.5" aria-hidden />
-                          <SupplierItemSwitcher
-                            key={segment.raw}
-                            segment={segment.raw}
-                            supplierId={supplier.id}
-                            basePath={supplierPath}
-                            tab={pathname.split('/')[6]}
-                          />
-                        </span>
+                        <SupplierItemSwitcher
+                          key={segment.raw}
+                          segment={segment.raw}
+                          supplierId={supplier.id}
+                          basePath={parts.slice(0, 5).join('/')}
+                          tab={pathname.split('/')[7]}
+                        />
                       );
                     }
                   }

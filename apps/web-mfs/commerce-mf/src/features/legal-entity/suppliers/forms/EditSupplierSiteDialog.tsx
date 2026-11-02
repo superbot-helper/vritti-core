@@ -7,6 +7,7 @@ import type React from 'react';
 import { useForm } from 'react-hook-form';
 import { useUpdateSupplierSite } from '@/hooks/legal-entity/suppliers';
 import { type SupplierSiteRow, type UpdateSupplierSiteFormData, updateSupplierSiteSchema } from '@/schemas/suppliers';
+import { PartyCommunicationSelector } from '@/selectors/party-communication';
 import { PaymentTermSelector } from '@/selectors/payment-term';
 
 interface EditSupplierSiteDialogProps {
@@ -33,6 +34,8 @@ export const EditSupplierSiteDialog: React.FC<EditSupplierSiteDialogProps> = ({
       partyTaxRegistrationId: site.partyTaxRegistrationId ?? undefined,
       partyBankAccountId: site.partyBankAccountId ?? undefined,
       orderRelationshipId: site.orderRelationshipId ?? undefined,
+      orderEmailCommunicationId: site.orderEmailCommunicationId ?? undefined,
+      orderPhoneCommunicationId: site.orderPhoneCommunicationId ?? undefined,
     },
   });
 
@@ -50,6 +53,8 @@ export const EditSupplierSiteDialog: React.FC<EditSupplierSiteDialogProps> = ({
           partyTaxRegistrationId: data.partyTaxRegistrationId,
           partyBankAccountId: data.partyBankAccountId || null,
           orderRelationshipId: data.orderRelationshipId || null,
+          orderEmailCommunicationId: data.orderEmailCommunicationId,
+          orderPhoneCommunicationId: data.orderPhoneCommunicationId,
         },
       })}
     >
@@ -80,6 +85,8 @@ export const EditSupplierSiteDialog: React.FC<EditSupplierSiteDialogProps> = ({
             optionsEndpoint="commerce-api/select-api/party-contacts"
             params={{ partyId, function: 'ORDER' }}
           />
+          <PartyCommunicationSelector name="orderEmailCommunicationId" partyId={partyId} channel="EMAIL" />
+          <PartyCommunicationSelector name="orderPhoneCommunicationId" partyId={partyId} channel="PHONE" />
         </div>
       </FormSection>
       <DialogActions>

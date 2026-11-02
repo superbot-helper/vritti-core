@@ -53,8 +53,6 @@ export const OverviewTab = ({ supplier }: OverviewTabProps) => {
                 </div>
               }
             />
-            <DetailField label="Order Email" type="string" value={supplier.orderEmail} />
-            <DetailField label="Order Phone" type="string" value={supplier.orderPhone} />
             <DetailField label="Notes" type="string" value={supplier.notes} className="col-span-2" />
           </div>
         </CardContent>

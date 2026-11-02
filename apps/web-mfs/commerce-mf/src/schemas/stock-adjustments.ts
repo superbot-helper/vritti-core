@@ -142,7 +142,7 @@ export const createStockAdjustmentSchema = z
       message: 'Adjustment type is required',
     }),
     reason: z.string().min(1, 'Reason is required'),
-    // Opening-stock valuation (BU currency, per primary UOM). Required when type is OPENING_STOCK.
+    // Opening-stock valuation (site currency, per primary UOM). Required when type is OPENING_STOCK.
     unitCost: zodCurrencyField({ positive: true }).optional(),
   })
   .superRefine((data, ctx) => {

@@ -25,24 +25,21 @@ export interface CreateSupplierPayload {
   partyId: string;
   code: string;
   currencyCode: string;
-  defaultPaymentTermId?: string;
+  currencyCodes: string[];
+  defaultPaymentTermId: string;
   notes?: string;
-  purchasingBlocked?: boolean;
-  paymentBlocked?: boolean;
-  orderEmail?: string | null;
-  orderPhone?: string | null;
-  isActive?: boolean;
+  purchasingBlocked: boolean;
+  paymentBlocked: boolean;
+  isActive: boolean;
 }
 
 export interface UpdateSupplierPayload {
   partyId?: string;
   code?: string;
-  defaultPaymentTermId?: string | null;
+  defaultPaymentTermId?: string;
   notes?: string | null;
   purchasingBlocked?: boolean;
   paymentBlocked?: boolean;
-  orderEmail?: string | null;
-  orderPhone?: string | null;
 }
 
 export interface AddSupplierItemPayload {
@@ -219,6 +216,8 @@ export interface AddSupplierSitePayload {
   partyTaxRegistrationId: string;
   partyBankAccountId?: string | null;
   orderRelationshipId?: string | null;
+  orderEmailCommunicationId: string;
+  orderPhoneCommunicationId: string;
 }
 
 export interface UpdateSupplierSitePayload {
@@ -226,6 +225,8 @@ export interface UpdateSupplierSitePayload {
   partyTaxRegistrationId?: string;
   partyBankAccountId?: string | null;
   orderRelationshipId?: string | null;
+  orderEmailCommunicationId?: string;
+  orderPhoneCommunicationId?: string;
 }
 
 export interface AddSupplierItemPricePayload {

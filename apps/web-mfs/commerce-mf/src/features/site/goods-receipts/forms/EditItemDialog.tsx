@@ -2,7 +2,7 @@ import { Button } from '@vritti/quantum-ui/Button';
 import { CurrencyField } from '@vritti/quantum-ui/CurrencyField';
 import { Dialog, DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form, FormSection } from '@vritti/quantum-ui/Form';
-import { useBUCurrency, useDialog } from '@vritti/quantum-ui/hooks';
+import { useDialog, useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
 import { Switch } from '@vritti/quantum-ui/Switch';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
@@ -28,7 +28,7 @@ const EditItemForm = ({
   onSuccess: () => void;
   onCancel: () => void;
 }) => {
-  const buCurrencyCode = useBUCurrency() ?? 'INR';
+  const workspaceCurrency = useWorkspaceCurrency() ?? 'INR';
   // PO remaining (ordered − received) caps the ordered qty for PO-linked items; null (un-linked) → uncapped.
   const maxQuantity = item.poRemainingQuantity ?? undefined;
   const form = useForm<UpdateGoodsReceiptItemFormData>({
@@ -45,7 +45,7 @@ const EditItemForm = ({
     },
   });
   const mutation = useUpdateGoodsReceiptItem(goodsReceiptId, item.id, { onSuccess });
-  const lockedCurrency = item.unitPrice?.currency ?? buCurrencyCode;
+  const lockedCurrency = item.unitPrice?.currency ?? workspaceCurrency;
 
   const hasScheme = form.watch('hasScheme');
   const freeQtyPreview = computeFreeQty(

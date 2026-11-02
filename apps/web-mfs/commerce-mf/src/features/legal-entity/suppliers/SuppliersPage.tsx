@@ -54,9 +54,22 @@ export const SuppliersPage = () => {
       },
       {
         accessorKey: 'currencyCode',
-        header: 'Currencies',
-        cell: ({ row }) => <StringCell value={row.original.currencyCodes.join(', ')} mono />,
-        enableSorting: true,
+        header: 'Currency',
+        cell: ({ row }) => {
+          const { currencyCode, currencyCodes } = row.original;
+          const others = currencyCodes.filter((code) => code !== currencyCode);
+          return (
+            <div className="flex flex-col gap-0.5">
+              <span className="font-mono">{currencyCode}</span>
+              {others.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  also has: <span className="font-mono">{others.join(', ')}</span>
+                </span>
+              )}
+            </div>
+          );
+        },
+        enableSorting: false,
       },
       {
         accessorKey: 'defaultPaymentTermName',

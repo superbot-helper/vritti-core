@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ArrayIncludesField } from '@vritti/api-sdk/decorators';
 import { IsCurrencyCode } from '@vritti/api-sdk/money';
-import { ArrayNotEmpty, IsArray } from 'class-validator';
+import { ArrayNotEmpty, ArrayUnique, IsArray } from 'class-validator';
 
 export class ChangeSupplierCurrencyDto {
   @ApiProperty({
@@ -18,6 +19,8 @@ export class ChangeSupplierCurrencyDto {
   })
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayUnique()
   @IsCurrencyCode({ each: true })
+  @ArrayIncludesField('currencyCode', { message: 'Must include the default currency' })
   currencyCodes: string[];
 }

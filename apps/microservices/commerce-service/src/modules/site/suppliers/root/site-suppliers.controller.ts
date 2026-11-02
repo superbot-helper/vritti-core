@@ -1,10 +1,9 @@
+import type { SiteSupplierListRowDto } from '@domain/supplier-sites/dto/entity/site-supplier-list-row.dto';
+import type { SupplierAtSiteDto } from '@domain/supplier-sites/dto/entity/supplier-at-site.dto';
 import type { SupplierSiteDto } from '@domain/supplier-sites/dto/entity/supplier-site.dto';
 import { EnrollSupplierDto } from '@domain/supplier-sites/dto/request/enroll-supplier.dto';
 import { UpdateSiteEnrollmentDto } from '@domain/supplier-sites/dto/request/update-site-enrollment.dto';
 import { SupplierSitesDomainService } from '@domain/supplier-sites/services/supplier-sites.service';
-import { SiteSupplierListRowDto } from '@domain/suppliers/dto/entity/site-supplier-list-row.dto';
-import type { SupplierAtSiteDto } from '@domain/suppliers/dto/entity/supplier-at-site.dto';
-import { SuppliersDomainService } from '@domain/suppliers/services/suppliers.service';
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import type { TableViewState } from '@vritti/api-sdk/data-table';
@@ -18,7 +17,6 @@ export class SiteSuppliersController {
 
   constructor(
     private readonly service: SupplierSitesDomainService,
-    private readonly suppliersService: SuppliersDomainService,
     private readonly siteService: SiteSuppliersService,
   ) {}
 
@@ -29,7 +27,7 @@ export class SiteSuppliersController {
     @RpcNatsHeaders() headers: NatsHeaders,
   ): Promise<{ result: SiteSupplierListRowDto[]; count: number }> {
     this.logger.log('site.suppliers.table');
-    return this.suppliersService.findForSiteTable(headers.legalEntityId, headers.siteId, state);
+    return this.service.findForSiteTable(headers.legalEntityId, headers.siteId, state);
   }
 
   // Enrolls a supplier for the caller's site
@@ -41,6 +39,8 @@ export class SiteSuppliersController {
       partyTaxRegistrationId: dto.partyTaxRegistrationId,
       partyBankAccountId: dto.partyBankAccountId ?? null,
       orderRelationshipId: dto.orderRelationshipId ?? null,
+      orderEmailCommunicationId: dto.orderEmailCommunicationId,
+      orderPhoneCommunicationId: dto.orderPhoneCommunicationId,
     });
   }
 
@@ -64,6 +64,6 @@ export class SiteSuppliersController {
     @RpcNatsHeaders() headers: NatsHeaders,
   ): Promise<SupplierAtSiteDto> {
     this.logger.log(`site.suppliers.findById — supplierId: ${data.supplierId}`);
-    return this.suppliersService.findAtSite(headers.legalEntityId, headers.siteId, data.supplierId);
+    return this.service.findAtSite(headers.legalEntityId, headers.siteId, data.supplierId);
   }
 }

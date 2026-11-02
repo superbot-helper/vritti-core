@@ -1,10 +1,12 @@
 import { Empty } from '@vritti/quantum-ui/Empty';
+import { useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { pluralize } from '@vritti/quantum-ui/pluralize';
 import { Select } from '@vritti/quantum-ui/Select';
-import { Skeleton } from '@vritti/quantum-ui/Skeleton';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { LineChart as LineChartIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import { PriceChartSkeleton } from '@/components/suppliers/PriceChartSkeleton';
 import { PriceCurrencyFilter } from '@/components/suppliers/PriceCurrencyFilter';
 import { PriceRangePicker } from '@/components/suppliers/PriceRangePicker';
 import { type SitePrices, SitePricesChart } from '@/components/suppliers/SitePricesChart';
@@ -24,7 +26,8 @@ interface PricesGraphTabProps {
 // one currency at a time
 export const PricesGraphTab: React.FC<PricesGraphTabProps> = ({ supplierId, itemId, currencyCode, addButton }) => {
   const [pickedSiteIds, setPickedSiteIds] = useState<string[]>([]);
-  const [range, setRange] = useState(defaultPriceRange);
+  const today = isoTodayDate(useWorkspaceTimeZone());
+  const [range, setRange] = useState(() => defaultPriceRange(today));
   const { data: history, isLoading } = useSupplierItemPriceHistory(supplierId, itemId, range);
 
   const sites = useMemo<SitePrices[]>(
@@ -40,9 +43,9 @@ export const PricesGraphTab: React.FC<PricesGraphTabProps> = ({ supplierId, item
     const picked = new Set(pickedSiteIds);
     return sites
       .filter((site) => picked.size === 0 || picked.has(site.siteId))
-      .map((site) => (currency ? inCurrency(site, currency) : site))
+      .map((site) => (currency ? inCurrency(site, currency, today) : site))
       .filter((site) => site.windows.length > 0);
-  }, [sites, pickedSiteIds, currency]);
+  }, [sites, pickedSiteIds, currency, today]);
 
   const siteOptions = useMemo(() => sites.map((site) => ({ value: site.siteId, label: site.siteName })), [sites]);
 
@@ -76,7 +79,7 @@ export const PricesGraphTab: React.FC<PricesGraphTabProps> = ({ supplierId, item
         </div>
       </div>
       {isLoading ? (
-        <Skeleton className="h-96 w-full" />
+        <PriceChartSkeleton />
       ) : sites.length === 0 ? (
         <Empty
           icon={<LineChartIcon className="size-6" />}
@@ -90,7 +93,7 @@ export const PricesGraphTab: React.FC<PricesGraphTabProps> = ({ supplierId, item
           description="No selected site has prices in this currency. Change the site or currency filter."
         />
       ) : (
-        <SitePricesChart sites={filtered} currencyCode={currency ?? currencyCode} range={range} />
+        <SitePricesChart sites={filtered} currencyCode={currency ?? currencyCode} range={range} today={today} />
       )}
     </div>
   );

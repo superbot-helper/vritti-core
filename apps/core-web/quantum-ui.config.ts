@@ -1,6 +1,6 @@
 import { defineConfig } from '@vritti/quantum-ui';
-import { getBusinessUnitCurrency, getUserCurrency } from '@vritti/quantum-ui/currency';
-import { getBusinessUnitTimeZone, getUserTimeZone } from '@vritti/quantum-ui/timezone';
+import { getUserCurrency, getWorkspaceCurrency } from '@vritti/quantum-ui/currency';
+import { getUserTimeZone, getWorkspaceTimeZone } from '@vritti/quantum-ui/timezone';
 import { getActiveWorkspace, type WorkspaceKind } from './src/utils/workspace';
 
 const WORKSPACE_TRANSPORT: Record<WorkspaceKind, { header: string; param: string }> = {
@@ -76,7 +76,7 @@ export default defineConfig({
     resolveTimeZone: () => {
       const workspaceId = getActiveWorkspaceId();
       if (workspaceId) {
-        return getBusinessUnitTimeZone(workspaceId) ?? getUserTimeZone();
+        return getWorkspaceTimeZone(workspaceId) ?? getUserTimeZone();
       }
 
       return getUserTimeZone();
@@ -87,7 +87,7 @@ export default defineConfig({
     resolveCurrency: () => {
       const workspaceId = getActiveWorkspaceId();
       if (workspaceId) {
-        return getBusinessUnitCurrency(workspaceId) ?? getUserCurrency();
+        return getWorkspaceCurrency(workspaceId) ?? getUserCurrency();
       }
 
       return getUserCurrency();

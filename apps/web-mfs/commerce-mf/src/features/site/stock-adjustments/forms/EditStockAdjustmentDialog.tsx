@@ -3,7 +3,7 @@ import { CurrencyField } from '@vritti/quantum-ui/CurrencyField';
 import type { CurrencyValue } from '@vritti/quantum-ui/currency';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form } from '@vritti/quantum-ui/Form';
-import { useBUCurrency } from '@vritti/quantum-ui/hooks';
+import { useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
 import { TextArea } from '@vritti/quantum-ui/TextArea';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import { useForm } from 'react-hook-form';
@@ -31,7 +31,7 @@ export const EditStockAdjustmentDialog = ({
   onSuccess,
   onCancel,
 }: EditStockAdjustmentDialogProps) => {
-  const buCurrencyCode = useBUCurrency();
+  const workspaceCurrency = useWorkspaceCurrency();
   const isOpeningStock = type === 'OPENING_STOCK';
   const form = useForm<UpdateStockAdjustmentFormData>({
     resolver: zodResolver(updateStockAdjustmentSchema),
@@ -56,7 +56,7 @@ export const EditStockAdjustmentDialog = ({
           name="unitCost"
           label="Unit Cost"
           description="Cost per primary unit, in your base currency. Used to value the opening stock."
-          currencyCode={buCurrencyCode ?? undefined}
+          currencyCode={workspaceCurrency ?? undefined}
         />
       )}
 

@@ -6,6 +6,7 @@ import { type ColumnDef, DataTable, RowActions, StringCell, useDataTable } from 
 import { Dialog } from '@vritti/quantum-ui/Dialog';
 import { useDialog } from '@vritti/quantum-ui/hooks';
 import { SelectFilter } from '@vritti/quantum-ui/Select';
+import { buildSlug } from '@vritti/quantum-ui/slug';
 import { Building2, Eye, Pencil, Plus, UserPlus } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
@@ -17,20 +18,20 @@ import { AddSupplierSiteDialog } from '../forms/AddSupplierSiteDialog';
 import { EditSupplierSiteDialog } from '../forms/EditSupplierSiteDialog';
 
 function sitePath(row: SupplierSiteRow): string {
-  return row.siteId;
+  return `sites/${buildSlug(row.siteName ?? row.siteCode ?? row.siteId, row.siteId)}`;
 }
 
 interface SitesTabProps {
   supplierId: string;
   partyId: string;
-  defaultPaymentTermId: string | null;
+  defaultPaymentTermId: string;
 }
 
 export const SitesTab: React.FC<SitesTabProps> = ({ supplierId, partyId, defaultPaymentTermId }) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { detail: tab } = useParams();
-  // A tab URL (…/<supplier>/items) has a segment to climb out of before a child path; the bare detail URL has none
+  const { tab } = useParams();
+  // Climbs out of the tab segment before a child path
   const fromTab = useCallback((target: string) => (tab ? `../${target}` : target), [tab]);
   const addDialog = useDialog();
   const { data: response, isLoading } = useSupplierSitesTable(supplierId);

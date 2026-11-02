@@ -47,6 +47,7 @@ export const binding: SupplierSiteBinding = {
 
   useSupplierRef: useSiteSupplierRef,
   useItemId: useSiteItemId,
+  siteItemPath: (itemSlug) => itemSlug,
   useExitPath: useSuppliersListPath,
   useSupplierAtSite: useSiteSupplierAtSite,
   useEnroll: useEnrollSiteSupplierView,

@@ -6,7 +6,7 @@ import { PartyFunctionsDomainRepository } from '../repositories/party-functions.
 
 export interface SyncEntityFunctionsInput {
   partyId: string;
-  target: { addressId?: string; relationshipId?: string };
+  target: { addressId?: string; relationshipId?: string; communicationId?: string };
   functions: PartyFunctionAssignmentInput[];
 }
 
@@ -16,6 +16,8 @@ const ADDRESS_FUNCTIONS = new Set<PartyFunctionType>([
   PartyFunctionTypeValues.SHIPPING,
   PartyFunctionTypeValues.ORDERING,
 ]);
+
+const COMMUNICATION_FUNCTIONS = new Set<PartyFunctionType>([PartyFunctionTypeValues.ORDERING]);
 
 const CONTACT_FUNCTIONS = new Set<PartyFunctionType>([
   PartyFunctionTypeValues.ORDER,
@@ -40,35 +42,37 @@ export class PartyFunctionsDomainService {
     return this.repository.relationshipHasFunction(relationshipId, functionCode);
   }
 
-  // Upserts the function rows of one address or relationship: inserts new, deletes removed, and applies
-  // single-primary-per-function via clear-then-set.
+  // Upserts the function rows of one address, relationship or communication: inserts new, deletes removed, and
+  // applies single-primary-per-function via clear-then-set (communication functions are never primary)
   async syncEntityFunctions(input: SyncEntityFunctionsInput): Promise<void> {
     const { partyId, target, functions } = input;
-    const addressId = target.addressId;
-    const relationshipId = target.relationshipId;
-    const isAddress = addressId != null;
-    const isRelationship = relationshipId != null;
-    if (isAddress === isRelationship) {
+    const { addressId, relationshipId, communicationId } = target;
+    const targets = [addressId, relationshipId, communicationId].filter((id) => id != null);
+    if (targets.length !== 1) {
       throw new BadRequestException({
         label: 'Invalid Target',
-        detail: 'A function assignment must target exactly one address or one relationship.',
+        detail: 'A function assignment must target exactly one address, relationship or communication.',
       });
     }
 
-    const allowed = isAddress ? ADDRESS_FUNCTIONS : CONTACT_FUNCTIONS;
+    const kind = addressId ? 'address' : relationshipId ? 'contact' : 'communication';
+    const allowed = addressId ? ADDRESS_FUNCTIONS : relationshipId ? CONTACT_FUNCTIONS : COMMUNICATION_FUNCTIONS;
+    const field = communicationId ? 'functions' : 'function';
     for (const assignment of functions) {
       if (!allowed.has(assignment.function)) {
         throw new BadRequestException({
           label: 'Invalid Function',
-          detail: `"${assignment.function}" cannot be assigned to a ${isAddress ? 'address' : 'contact'}.`,
-          errors: [{ field: 'function', message: 'Function not valid for this target' }],
+          detail: `"${assignment.function}" cannot be assigned to a ${kind}.`,
+          errors: [{ field, message: 'Function not valid for this target' }],
         });
       }
     }
 
-    const existing = isAddress
-      ? await this.repository.findByAddress(addressId as string)
-      : await this.repository.findByRelationship(relationshipId as string);
+    const existing = addressId
+      ? await this.repository.findByAddress(addressId)
+      : relationshipId
+        ? await this.repository.findByRelationship(relationshipId)
+        : await this.repository.findByCommunication(communicationId as string);
     const desired = new Set(functions.map((assignment) => assignment.function));
 
     for (const row of existing) {
@@ -77,7 +81,7 @@ export class PartyFunctionsDomainService {
 
     for (const assignment of functions) {
       const current = existing.find((row) => row.function === assignment.function);
-      const isPrimary = assignment.isPrimary ?? false;
+      const isPrimary = communicationId ? false : (assignment.isPrimary ?? false);
       if (current) {
         if (isPrimary) await this.repository.clearPrimary(partyId, assignment.function, current.id);
         await this.repository.update(current.id, { isPrimary });
@@ -86,12 +90,13 @@ export class PartyFunctionsDomainService {
         await this.repository.create({
           partyId,
           function: assignment.function,
-          partyAddressId: isAddress ? (addressId as string) : null,
-          partyRelationshipId: isRelationship ? (relationshipId as string) : null,
+          partyAddressId: addressId ?? null,
+          partyRelationshipId: relationshipId ?? null,
+          partyCommunicationId: communicationId ?? null,
           isPrimary,
         });
       }
     }
-    this.logger.log(`Synced functions for party ${partyId} ${isAddress ? 'address' : 'relationship'}`);
+    this.logger.log(`Synced functions for party ${partyId} ${kind}`);
   }
 }

@@ -1,19 +1,29 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, desc, eq, inArray, ne, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, desc, eq, exists, inArray, ne, or, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import type { SelectOptionsQueryDto, SelectQueryResult } from '@vritti/api-sdk/select';
 import {
   CONTACTABLE_CHANNELS,
   type MessagingApp,
   type PartyCommunication,
   type PartyCommunicationChannel,
+  type PartyFunctionType,
   PartyTypeValues,
   parties,
   partyCommunicationApps,
   partyCommunications,
+  partyFunctions,
+  supplierSites,
 } from '@/db/schema';
-import type { PartyCommunicationAppDto } from '../dto/entity/party-communication.dto';
+import type {
+  PartyCommunicationAppDto,
+  PartyCommunicationFunction,
+} from '../dto/entity/party-communication.dto';
 
-export type PartyCommunicationRow = PartyCommunication & { apps: PartyCommunicationAppDto[] };
+export type PartyCommunicationRow = PartyCommunication & {
+  apps: PartyCommunicationAppDto[];
+  functions: PartyCommunicationFunction[];
+};
 
 // Restricts a read to channels that are an actual way to reach someone
 const contactableOnly = () => inArray(partyCommunications.channel, [...CONTACTABLE_CHANNELS]);
@@ -21,6 +31,12 @@ const contactableOnly = () => inArray(partyCommunications.channel, [...CONTACTAB
 const appsAgg = sql<PartyCommunicationAppDto[]>`COALESCE(
   json_agg(json_build_object('app', ${partyCommunicationApps.app}, 'handle', ${partyCommunicationApps.handle}))
     FILTER (WHERE ${partyCommunicationApps.id} IS NOT NULL),
+  '[]'::json
+)`;
+
+const functionsSubquery = sql<PartyCommunicationFunction[]>`COALESCE(
+  (SELECT json_agg(${partyFunctions.function}) FROM ${partyFunctions}
+    WHERE ${partyFunctions.partyCommunicationId} = ${partyCommunications.id}),
   '[]'::json
 )`;
 
@@ -38,7 +54,7 @@ export class PartyCommunicationsDomainRepository extends PrimaryBaseRepository<t
     const where = options.where ? and(options.where, contactableOnly()) : contactableOnly();
 
     const rowsPromise = this.db
-      .select({ communication: partyCommunications, apps: appsAgg })
+      .select({ communication: partyCommunications, apps: appsAgg, functions: functionsSubquery })
       .from(partyCommunications)
       .leftJoin(partyCommunicationApps, eq(partyCommunicationApps.communicationId, partyCommunications.id))
       .where(where)
@@ -51,12 +67,11 @@ export class PartyCommunicationsDomainRepository extends PrimaryBaseRepository<t
 
     const [rows, countResult] = await Promise.all([rowsPromise, countPromise]);
     return {
-      result: rows.map((row) => ({ ...row.communication, apps: row.apps ?? [] })),
+      result: rows.map((row) => ({ ...row.communication, apps: row.apps ?? [], functions: row.functions ?? [] })),
       count: countResult[0]?.count ?? 0,
     };
   }
 
-  // Replaces the full set of messaging apps for a communication (delete-all then re-insert).
   // Replaces the full set of messaging apps for a communication (delete-all then re-insert). Runs in the caller's
   // transaction.
   async replaceApps(communicationId: string, apps: { app: MessagingApp; handle?: string | null }[]): Promise<void> {
@@ -146,5 +161,55 @@ export class PartyCommunicationsDomainRepository extends PrimaryBaseRepository<t
     const base = and(eq(partyCommunications.partyId, partyId), eq(partyCommunications.channel, channel));
     const where = exceptId ? and(base, ne(partyCommunications.id, exceptId)) : base;
     await this.db.update(partyCommunications).set({ isPrimary: false }).where(where);
+  }
+
+  // Returns a party's active communications on one channel as select options, optionally only holders of a function
+  findOptionsForSelect(
+    partyId: string,
+    channel: PartyCommunicationChannel,
+    query: SelectOptionsQueryDto,
+    functionCode?: PartyFunctionType,
+  ): Promise<SelectQueryResult> {
+    const conditions: SQL[] = [];
+    if (functionCode) {
+      conditions.push(
+        exists(
+          this.db
+            .select({ one: sql`1` })
+            .from(partyFunctions)
+            .where(
+              and(
+                eq(partyFunctions.partyCommunicationId, partyCommunications.id),
+                eq(partyFunctions.function, functionCode),
+              ),
+            ),
+        ),
+      );
+    }
+    return this.findForSelect({
+      value: 'id',
+      label: 'value',
+      additionalKeys: query.additionalKeys,
+      search: query.search,
+      searchKeys: ['value'],
+      limit: query.limit,
+      offset: query.offset,
+      values: query.values,
+      excludeIds: query.excludeIds,
+      orderByKey: 'value',
+      orderDirection: 'asc',
+      where: { partyId, channel, isActive: true },
+      conditions,
+    });
+  }
+
+  // Returns true when a supplier site uses the communication as its order email or order phone
+  async isUsedBySupplierSite(id: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ one: sql<number>`1` })
+      .from(supplierSites)
+      .where(or(eq(supplierSites.orderEmailCommunicationId, id), eq(supplierSites.orderPhoneCommunicationId, id)))
+      .limit(1);
+    return Boolean(row);
   }
 }

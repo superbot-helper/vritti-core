@@ -9,14 +9,16 @@ interface SitePricesChartProps {
   sites: SitePrices[];
   currencyCode: string;
   range: PriceRange;
+  today: string;
 }
 
 // Every given site's price for one supplier item, a line per site
-export const SitePricesChart: React.FC<SitePricesChartProps> = ({ sites, currencyCode, range }) => (
+export const SitePricesChart: React.FC<SitePricesChartProps> = ({ sites, currencyCode, range, today }) => (
   <PriceSeriesChart
     series={sites.map((site) => ({ ...site, id: site.siteId, label: site.siteName }))}
     currencyCode={currencyCode}
     noun="site"
     range={range}
+    today={today}
   />
 );

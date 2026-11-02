@@ -1,7 +1,7 @@
 import { Badge } from '@vritti/quantum-ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@vritti/quantum-ui/Card';
 import { DetailField } from '@vritti/quantum-ui/DetailField';
-import { useBUCurrency } from '@vritti/quantum-ui/hooks';
+import { useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
 import type { PurchaseOrderDetail } from '@/schemas/purchase-orders';
 
 interface OverviewTabProps {
@@ -14,8 +14,8 @@ interface OverviewTabProps {
 }
 
 export const OverviewTab = ({ po, status }: OverviewTabProps) => {
-  const buCurrency = useBUCurrency();
-  const isCrossCurrency = !!buCurrency && buCurrency !== po.currencyCode;
+  const workspaceCurrency = useWorkspaceCurrency();
+  const isCrossCurrency = !!workspaceCurrency && workspaceCurrency !== po.currencyCode;
 
   return (
     <Card>
@@ -41,7 +41,7 @@ export const OverviewTab = ({ po, status }: OverviewTabProps) => {
           <DetailField label="Total Amount" type="currency" value={po.totalAmount} exchangeRate={po.exchangeRate} />
           {isCrossCurrency && (
             <DetailField
-              label={`Exchange Rate (${po.currencyCode} → ${buCurrency})`}
+              label={`Exchange Rate (${po.currencyCode} → ${workspaceCurrency})`}
               type="number"
               value={po.exchangeRate}
             />

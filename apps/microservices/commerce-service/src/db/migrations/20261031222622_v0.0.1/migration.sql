@@ -1,0 +1,11 @@
+ALTER TABLE "commerce"."party_functions" ADD COLUMN "party_communication_id" uuid;--> statement-breakpoint
+ALTER TABLE "commerce"."supplier_sites" ADD COLUMN "order_email_communication_id" uuid;--> statement-breakpoint
+ALTER TABLE "commerce"."supplier_sites" ADD COLUMN "order_phone_communication_id" uuid;--> statement-breakpoint
+DROP INDEX "commerce"."uq_party_functions_primary";--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_party_functions_primary" ON "commerce"."party_functions" ("party_id","function") WHERE is_primary = true AND party_communication_id IS NULL;--> statement-breakpoint
+ALTER TABLE "commerce"."party_communications" ADD CONSTRAINT "uq_party_communications_party_id" UNIQUE("party_id","id");--> statement-breakpoint
+ALTER TABLE "commerce"."party_functions" ADD CONSTRAINT "uq_party_functions_communication_function" UNIQUE("party_communication_id","function");--> statement-breakpoint
+ALTER TABLE "commerce"."party_functions" ADD CONSTRAINT "fk_party_functions_communication" FOREIGN KEY ("party_id","party_communication_id") REFERENCES "commerce"."party_communications"("party_id","id") ON DELETE CASCADE;--> statement-breakpoint
+ALTER TABLE "commerce"."supplier_sites" ADD CONSTRAINT "fk_supplier_sites_order_email" FOREIGN KEY ("order_email_communication_id") REFERENCES "commerce"."party_communications"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "commerce"."supplier_sites" ADD CONSTRAINT "fk_supplier_sites_order_phone" FOREIGN KEY ("order_phone_communication_id") REFERENCES "commerce"."party_communications"("id") ON DELETE RESTRICT;--> statement-breakpoint
+ALTER TABLE "commerce"."party_functions" DROP CONSTRAINT "party_functions_target_chk", ADD CONSTRAINT "party_functions_target_chk" CHECK (("function" IN ('REGISTERED','BILLING','SHIPPING','ORDERING') AND party_address_id IS NOT NULL AND party_relationship_id IS NULL AND party_communication_id IS NULL) OR ("function" IN ('ORDER','ACCOUNTS','LOGISTICS','ESCALATION') AND party_relationship_id IS NOT NULL AND party_address_id IS NULL AND party_communication_id IS NULL) OR ("function" = 'ORDERING' AND party_communication_id IS NOT NULL AND party_address_id IS NULL AND party_relationship_id IS NULL));

@@ -20,6 +20,11 @@ export class PartyFunctionsDomainRepository extends PrimaryBaseRepository<typeof
     return this.db.select().from(partyFunctions).where(eq(partyFunctions.partyAddressId, addressId));
   }
 
+  // Returns the party functions attached to a given communication
+  async findByCommunication(communicationId: string): Promise<PartyFunction[]> {
+    return this.db.select().from(partyFunctions).where(eq(partyFunctions.partyCommunicationId, communicationId));
+  }
+
   // Returns the party functions attached to a given relationship
   async findByRelationship(relationshipId: string): Promise<PartyFunction[]> {
     return this.db.select().from(partyFunctions).where(eq(partyFunctions.partyRelationshipId, relationshipId));

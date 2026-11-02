@@ -22,8 +22,8 @@ export class SiteSupplierListRowResponseDto {
   @ApiProperty({ description: 'Whether purchasing from this supplier is blocked' })
   purchasingBlocked: boolean;
 
-  @ApiPropertyOptional({ description: 'Payment term new enrollments start from', nullable: true })
-  defaultPaymentTermId: string | null;
+  @ApiProperty({ description: 'Payment term new enrollments start from' })
+  defaultPaymentTermId: string;
 
   @ApiProperty({ description: 'Whether the supplier is enrolled at this site', enum: SITE_ENROLLMENT_STATUSES })
   enrollmentStatus: SiteEnrollmentStatus;

@@ -9,10 +9,10 @@ packages:
 nodeLinker: hoisted
 
 onlyBuiltDependencies:
-  - '@compodoc/compodoc'
-  - '@nestjs/core'
-  - '@scarf/scarf'
-  - '@swc/core'
+  - "@compodoc/compodoc"
+  - "@nestjs/core"
+  - "@scarf/scarf"
+  - "@swc/core"
   - bcrypt
   - core-js
   - esbuild
@@ -20,11 +20,11 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
-  '@react-native-menu/menu': 2.0.0
+  "@react-native-menu/menu": 2.0.0
   # LOCAL ONLY — do not commit. Uncomment to build against unpublished source.
   # '@vritti/api-sdk': link:../api-sdk
+  # '@vritti/api-sdk': file:../api-sdk/vritti-api-sdk-0.6.7.tgz
   # '@vritti/quantum-ui-native': link:../quantum-ui-native
-  # '@vritti/quantum-ui': link:../quantum-ui
   # api-sdk pins zod exactly; core-app/commerce-ma allow ^4.3.6. Two copies put two zod type graphs
   # in one program, and react-hook-form's resolver rejects a schema built by the other one.
   zod: 4.5.4
@@ -33,6 +33,6 @@ overrides:
   react-native-ios-utilities: 5.2.0
 
 patchedDependencies:
-  '@gorhom/bottom-sheet@5.2.13': patches/@gorhom__bottom-sheet@5.2.13.patch
+  "@gorhom/bottom-sheet@5.2.13": patches/@gorhom__bottom-sheet@5.2.13.patch
   react-native-css@3.0.6: patches/react-native-css@3.0.6.patch
   zeego@3.0.6: patches/zeego@3.0.6.patch

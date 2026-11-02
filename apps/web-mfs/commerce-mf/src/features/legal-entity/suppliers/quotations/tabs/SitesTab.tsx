@@ -27,7 +27,7 @@ export const SitesTab = ({ supplierId, quotation }: SitesTabProps) => {
   const confirm = useConfirm();
   const postDialog = useDialog();
   const removeMutation = useRemoveSupplierQuotationFromSite(supplierId, quotation.id);
-  const noLinesTip = quotation.items.length === 0 ? 'Add lines before posting the quotation' : undefined;
+  const hasNoLines = quotation.items.length === 0;
 
   const handleRemove = useCallback(
     async (site: SupplierQuotationSiteData) => {
@@ -91,8 +91,8 @@ export const SitesTab = ({ supplierId, quotation }: SitesTabProps) => {
       permission={LE_SUPPLIERS.sites.quotations.add}
       startAdornment={<Send className="size-4" />}
       onClick={postDialog.open}
-      disabled={!!noLinesTip}
-      disabledTip={noLinesTip}
+      disabled={hasNoLines}
+      disabledTip="Add lines before posting the quotation"
     >
       Post to Site
     </Button>

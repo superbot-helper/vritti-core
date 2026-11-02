@@ -12,6 +12,7 @@ import { LocationsDomainModule } from '@domain/locations/locations.module';
 import { OfferingVariantsDomainModule } from '@domain/offering-variants/offering-variants.module';
 import { OfferingsDomainModule } from '@domain/offerings/offerings.module';
 import { PartiesDomainModule } from '@domain/parties/parties.module';
+import { PartyCommunicationsDomainModule } from '@domain/party-communications/party-communications.module';
 import { PartyBankAccountsDomainModule } from '@domain/party-bank-accounts/party-bank-accounts.module';
 import { PartyRelationshipsDomainModule } from '@domain/party-relationships/party-relationships.module';
 import { PaymentTermsDomainModule } from '@domain/payment-terms/payment-terms.module';
@@ -43,6 +44,7 @@ import { SelectController } from './select.controller';
     CustomersDomainModule,
     LocationsDomainModule,
     PartyBankAccountsDomainModule,
+    PartyCommunicationsDomainModule,
     PartyRelationshipsDomainModule,
     InventoryItemLotsDomainModule,
     InventoryItemMrpsDomainModule,

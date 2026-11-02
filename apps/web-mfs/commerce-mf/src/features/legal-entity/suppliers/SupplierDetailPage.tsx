@@ -81,7 +81,7 @@ export const SupplierDetailPage = () => {
       />
 
       <Tabs
-        routeParam="detail"
+        routeParam="tab"
         tabs={[
           {
             value: 'overview',

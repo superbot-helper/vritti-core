@@ -1,6 +1,6 @@
 import { Button } from '@vritti/quantum-ui/Button';
 import { DropdownMenu, type MenuItem } from '@vritti/quantum-ui/DropdownMenu';
-import { useBUCurrency, useConfirm } from '@vritti/quantum-ui/hooks';
+import { useConfirm, useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
 import { Mail, MoreVertical, PackageX, Pencil, Printer, Send, Trash2, Truck, Wallet } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -38,7 +38,7 @@ export const PurchaseOrderActions = ({ po, poItemIds }: PurchaseOrderActionsProp
   const updateStatusMutation = useUpdatePurchaseOrderStatus();
   const deleteMutation = useDeletePurchaseOrder();
   const closeMutation = useClosePurchaseOrder();
-  const buCurrencyCode = useBUCurrency();
+  const workspaceCurrency = useWorkspaceCurrency();
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const handleStatusChange = useCallback(
@@ -135,7 +135,7 @@ export const PurchaseOrderActions = ({ po, poItemIds }: PurchaseOrderActionsProp
     [po],
   );
 
-  const isCrossCurrency = !!buCurrencyCode && po.currencyCode !== buCurrencyCode;
+  const isCrossCurrency = !!workspaceCurrency && po.currencyCode !== workspaceCurrency;
   const isPreReceipt = po.status === 'DRAFT' || po.status === 'SENT' || po.status === 'CONFIRMED';
   const canChangeExchangeRate = isCrossCurrency && isPreReceipt && !po.goodsReceiptExists;
   const canChangeConversionRate = isPreReceipt && !po.goodsReceiptExists && Object.keys(po.conversionRates).length > 0;
@@ -145,9 +145,6 @@ export const PurchaseOrderActions = ({ po, poItemIds }: PurchaseOrderActionsProp
   const totalAmountValue = Number(po.totalAmount?.value ?? 0);
   const hasPositiveTotalAmount = Number.isFinite(totalAmountValue) && totalAmountValue > 0;
   const requiresPositiveTotalToSend = po.status === 'DRAFT' && !hasPositiveTotalAmount;
-  const markAsSentDisabledTip = requiresPositiveTotalToSend
-    ? 'Add Line Items to Mark the Purchase Order as Sent'
-    : undefined;
   const canCancel =
     po.status !== 'DRAFT' &&
     po.status !== 'CANCELLED' &&
@@ -169,7 +166,7 @@ export const PurchaseOrderActions = ({ po, poItemIds }: PurchaseOrderActionsProp
             onClick: () => handleStatusChange(nextAction.status, nextAction.label),
             icon: Send,
             disabled: nextAction.status === 'SENT' && requiresPositiveTotalToSend,
-            disabledTip: nextAction.status === 'SENT' ? markAsSentDisabledTip : undefined,
+            disabledTip: 'Add Line Items to Mark the Purchase Order as Sent',
           }
         : undefined;
 

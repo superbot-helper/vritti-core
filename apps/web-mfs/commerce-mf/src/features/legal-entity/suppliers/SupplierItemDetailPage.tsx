@@ -19,14 +19,14 @@ import { PricesTableTab } from './item-tabs/PricesTableTab';
 
 export const SupplierItemDetailPage = () => {
   const { id: supplierId } = useSlugParams('supplierSlug');
-  const { id: itemId } = useSlugParams('detail');
+  const { id: itemId } = useSlugParams('itemSlug');
   const { data: item } = useSupplierItem(supplierId, itemId);
   const navigate = useNavigate();
   const confirm = useConfirm();
   const editDialog = useDialog();
-  // The item page sits at …/<supplier>/<item>/<tab>; deleting returns to the supplier's Items tab
+  // Deleting returns to the supplier's Items tab
   const deleteMutation = useUnlinkSupplierItem(supplierId, {
-    onSuccess: () => navigate('../../items', { relative: 'path' }),
+    onSuccess: () => navigate('../..', { relative: 'path' }),
   });
 
   const handleDelete = useCallback(async () => {
@@ -68,7 +68,7 @@ export const SupplierItemDetailPage = () => {
       />
 
       <Tabs
-        routeParam="subDetail"
+        routeParam="tab"
         tabs={[
           {
             value: 'overview',

@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID } from 'class-validator';
+import { IsOptional, IsUUID, ValidateIf } from 'class-validator';
 
 export class UpdateSiteEnrollmentDto {
   @IsUUID('7')
@@ -19,4 +19,12 @@ export class UpdateSiteEnrollmentDto {
   @IsOptional()
   @IsUUID('7')
   orderRelationshipId?: string | null;
+
+  @ValidateIf((_, value) => value !== undefined)
+  @IsUUID('7')
+  orderEmailCommunicationId?: string;
+
+  @ValidateIf((_, value) => value !== undefined)
+  @IsUUID('7')
+  orderPhoneCommunicationId?: string;
 }

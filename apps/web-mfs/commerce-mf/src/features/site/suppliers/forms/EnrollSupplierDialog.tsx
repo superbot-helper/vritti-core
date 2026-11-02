@@ -9,12 +9,13 @@ import { useForm } from 'react-hook-form';
 import { useEnrollSiteSupplier } from '@/hooks/site/suppliers';
 import { useSiteId } from '@/hooks/site/useSiteId';
 import { type EnrollSiteSupplierFormData, enrollSiteSupplierSchema } from '@/schemas/site-suppliers';
+import { PartyCommunicationSelector } from '@/selectors/party-communication';
 import { PaymentTermSelector } from '@/selectors/payment-term';
 import { SupplierSelector } from '@/selectors/supplier';
 
 interface EnrollSupplierDialogProps {
   // Preselects the supplier when enrolling from its row; the supplier picker is then fixed
-  supplier?: { id: string; partyId: string; defaultPaymentTermId: string | null };
+  supplier?: { id: string; partyId: string; defaultPaymentTermId: string };
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -24,7 +25,7 @@ export const EnrollSupplierDialog: React.FC<EnrollSupplierDialogProps> = ({ supp
     resolver: zodResolver(enrollSiteSupplierSchema),
     defaultValues: {
       supplierId: supplier?.id,
-      paymentTermId: supplier?.defaultPaymentTermId ?? undefined,
+      paymentTermId: supplier?.defaultPaymentTermId,
     },
   });
   const [partyId, setPartyId] = useState<string | undefined>(supplier?.partyId);
@@ -49,6 +50,8 @@ export const EnrollSupplierDialog: React.FC<EnrollSupplierDialogProps> = ({ supp
               form.resetField('partyTaxRegistrationId');
               form.resetField('partyBankAccountId');
               form.resetField('orderRelationshipId');
+              form.resetField('orderEmailCommunicationId');
+              form.resetField('orderPhoneCommunicationId');
               const defaultTerm = option?.additionals?.defaultPaymentTermId;
               if (typeof defaultTerm === 'string') form.setValue('paymentTermId', defaultTerm);
               else form.resetField('paymentTermId');
@@ -82,6 +85,8 @@ export const EnrollSupplierDialog: React.FC<EnrollSupplierDialogProps> = ({ supp
             optionsEndpoint={partyId ? 'commerce-api/select-api/party-contacts' : undefined}
             params={partyId ? { partyId, function: 'ORDER' } : undefined}
           />
+          <PartyCommunicationSelector name="orderEmailCommunicationId" partyId={partyId} channel="EMAIL" />
+          <PartyCommunicationSelector name="orderPhoneCommunicationId" partyId={partyId} channel="PHONE" />
         </div>
       </FormSection>
       <DialogActions>

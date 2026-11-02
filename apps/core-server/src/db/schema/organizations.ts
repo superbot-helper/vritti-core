@@ -1,6 +1,6 @@
 import type { FeatureLocks } from '@vritti/api-sdk/catalog-resolver';
 import { sql } from '@vritti/api-sdk/drizzle-orm';
-import { boolean, jsonb, timestamp, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
+import { boolean, char, jsonb, timestamp, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
 import type { OrgEntitlement, SignedDocument } from '@vritti/api-sdk/license';
 import { coreSchema } from './core-schema';
 import { orgPlanEnum, orgSizeEnum } from './enums';
@@ -16,6 +16,8 @@ export const organizations = coreSchema.table('organizations', {
   plan: orgPlanEnum('plan').notNull().default('FREE'),
   planCode: varchar('plan_code', { length: 100 }),
   businessCode: varchar('business_code', { length: 100 }),
+  // ISO 4217. Pushed from cloud; prices org and site-group workspaces, which hold no ledger of their own
+  defaultCurrencyCode: char('default_currency_code', { length: 3 }).notNull(),
   // Signed entitlement document pushed from cloud — planCode/businessCode are denormalized from it
   entitlement: jsonb('entitlement').$type<SignedDocument<OrgEntitlement>>(),
   // Per-feature lock deny-list gating ORG-scope features in the org context; null = inherit the full plan

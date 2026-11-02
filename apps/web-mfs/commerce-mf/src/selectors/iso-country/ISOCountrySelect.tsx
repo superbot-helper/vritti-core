@@ -5,6 +5,7 @@ import {
   type SelectOption,
   type SelectProps,
 } from '@vritti/quantum-ui/Select';
+import type { DistributiveOmit } from '@vritti/quantum-ui/types/utility';
 import { forwardRef } from 'react';
 import { countryFlag, ISO_COUNTRIES } from './iso-countries';
 
@@ -22,7 +23,7 @@ export const ISOCountrySelect = forwardRef<HTMLButtonElement, ISOCountrySelectPr
 ));
 ISOCountrySelect.displayName = 'ISOCountrySelect';
 
-export type ISOCountryFilterProps = Omit<SelectFilterProps, 'optionsEndpoint' | 'options' | 'name'> & {
+export type ISOCountryFilterProps = DistributiveOmit<SelectFilterProps, 'optionsEndpoint' | 'options' | 'name'> & {
   name?: string;
 };
 

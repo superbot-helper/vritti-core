@@ -322,7 +322,7 @@ export function ApiPaymentTermsSelect() {
   return applyDecorators(
     ApiOperation({
       summary: 'Get payment term select options',
-      description: 'Returns paginated active payment term options for the select component.',
+      description: 'Returns paginated published payment term options for the select component.',
     }),
     ...BASE_SELECT_QUERIES,
     ApiResponse({ status: 200, description: 'Payment term select options retrieved successfully.' }),

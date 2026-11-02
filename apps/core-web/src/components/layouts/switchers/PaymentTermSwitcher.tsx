@@ -22,8 +22,8 @@ export const PaymentTermSwitcher = ({ segment, basePath }: PaymentTermSwitcherPr
   return (
     <PaymentTermSelector
       value={current}
-      // Drafts and inactive terms are still pages you can open, so the switcher lists every term
-      params={{ includeAll: true }}
+      // Draft terms are still pages you can open, so the switcher lists them too
+      allowUnpublished
       // The anchor replaces the trigger but not the surrounding Field, so a label would still render above it
       label={undefined}
       searchPlaceholder="Find payment term..."

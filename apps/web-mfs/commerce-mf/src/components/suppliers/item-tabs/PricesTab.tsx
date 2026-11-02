@@ -2,8 +2,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@vritti/quantum-ui/Button';
 import { type ColumnDef, DataTable, RowActions, useDataTable } from '@vritti/quantum-ui/DataTable';
 import { Dialog } from '@vritti/quantum-ui/Dialog';
-import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
+import { useConfirm, useDialog, useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { CalendarClock, Pencil, Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
@@ -58,6 +59,7 @@ export const PricesTab: React.FC<PricesTabProps> = ({
   );
 
   const showMrp = usePermission(binding.permissions.mrp.view).available;
+  const today = isoTodayDate(useWorkspaceTimeZone(supplierRef.siteId));
   const columns = useMemo<ColumnDef<SupplierItemPriceRow>[]>(
     () => [
       ...supplierPriceColumns({ showMrp, showSite: false }),
@@ -82,7 +84,7 @@ export const PricesTab: React.FC<PricesTabProps> = ({
                   disabledTip: quotationTip,
                   dialog: {
                     title: 'Edit Price',
-                    description: isPriceInForce(row.original)
+                    description: isPriceInForce(row.original, today)
                       ? 'Change the end date of this price.'
                       : 'Update this scheduled price.',
                     content: (close) => (
@@ -106,7 +108,7 @@ export const PricesTab: React.FC<PricesTabProps> = ({
                   label: 'Delete',
                   variant: 'destructive',
                   permission: binding.permissions.prices.delete,
-                  hidden: isPriceInForce(row.original),
+                  hidden: isPriceInForce(row.original, today),
                   disabled: !!quotationTip,
                   disabledTip: quotationTip,
                   onClick: () => handleDelete(row.original),
@@ -117,7 +119,7 @@ export const PricesTab: React.FC<PricesTabProps> = ({
         },
       },
     ],
-    [showMrp, binding, supplierRef, itemId, inventoryItemId, uomId, currencyCodes, handleDelete],
+    [showMrp, today, binding, supplierRef, itemId, inventoryItemId, uomId, currencyCodes, handleDelete],
   );
 
   const { table } = useDataTable({

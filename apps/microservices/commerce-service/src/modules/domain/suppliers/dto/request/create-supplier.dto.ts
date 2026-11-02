@@ -1,6 +1,16 @@
-import { Trim } from '@vritti/api-sdk/decorators';
+import { ArrayIncludesField, Trim } from '@vritti/api-sdk/decorators';
 import { IsCurrencyCode } from '@vritti/api-sdk/money';
-import { IsArray, IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateSupplierDto {
   @IsUUID('7')
@@ -16,43 +26,29 @@ export class CreateSupplierDto {
   @IsCurrencyCode()
   currencyCode: string;
 
-  // Further currencies the supplier trades in; the default is always among them
-  @IsOptional()
+  // Every currency the supplier trades in; the default is always among them
   @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
   @IsCurrencyCode({ each: true })
-  currencyCodes?: string[];
+  @ArrayIncludesField('currencyCode', { message: 'Must include the default currency' })
+  currencyCodes: string[];
 
-  @IsOptional()
   @IsUUID('7')
-  defaultPaymentTermId?: string | null;
+  defaultPaymentTermId: string;
 
-  @Trim()
+  @Trim({ nullify: true })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   notes?: string | null;
 
-  @IsOptional()
   @IsBoolean()
-  purchasingBlocked?: boolean;
+  purchasingBlocked: boolean;
 
-  @IsOptional()
   @IsBoolean()
-  paymentBlocked?: boolean;
+  paymentBlocked: boolean;
 
-  @Trim()
-  @IsOptional()
-  @IsEmail()
-  @MaxLength(255)
-  orderEmail?: string | null;
-
-  @Trim()
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  orderPhone?: string | null;
-
-  @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  isActive: boolean;
 }

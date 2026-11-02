@@ -1,5 +1,6 @@
 import type { TableResponse } from '@vritti/quantum-ui/types/api-response';
 import { z } from '@vritti/quantum-ui/zod';
+import type { PartyFunctionOption } from './party-functions';
 
 const COMMUNICATION_CHANNELS = ['EMAIL', 'PHONE'] as const;
 
@@ -16,6 +17,28 @@ export const COMMUNICATION_CHANNEL_OPTIONS = COMMUNICATION_CHANNELS.map((value) 
   value,
   label: COMMUNICATION_CHANNEL_LABELS[value],
 }));
+
+const COMMUNICATION_FUNCTIONS = ['ORDERING'] as const;
+
+export type CommunicationFunction = (typeof COMMUNICATION_FUNCTIONS)[number];
+
+export const COMMUNICATION_FUNCTION_LABELS: Record<CommunicationFunction, string> = {
+  ORDERING: 'Ordering',
+};
+
+export const COMMUNICATION_FUNCTION_OPTIONS: PartyFunctionOption[] = COMMUNICATION_FUNCTIONS.map((value) => ({
+  value,
+  label: COMMUNICATION_FUNCTION_LABELS[value],
+}));
+
+export const communicationFunctionSchema = z.object({
+  function: z.enum(COMMUNICATION_FUNCTIONS),
+  isPrimary: z.boolean().optional(),
+});
+
+export interface PartyCommunicationFunction {
+  function: CommunicationFunction;
+}
 
 const MESSAGING_APPS = ['WHATSAPP', 'TELEGRAM', 'SIGNAL', 'IMO', 'VIBER', 'WECHAT'] as const;
 
@@ -54,6 +77,7 @@ export const communicationSchema = z
     isPrimary: z.boolean().optional(),
     isActive: z.boolean().optional(),
     apps: z.array(communicationAppSchema),
+    functions: z.array(communicationFunctionSchema),
   })
   .superRefine((data, ctx) => {
     if (data.channel === 'EMAIL' && !z.string().email().safeParse(data.value).success) {
@@ -69,6 +93,7 @@ export interface PartyCommunicationPayload {
   isPrimary?: boolean;
   isActive?: boolean;
   apps?: PartyCommunicationApp[];
+  functions?: PartyCommunicationFunction[];
 }
 
 export interface PartyCommunicationUpdatePayload {
@@ -76,6 +101,7 @@ export interface PartyCommunicationUpdatePayload {
   isPrimary?: boolean;
   isActive?: boolean;
   apps?: PartyCommunicationApp[];
+  functions?: PartyCommunicationFunction[];
 }
 
 export interface PartyCommunicationRow {
@@ -86,6 +112,7 @@ export interface PartyCommunicationRow {
   isPrimary: boolean;
   isActive: boolean;
   apps: PartyCommunicationApp[];
+  functions: CommunicationFunction[];
   createdAt: string;
 }
 

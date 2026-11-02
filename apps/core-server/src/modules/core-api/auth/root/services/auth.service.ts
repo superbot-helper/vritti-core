@@ -286,6 +286,7 @@ export class AuthService {
           id: org.id,
           name: org.name,
           subdomain: org.subdomain,
+          defaultCurrencyCode: org.defaultCurrencyCode,
           logoLightUrl: org.logoLightUrl,
           logoDarkUrl: org.logoDarkUrl,
           // Clients gate service-dependent screens on this instead of calling the provider
@@ -309,6 +310,7 @@ export class AuthService {
               id: resolvedOrg.id,
               name: resolvedOrg.name,
               subdomain: resolvedOrg.subdomain,
+              defaultCurrencyCode: resolvedOrg.defaultCurrencyCode,
               logoLightUrl: resolvedOrg.logoLightUrl,
               logoDarkUrl: resolvedOrg.logoDarkUrl,
               services: resolvedOrg.services,
@@ -479,6 +481,7 @@ export class AuthService {
           id: org.id,
           name: org.name,
           subdomain: org.subdomain,
+          defaultCurrencyCode: org.defaultCurrencyCode,
           logoLightUrl: org.logoLightUrl,
           logoDarkUrl: org.logoDarkUrl,
           // Clients gate service-dependent screens on this instead of calling the provider

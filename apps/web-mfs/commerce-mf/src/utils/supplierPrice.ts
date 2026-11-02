@@ -1,8 +1,9 @@
+import { addMonths, format, parseISO, subMonths } from '@vritti/quantum-ui/date-fns';
 import type { PriceGraphSelection, PriceWindow, SupplierItemPriceRow } from '@/schemas/suppliers';
 
 // Mirrors the backend frozen-row rule: a price whose start date has arrived only accepts a new end date
-export function isPriceInForce(price: Pick<SupplierItemPriceRow, 'validFrom'>): boolean {
-  return price.validFrom <= new Date().toISOString().slice(0, 10);
+export function isPriceInForce(price: Pick<SupplierItemPriceRow, 'validFrom'>, today: string): boolean {
+  return price.validFrom <= today;
 }
 
 export interface PricePoint {
@@ -16,9 +17,9 @@ function toEpoch(date: string): number {
   return Date.parse(`${date}T00:00:00Z`);
 }
 
-// Today on the price charts' time axis
-export function todayEpoch(): number {
-  return toEpoch(new Date().toISOString().slice(0, 10));
+// A YYYY-MM-DD day on the price charts' time axis
+export function dayEpoch(date: string): number {
+  return toEpoch(date);
 }
 
 // The window a price chart shows, as YYYY-MM-DD dates
@@ -57,13 +58,9 @@ export function priceGraphState(selection: PriceGraphSelection) {
 }
 
 // The default chart window: two months back to one month ahead, so recent moves and scheduled changes both show
-export function defaultPriceRange(): PriceRange {
-  const today = new Date();
-  const shift = (months: number) =>
-    new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + months, today.getUTCDate()))
-      .toISOString()
-      .slice(0, 10);
-  return { from: shift(-2), to: shift(1) };
+export function defaultPriceRange(today: string): PriceRange {
+  const day = parseISO(today);
+  return { from: format(subMonths(day, 2), 'yyyy-MM-dd'), to: format(addMonths(day, 1), 'yyyy-MM-dd') };
 }
 
 // The value a step series holds at an instant: its last point at or before it
@@ -81,10 +78,10 @@ function valueAt(points: PricePoint[], at: number): number | null {
 // cut to it, starting and ending on the price in force at its edges.
 export function buildPriceSeries(
   prices: Pick<SupplierItemPriceRow, 'unitPrice' | 'validFrom' | 'validTo'>[],
-  range?: PriceRange,
+  range: PriceRange,
 ): PricePoint[] {
   const sorted = [...prices].sort((a, b) => a.validFrom.localeCompare(b.validFrom));
-  const openUntil = range ? toEpoch(range.to) : todayEpoch();
+  const openUntil = toEpoch(range.to);
   const points: PricePoint[] = [];
 
   sorted.forEach((price, index) => {
@@ -102,7 +99,6 @@ export function buildPriceSeries(
     }
   });
 
-  if (!range) return points;
   const from = toEpoch(range.from);
   const to = toEpoch(range.to);
   return [
@@ -187,8 +183,7 @@ export function priceCurrencies(timelines: PriceTimeline[]): string[] {
 
 // A timeline narrowed to one currency, with the price in force, the one it replaced and the next change found again
 // among its windows, so a trend never compares two currencies
-export function inCurrency<T extends PriceTimeline>(timeline: T, currency: string): T {
-  const today = new Date().toISOString().slice(0, 10);
+export function inCurrency<T extends PriceTimeline>(timeline: T, currency: string, today: string): T {
   const windows = timeline.windows.filter((window) => window.unitPrice.currency === currency);
   const currentIndex = windows.findIndex(
     (window) => window.validFrom <= today && (!window.validTo || window.validTo >= today),

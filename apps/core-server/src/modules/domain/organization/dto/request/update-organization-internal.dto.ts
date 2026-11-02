@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsCurrencyCode } from '@vritti/api-sdk/money';
 import { IsBoolean, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 import { type OrgCredential, OrgSizeValues } from '@/db/schema';
 
@@ -13,6 +14,11 @@ export class UpdateOrganizationInternalDto {
   @IsOptional()
   @IsEnum(OrgSizeValues)
   size?: string;
+
+  @ApiPropertyOptional({ description: 'ISO 4217 currency of org and site-group workspaces', example: 'INR' })
+  @IsOptional()
+  @IsCurrencyCode()
+  defaultCurrencyCode?: string;
 
   @ApiPropertyOptional({ description: 'Public logo URL for light surfaces' })
   @IsOptional()

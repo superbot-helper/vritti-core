@@ -7,11 +7,11 @@ import { useMemo, useRef } from 'react';
 import type { PriceWindow } from '@/schemas/suppliers';
 import {
   buildPriceSeries,
+  dayEpoch,
   mergePriceSeries,
   type PriceRange,
   priceDomain,
   priceTrend,
-  todayEpoch,
 } from '@/utils/supplierPrice';
 import { PriceTrendChip } from './PriceTrendChip';
 
@@ -32,6 +32,7 @@ interface PriceSeriesChartProps {
   noun: string;
   // The window the chart shows; each line is cut to it
   range: PriceRange;
+  today: string;
 }
 
 // The validated categorical series palette (quantum-ui --chart-series-1…8), in its fixed order
@@ -39,7 +40,7 @@ const SERIES = Array.from({ length: 8 }, (_, index) => `var(--chart-series-${ind
 
 // Several price timelines on one chart — a coloured step line each — with a key beneath that doubles as each line's
 // ticker: the price in force, its last move and the next scheduled change
-export const PriceSeriesChart: React.FC<PriceSeriesChartProps> = ({ series, currencyCode, noun, range }) => {
+export const PriceSeriesChart: React.FC<PriceSeriesChartProps> = ({ series, currencyCode, noun, range, today }) => {
   const fmt = useFormatters();
 
   // A line keeps its colour while it stays on the chart — filtering others in or out never repaints it. Colours go to
@@ -63,7 +64,6 @@ export const PriceSeriesChart: React.FC<PriceSeriesChartProps> = ({ series, curr
     });
   }, [series]);
 
-  const today = new Date().toISOString().slice(0, 10);
   const todayInRange = range.from <= today && today <= range.to;
 
   const { rows, config, lines, yDomain } = useMemo(() => {
@@ -99,7 +99,7 @@ export const PriceSeriesChart: React.FC<PriceSeriesChartProps> = ({ series, curr
         lines={lines}
         showLegend={false}
         yDomain={yDomain}
-        markers={todayInRange ? [{ x: todayEpoch(), label: 'Today' }] : []}
+        markers={todayInRange ? [{ x: dayEpoch(today), label: 'Today' }] : []}
         className="min-h-80 w-full"
         valueFormatter={(value) => String(fmt.currency({ currency: currencyCode, value: String(value) }).primary)}
         xAxisFormatter={(value) => String(fmt.date(new Date(Number(value)).toISOString().slice(0, 10)).primary)}

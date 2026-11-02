@@ -5,10 +5,10 @@ import { IsBoolean, IsOptional } from 'class-validator';
 
 export class PaymentTermsSelectQueryDto extends SelectOptionsQueryDto {
   @ApiPropertyOptional({
-    description: 'When true, draft and inactive terms are returned too (navigation, not picking)',
+    description: 'When true, unpublished (draft) terms are returned too — for navigation, not picking',
   })
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
-  includeAll?: boolean;
+  allowUnpublished?: boolean;
 }

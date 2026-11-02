@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { asc, eq, inArray, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, eq, inArray, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { ConflictException } from '@vritti/api-sdk/exceptions';
 import {
   type FulfilmentType,
   inventoryItems,
@@ -113,6 +114,23 @@ export class OfferingBomDomainRepository extends PrimaryBaseRepository<typeof of
       .from(offeringBom)
       .where(eq(offeringBom.variantId, variantId));
     return row?.n ?? 0;
+  }
+
+  // Throws when the variant already draws on the item in that unit
+  async assertLineFree(variantId: string, inventoryItemId: string, uomId: string, variantCode: string): Promise<void> {
+    const taken = await this.exists(
+      and(
+        eq(offeringBom.variantId, variantId),
+        eq(offeringBom.inventoryItemId, inventoryItemId),
+        eq(offeringBom.uomId, uomId),
+      ) as SQL,
+    );
+    if (taken) {
+      throw new ConflictException({
+        label: 'Already A Component',
+        detail: `"${variantCode}" already draws on that item in that unit. Edit the existing line instead.`,
+      });
+    }
   }
 
   async insertLine(row: NewOfferingBomLine): Promise<void> {

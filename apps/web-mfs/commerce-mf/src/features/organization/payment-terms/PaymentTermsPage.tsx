@@ -1,29 +1,24 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { ORG_PAYMENT_TERMS } from '@vritti/commerce-permissions/payment-terms';
 import { Button } from '@vritti/quantum-ui/Button';
-import {
-  type ColumnDef,
-  DataTable,
-  type RowAction,
-  RowActions,
-  StringCell,
-  useDataTable,
-} from '@vritti/quantum-ui/DataTable';
+import { type ColumnDef, DataTable, type RowAction, RowActions, useDataTable } from '@vritti/quantum-ui/DataTable';
 import { Dialog } from '@vritti/quantum-ui/Dialog';
-import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
+import { useDialog } from '@vritti/quantum-ui/hooks';
 import { PageHeader } from '@vritti/quantum-ui/PageHeader';
+import { SelectFilter } from '@vritti/quantum-ui/Select';
 import { buildSlug } from '@vritti/quantum-ui/slug';
-import { CalendarClock, Eye, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+import { CalendarClock, Eye, Plus } from 'lucide-react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PAYMENT_TERMS_TABLE_KEY, usePaymentTermsTable } from '@/hooks/organization/payment-terms';
 import {
-  PAYMENT_TERMS_TABLE_KEY,
-  useDeletePaymentTerm,
-  usePaymentTermsTable,
-} from '@/hooks/organization/payment-terms';
-import { PAYMENT_TERM_BASELINE_LABELS, type PaymentTermData } from '@/schemas/payment-terms';
+  PAYMENT_TERM_BASELINE_LABELS,
+  PAYMENT_TERM_BASELINE_OPTIONS,
+  PAYMENT_TERM_STATUS_OPTIONS,
+  type PaymentTermData,
+} from '@/schemas/payment-terms';
+import { PaymentTermStatusBadge } from './components/PaymentTermStatusBadge';
 import { AddPaymentTermDialog } from './forms/AddPaymentTermDialog';
-import { PaymentTermStatusBadge } from './PaymentTermStatusBadge';
 
 function paymentTermPath(term: Pick<PaymentTermData, 'id' | 'name'>, tab: 'overview' | 'rules'): string {
   return `${buildSlug(term.name, term.id)}/${tab}`;
@@ -34,42 +29,20 @@ export const PaymentTermsPage = () => {
   const navigate = useNavigate();
   const { data: response, isLoading } = usePaymentTermsTable();
   const addDialog = useDialog();
-  const confirm = useConfirm();
-  const deleteMutation = useDeletePaymentTerm();
-
-  const handleDelete = useCallback(
-    async (row: PaymentTermData) => {
-      const ok = await confirm({
-        title: `Delete "${row.name}"?`,
-        description: 'This permanently removes the payment term. Terms used by a supplier or site cannot be deleted.',
-        confirmLabel: 'Delete',
-        variant: 'destructive',
-      });
-      if (ok) deleteMutation.mutate(row.id);
-    },
-    [confirm, deleteMutation],
-  );
 
   const columns = useMemo<ColumnDef<PaymentTermData>[]>(
     () => [
-      {
-        accessorKey: 'code',
-        header: 'Code',
-        cell: ({ row }) => <StringCell value={row.original.code} mono />,
-        enableSorting: true,
-      },
       { accessorKey: 'name', header: 'Name', enableSorting: true },
-      { accessorKey: 'summary', header: 'Terms', cell: ({ row }) => row.original.summary ?? '—', enableSorting: false },
       {
         accessorKey: 'baseline',
-        header: 'Counted From',
+        header: 'Baseline',
         cell: ({ row }) => PAYMENT_TERM_BASELINE_LABELS[row.original.baseline],
         enableSorting: true,
       },
       {
-        accessorKey: 'status',
+        accessorKey: 'isPublished',
         header: 'Status',
-        cell: ({ row }) => <PaymentTermStatusBadge status={row.original.status} />,
+        cell: ({ row }) => <PaymentTermStatusBadge isPublished={row.original.isPublished} />,
         enableSorting: true,
       },
       {
@@ -84,14 +57,6 @@ export const PaymentTermsPage = () => {
               label: 'View',
               onClick: () => navigate(paymentTermPath(r, 'overview')),
             },
-            {
-              id: 'delete',
-              icon: Trash2,
-              label: 'Delete',
-              variant: 'destructive',
-              permission: ORG_PAYMENT_TERMS.delete,
-              onClick: () => handleDelete(r),
-            },
           ];
           return <RowActions actions={actions} />;
         },
@@ -99,7 +64,7 @@ export const PaymentTermsPage = () => {
         enableHiding: false,
       },
     ],
-    [handleDelete, navigate],
+    [navigate],
   );
 
   const { table } = useDataTable({
@@ -124,11 +89,12 @@ export const PaymentTermsPage = () => {
         table={table}
         isLoading={isLoading}
         permission={ORG_PAYMENT_TERMS.view}
+        filters={[
+          <SelectFilter key="isPublished" name="isPublished" label="Status" options={PAYMENT_TERM_STATUS_OPTIONS} />,
+          <SelectFilter key="baseline" name="baseline" label="Baseline" options={PAYMENT_TERM_BASELINE_OPTIONS} />,
+        ]}
         searchConfig={{
-          columns: [
-            { id: 'name', label: 'Name' },
-            { id: 'code', label: 'Code' },
-          ],
+          columns: [{ id: 'name', label: 'Name' }],
           searchAll: true,
         }}
         toolbarActions={{
@@ -163,7 +129,7 @@ export const PaymentTermsPage = () => {
         handle={addDialog}
         icon={CalendarClock}
         title="Add Payment Term"
-        description="Start a draft payment term. You add its rules next and activate it once they total 100%."
+        description="Start a draft payment term. You add its rules next and publish it once they total 100%."
         content={(close) => (
           <AddPaymentTermDialog
             onSuccess={(term) => {

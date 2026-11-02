@@ -1,12 +1,12 @@
 import { Button } from '@vritti/quantum-ui/Button';
 import { DatePicker } from '@vritti/quantum-ui/DatePicker';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
-import { format } from '@vritti/quantum-ui/date-fns';
 import { Form } from '@vritti/quantum-ui/Form';
-import { useBUCurrency } from '@vritti/quantum-ui/hooks';
+import { useWorkspaceCurrency, useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import type { SelectOption } from '@vritti/quantum-ui/Select';
 import { TextArea } from '@vritti/quantum-ui/TextArea';
 import { TextField } from '@vritti/quantum-ui/TextField';
+import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
 import { useEffect, useState } from 'react';
@@ -33,12 +33,13 @@ interface PoSelection {
 }
 
 export const CreateGoodsReceiptDialog: React.FC<CreateGoodsReceiptDialogProps> = ({ onSuccess, onCancel }) => {
-  const buCurrencyCode = useBUCurrency();
+  const workspaceCurrency = useWorkspaceCurrency();
   const siteId = useSiteId();
+  const timeZone = useWorkspaceTimeZone();
   const form = useForm<CreateGoodsReceiptFormData>({
     resolver: zodResolver(createGoodsReceiptSchema),
     defaultValues: {
-      receivedDate: format(new Date(), 'yyyy-MM-dd'),
+      receivedDate: isoTodayDate(timeZone),
       notes: '',
       exchangeRate: undefined,
     },
@@ -60,7 +61,7 @@ export const CreateGoodsReceiptDialog: React.FC<CreateGoodsReceiptDialogProps> =
   // Exchange-rate UX by context: sameCurrency hides the field, FIXED PO shows it read-only, else editable+required.
   // Received against a PO, the goods are in the PO's currency; otherwise in the supplier's default
   const receiptCurrencyCode = poSelection?.currencyCode ?? supplierCurrencyCode;
-  const sameCurrency = !!receiptCurrencyCode && receiptCurrencyCode === buCurrencyCode;
+  const sameCurrency = !!receiptCurrencyCode && receiptCurrencyCode === workspaceCurrency;
   const showRateField = !!receiptCurrencyCode && !sameCurrency;
   const fixedFromPo = !!poSelection && poSelection.exchangeRateType === 'FIXED';
 
@@ -132,7 +133,7 @@ export const CreateGoodsReceiptDialog: React.FC<CreateGoodsReceiptDialogProps> =
       {showRateField && (
         <TextField
           name="exchangeRate"
-          label={`Exchange Rate (${receiptCurrencyCode} → ${buCurrencyCode})`}
+          label={`Exchange Rate (${receiptCurrencyCode} → ${workspaceCurrency})`}
           type="number"
           positive
           disabled={fixedFromPo}

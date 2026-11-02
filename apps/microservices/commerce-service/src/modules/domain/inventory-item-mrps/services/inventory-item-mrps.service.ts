@@ -91,10 +91,11 @@ export class InventoryItemMrpsDomainService {
     return this.repository.findOrInsert(inventoryItemId, uomId, currencyCode, amount);
   }
 
-  // Inserts a new suggested MRP for an (item, uom, currency); the unique constraint surfaces conflicts
+  // Inserts a new suggested MRP for an (item, uom, currency); refuses an amount already recorded for it
   async create(dto: AddInventoryItemMrpDto): Promise<InventoryItemMrp> {
     const currencyCode = dto.amount.currency;
     const amount = majorToMinor(dto.amount.value, currencyCode, 'amount');
+    await this.repository.assertAmountFree(dto.inventoryItemId, dto.uomId, currencyCode, amount);
     const row = await this.repository.createMrp(dto.inventoryItemId, dto.uomId, currencyCode, amount);
     const total = await this.repository.countForTriple(dto.inventoryItemId, dto.uomId, currencyCode);
     if (total === 1) return (await this.repository.setCurrent(row.id)) ?? row;
