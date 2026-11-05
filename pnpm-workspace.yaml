@@ -25,7 +25,6 @@ overrides:
   # '@vritti/api-sdk': link:../api-sdk
   # '@vritti/api-sdk': file:../api-sdk/vritti-api-sdk-0.6.7.tgz
   # '@vritti/quantum-ui-native': link:../quantum-ui-native
-  '@vritti/quantum-ui': file:../quantum-ui/vritti-quantum-ui-0.6.2.tgz
   # api-sdk pins zod exactly; core-app/commerce-ma allow ^4.3.6. Two copies put two zod type graphs
   # in one program, and react-hook-form's resolver rejects a schema built by the other one.
   zod: 4.5.4
