@@ -1,5 +1,5 @@
 import { defineConfig } from '@vritti/quantum-ui';
-import { getUserCurrency, getWorkspaceCurrency } from '@vritti/quantum-ui/currency';
+import { getWorkspaceCurrency } from '@vritti/quantum-ui/currency';
 import { getUserTimeZone, getWorkspaceTimeZone } from '@vritti/quantum-ui/timezone';
 import { getActiveWorkspace, type WorkspaceKind } from './src/utils/workspace';
 
@@ -84,13 +84,10 @@ export default defineConfig({
   },
 
   currency: {
+    // The active workspace's currency; outside a workspace there is none
     resolveCurrency: () => {
       const workspaceId = getActiveWorkspaceId();
-      if (workspaceId) {
-        return getWorkspaceCurrency(workspaceId) ?? getUserCurrency();
-      }
-
-      return getUserCurrency();
+      return workspaceId ? getWorkspaceCurrency(workspaceId) : null;
     },
   },
 
