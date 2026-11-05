@@ -3,8 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@vritti/quantum-ui/Car
 import { DetailField } from '@vritti/quantum-ui/DetailField';
 import { useFormatters } from '@vritti/quantum-ui/hooks';
 import type { ReactNode } from 'react';
+import { NoTaxIdentityAlert } from '@/components/suppliers/NoTaxIdentityAlert';
+import { TaxIdField } from '@/components/suppliers/TaxIdField';
 import { LICENSE_TYPE_LABELS } from '@/schemas/party-licenses';
 import type { SupplierDetail } from '@/schemas/suppliers';
+import { hasActiveSalesTaxRegistration } from '@/utils/supplierTax';
 
 interface OverviewTabProps {
   supplier: SupplierDetail;
@@ -29,14 +32,19 @@ export const OverviewTab = ({ supplier }: OverviewTabProps) => {
 
   return (
     <div className="flex flex-col gap-6">
+      <NoTaxIdentityAlert
+        partyTaxId={supplier.partyTaxId}
+        hasSalesTaxRegistration={hasActiveSalesTaxRegistration(supplier.registrations)}
+      />
       <Card>
         <CardHeader>
           <CardTitle>Details</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-6">
-            <DetailField label="Company" type="string" value={supplier.partyName} />
+            <DetailField label="Name" type="string" value={supplier.partyName} />
             <DetailField label="Code" type="string" mono value={supplier.code} />
+            <TaxIdField taxId={supplier.partyTaxId} taxIdType={supplier.partyTaxIdType} />
             <DetailField label="Default Currency" type="string" mono value={supplier.currencyCode} />
             <DetailField label="Currencies" type="string" mono value={supplier.currencyCodes.join(', ')} />
             <DetailField label="Default Payment Term" type="string" value={supplier.defaultPaymentTermName} />
@@ -65,7 +73,7 @@ export const OverviewTab = ({ supplier }: OverviewTabProps) => {
           </CardHeader>
           <CardContent>
             {supplier.registrations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No tax registrations on the linked company.</p>
+              <p className="text-sm text-muted-foreground">No tax registrations on record.</p>
             ) : (
               <ul className="flex flex-col gap-3">
                 {supplier.registrations.map((registration) => (
@@ -91,7 +99,7 @@ export const OverviewTab = ({ supplier }: OverviewTabProps) => {
           </CardHeader>
           <CardContent>
             {supplier.licenses.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No licenses on the linked company.</p>
+              <p className="text-sm text-muted-foreground">No licenses on record.</p>
             ) : (
               <ul className="flex flex-col gap-3">
                 {supplier.licenses.map((license) => (

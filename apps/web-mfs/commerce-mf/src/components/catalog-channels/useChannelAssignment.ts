@@ -25,8 +25,8 @@ export function useChannelAssignment(binding: CatalogChannelsBinding, slot: Slot
     transformSubmit: ({ catalogId }: AssignCatalogFormData) => ({
       type: slot.type,
       catalogId,
-      appId: slot.type === CatalogChannelTypeValues.POS ? undefined : slot.targetId,
-      terminalId: slot.type === CatalogChannelTypeValues.POS ? slot.targetId : undefined,
+      appId: slot.type === CatalogChannelTypeValues.POS ? undefined : (slot.targetId ?? undefined),
+      terminalId: slot.type === CatalogChannelTypeValues.POS ? (slot.targetId ?? undefined) : undefined,
     }),
   };
 

@@ -13,6 +13,10 @@ export const PARTY_IDENTIFIER_TYPES = {
   DUNS: 'DUNS',
   LEI: 'LEI',
   CIN: 'CIN',
+  TIN: 'TIN',
+  EIN: 'EIN',
+  UTR: 'UTR',
+  ABN: 'ABN',
 } as const;
 
 export type PartyIdentifierTypeValue = (typeof PARTY_IDENTIFIER_TYPES)[keyof typeof PARTY_IDENTIFIER_TYPES];

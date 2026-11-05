@@ -16,14 +16,15 @@ export function getSupplierQuotationsTable(supplierId: string): Promise<Supplier
     .then((r) => r.data);
 }
 
-export function getSupplierSiteQuotationsTable(
+// Fetches the supplier's quotations posted to the enrollment's site
+export function getSupplierEnrollmentQuotationsTable(
   supplierId: string,
   siteId: string,
 ): Promise<SupplierQuotationsTableResponse> {
   return axios
-    .get<SupplierQuotationsTableResponse>(`commerce-api/le/suppliers/${supplierId}/sites/${siteId}/quotations/table`, {
-      showSuccessToast: false,
-    })
+    .get<SupplierQuotationsTableResponse>(
+      `commerce-api/le/suppliers/${supplierId}/enrollments/${siteId}/quotations/table`,
+    )
     .then((r) => r.data);
 }
 

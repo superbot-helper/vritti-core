@@ -71,7 +71,7 @@ export const CreateStockAdjustmentDialog: React.FC<CreateStockAdjustmentDialogPr
           name="unitCost"
           label="Unit Cost"
           description="Cost per primary unit, in your base currency. Used to value the opening stock."
-          currencyCode={workspaceCurrency ?? undefined}
+          currencyCode={workspaceCurrency}
         />
       )}
       <TextArea name="reason" label="Reason" placeholder="Enter reason for adjustment" />

@@ -31,7 +31,7 @@ export const PricesTab: React.FC<PricesTabProps> = ({ inventoryItemId }) => {
         header: 'Per',
         cell: ({ row }) => row.original.uomSymbol ?? '—',
       },
-      ...supplierPriceColumns<ItemSupplierPriceRow>({ showMrp, showSite: false }),
+      ...supplierPriceColumns<ItemSupplierPriceRow>({ showMrp }),
     ],
     [showMrp],
   );

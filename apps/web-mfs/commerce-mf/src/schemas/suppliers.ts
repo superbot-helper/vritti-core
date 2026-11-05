@@ -1,8 +1,8 @@
 import type { CurrencyValue } from '@vritti/quantum-ui/currency';
 import type { TableResponse } from '@vritti/quantum-ui/types/api-response';
 import { z, zodCurrencyField, zodNumericField } from '@vritti/quantum-ui/zod';
+import type { IdentifierType } from './party-identifiers';
 import type { PartyLicenseType } from './party-licenses';
-import { orderCommunicationFields, type SiteEnrollmentStatus } from './site-suppliers';
 
 const currencyCodeField = z.string({ error: 'Currency is required' }).regex(/^[A-Z]{3}$/, 'Currency is required');
 const currencyCodesField = z
@@ -15,10 +15,9 @@ const defaultCurrencyListed = {
   params: { path: ['currencyCode'], message: 'Pick the default from the selected currencies' },
 };
 
-// A supplier now references a company party — identity lives on the company, not inline.
 export const createSupplierSchema = z
   .object({
-    partyId: z.uuid('Company is required'),
+    partyId: z.uuid('Supplier is required'),
     code: z.string().min(1, 'Code is required').max(100),
     currencyCodes: currencyCodesField,
     currencyCode: currencyCodeField,
@@ -32,10 +31,7 @@ export const createSupplierSchema = z
 
 export const updateSupplierSchema = z.object({
   code: z.string().min(1).max(100).optional(),
-  defaultPaymentTermId: z.uuid('Default payment term is required'),
   notes: z.string().nullable().optional(),
-  purchasingBlocked: z.boolean().optional(),
-  paymentBlocked: z.boolean().optional(),
 });
 
 const siteIdsField = z.array(z.uuid(), { error: 'Select at least one site' }).min(1, 'Select at least one site');
@@ -45,7 +41,7 @@ export const addSupplierItemSchema = z.object({
   supplierItemCode: z.string().max(100).optional(),
   uomId: z.uuid('Unit of measure is required'),
   minOrderQuantity: zodNumericField({ positive: true }).optional(),
-  leadTimeDays: zodNumericField({ integer: true, positive: true }).optional(),
+  defaultLeadTimeDays: zodNumericField({ integer: true, positive: true }).optional(),
   siteIds: siteIdsField,
 });
 
@@ -53,15 +49,15 @@ export const updateSupplierItemSchema = z.object({
   supplierItemCode: z.string().max(100).optional(),
   uomId: z.uuid('Unit of measure is required'),
   minOrderQuantity: zodNumericField({ positive: true, nullable: true }).optional(),
-  leadTimeDays: zodNumericField({ integer: true, positive: true, nullable: true }).optional(),
+  defaultLeadTimeDays: zodNumericField({ integer: true, positive: true, nullable: true }).optional(),
 });
 
-export const setSupplierItemPreferredSchema = z.object({
+export const setSupplierSiteItemPreferredSchema = z.object({
   siteIds: siteIdsField,
   isPreferred: z.boolean(),
 });
 
-export type SetSupplierItemPreferredFormData = z.infer<typeof setSupplierItemPreferredSchema>;
+export type SetSupplierSiteItemPreferredFormData = z.infer<typeof setSupplierSiteItemPreferredSchema>;
 
 export const setSupplierItemMinOrderSchema = z.object({
   minOrderQuantity: zodNumericField({ positive: true, nullable: true }).optional(),
@@ -69,11 +65,11 @@ export const setSupplierItemMinOrderSchema = z.object({
 
 export type SetSupplierItemMinOrderFormData = z.infer<typeof setSupplierItemMinOrderSchema>;
 
-export const setSupplierItemLeadTimeSchema = z.object({
-  leadTimeDays: zodNumericField({ integer: true, positive: true, nullable: true }).optional(),
+export const setSupplierItemDefaultLeadTimeSchema = z.object({
+  defaultLeadTimeDays: zodNumericField({ integer: true, positive: true, nullable: true }).optional(),
 });
 
-export type SetSupplierItemLeadTimeFormData = z.infer<typeof setSupplierItemLeadTimeSchema>;
+export type SetSupplierItemDefaultLeadTimeFormData = z.infer<typeof setSupplierItemDefaultLeadTimeSchema>;
 
 export type CreateSupplierFormData = z.infer<typeof createSupplierSchema>;
 export const editSupplierFormSchema = updateSupplierSchema.extend({
@@ -87,7 +83,7 @@ export type AddSupplierItemFormData = z.infer<typeof addSupplierItemSchema>;
 export type UpdateSupplierItemFormData = z.infer<typeof updateSupplierItemSchema>;
 export type SuppliersTableResponse = TableResponse<SupplierData>;
 export type SupplierItemsTableResponse = TableResponse<SupplierItemData>;
-export type SiteSupplierItemsTableResponse = TableResponse<SiteSupplierItemData>;
+export type SupplierSiteItemDataTableResponse = TableResponse<SupplierSiteItemData>;
 
 export interface SupplierData {
   id: string;
@@ -108,6 +104,13 @@ export interface SupplierData {
   createdAt: string;
   updatedAt: string;
 }
+
+export type SupplierPartyType = SupplierData['partyType'];
+
+export const SUPPLIER_PARTY_TYPE_OPTIONS: { value: SupplierPartyType; label: string }[] = [
+  { value: 'COMPANY', label: 'Company' },
+  { value: 'PERSON', label: 'Person' },
+];
 
 export interface SupplierRegistrationData {
   id: string;
@@ -136,17 +139,17 @@ export interface SupplierItemData {
   // The least the supplier sells per order, in the item's unit
   minOrderQuantity: number | null;
   // Days from order to delivery, which every site follows unless it sets its own
-  leadTimeDays: number | null;
+  defaultLeadTimeDays: number | null;
   siteCount: number;
   // Sites where this supplier is the preferred one for the item
   preferredSiteCount: number;
 }
 
-export interface SiteSupplierItemTerms {
-  itemSiteId: string | null;
+export interface SupplierSiteItemTerms {
+  supplierSiteItemId: string | null;
   isPreferred: boolean;
   leadTimeDays: number | null;
-  // True when the site sets its own lead time instead of following the supplier item's
+  // True when the site sets its own lead time instead of following the supplier item's default
   isLeadTimeOverridden: boolean;
   minOrderQuantity: number | null;
   unitPrice: CurrencyValue | null;
@@ -156,9 +159,9 @@ export interface SiteSupplierItemTerms {
   taxInclusive: boolean;
 }
 
-export interface SiteSupplierItemData extends SupplierItemData, SiteSupplierItemTerms {}
+export interface SupplierSiteItemData extends SupplierItemData, SupplierSiteItemTerms {}
 
-export interface SiteSupplierItemDetail extends SiteSupplierItemData {
+export interface SupplierSiteItemDetail extends SupplierSiteItemData {
   supplierId: string;
   supplierCode: string;
   // The supplier's default currency, which new prices start in, and every currency a price may be in
@@ -178,7 +181,7 @@ export interface SupplierItemDetail extends SupplierItemData {
   canDelete: boolean;
 }
 
-export interface InventoryItemSupplierData extends SiteSupplierItemTerms {
+export interface InventoryItemSupplierData extends SupplierSiteItemTerms {
   id: string;
   supplierId: string;
   supplierName: string;
@@ -193,6 +196,8 @@ export interface InventoryItemSupplierData extends SiteSupplierItemTerms {
 export type InventoryItemSuppliersTableResponse = TableResponse<InventoryItemSupplierData>;
 
 export interface SupplierDetail extends SupplierData {
+  partyTaxId: string | null;
+  partyTaxIdType: IdentifierType | null;
   registrations: SupplierRegistrationData[];
   licenses: SupplierLicenseData[];
   enrolledSiteCount: number;
@@ -205,51 +210,11 @@ export const changeSupplierCurrencySchema = z
 
 export type ChangeSupplierCurrencyFormData = z.infer<typeof changeSupplierCurrencySchema>;
 
-// One of the legal entity's sites with the supplier's enrollment there; `id` is the enrollment, null when not enrolled
-export interface SupplierSiteRow {
-  id: string | null;
-  supplierId: string;
-  siteId: string;
-  siteName: string | null;
-  siteCode: string | null;
-  enrollmentStatus: SiteEnrollmentStatus;
-  paymentTermId: string | null;
-  paymentTermName: string | null;
-  partyTaxRegistrationId: string | null;
-  registrationNumber: string | null;
-  partyBankAccountId: string | null;
-  bankAccountName: string | null;
-  orderRelationshipId: string | null;
-  orderContactLabel: string | null;
-  orderContactName: string | null;
-  orderEmailCommunicationId: string | null;
-  orderPhoneCommunicationId: string | null;
-  orderEmail: string | null;
-  orderPhone: string | null;
-  createdAt: string | null;
-}
-
-export type SupplierSitesTableResponse = TableResponse<SupplierSiteRow>;
-
-export const addSupplierSiteSchema = z.object({
-  siteId: z.uuid('Site is required'),
-  paymentTermId: z.uuid('Payment term is required'),
-  partyTaxRegistrationId: z.uuid('Tax registration is required'),
-  partyBankAccountId: z.uuid().nullable().optional(),
-  orderRelationshipId: z.uuid().nullable().optional(),
-  ...orderCommunicationFields,
+export const setSupplierDefaultPaymentTermSchema = z.object({
+  defaultPaymentTermId: z.uuid('Default payment term is required'),
 });
 
-export const updateSupplierSiteSchema = z.object({
-  paymentTermId: z.uuid('Payment term is required'),
-  partyTaxRegistrationId: z.uuid('Tax registration is required'),
-  partyBankAccountId: z.uuid().nullable().optional(),
-  orderRelationshipId: z.uuid().nullable().optional(),
-  ...orderCommunicationFields,
-});
-
-export type AddSupplierSiteFormData = z.infer<typeof addSupplierSiteSchema>;
-export type UpdateSupplierSiteFormData = z.infer<typeof updateSupplierSiteSchema>;
+export type SetSupplierDefaultPaymentTermFormData = z.infer<typeof setSupplierDefaultPaymentTermSchema>;
 
 const PRICE_SOURCES = ['QUOTATION', 'MANUAL'] as const;
 export type SupplierPriceSource = (typeof PRICE_SOURCES)[number];
@@ -263,8 +228,6 @@ export interface SupplierItemPriceRow {
   supplierItemId: string;
   legalEntityId: string;
   siteId: string;
-  siteName?: string | null;
-  siteCode?: string | null;
   unitPrice: CurrencyValue;
   mrpId: string | null;
   mrp: CurrencyValue | null;
@@ -281,7 +244,12 @@ export interface SupplierItemPriceRow {
   createdAt: string;
 }
 
+// One site's price timeline of an LE supplier item
+// A supplier item's price timeline at one site
 export type SupplierItemPricesTableResponse = TableResponse<SupplierItemPriceRow>;
+
+// The session site's price timeline of a supplier item
+export type SupplierSiteItemPricesTableResponse = TableResponse<SupplierItemPriceRow>;
 
 // A price row of one supplier for an inventory item, with the supplier and the unit the price is per
 export interface ItemSupplierPriceRow extends SupplierItemPriceRow {
@@ -431,7 +399,7 @@ export type AddSupplierItemPriceFormData = z.infer<typeof addSupplierItemPriceSc
 export type AddLeSupplierItemPriceFormData = z.infer<typeof addLeSupplierItemPriceSchema>;
 export type UpdateSupplierItemPriceFormData = z.infer<typeof updateSupplierItemPriceSchema>;
 
-export interface SupplierItemSiteRow {
+export interface SupplierSiteItemRow {
   id: string;
   supplierItemId: string;
   legalEntityId: string;
@@ -441,25 +409,68 @@ export interface SupplierItemSiteRow {
   siteCode: string | null;
   isPreferred: boolean;
   leadTimeDays: number | null;
-  // True when the site sets its own lead time instead of following the supplier item's
+  // True when the site sets its own lead time instead of following the supplier item's default
   isLeadTimeOverridden: boolean;
   createdAt: string;
 }
 
-export type SupplierItemSitesTableResponse = TableResponse<SupplierItemSiteRow>;
+export type SupplierSiteItemsTableResponse = TableResponse<SupplierSiteItemRow>;
 
-export const addSupplierItemSiteSchema = z.object({
+export const addSupplierSiteItemSchema = z.object({
   siteId: z.uuid('Site is required'),
   isPreferred: z.boolean(),
   leadTimeDays: zodNumericField({ integer: true, positive: true }).optional(),
 });
 
-export const updateSupplierItemSiteSchema = z.object({
+export const updateSupplierSiteItemSchema = z.object({
   isPreferred: z.boolean(),
-  // On: the site follows the supplier item's lead time; off: the lead time below is the site's own
-  followItemLeadTime: z.boolean(),
+  // On: the site follows the supplier item's default lead time; off: the lead time below is the site's own
+  followDefaultLeadTime: z.boolean(),
   leadTimeDays: zodNumericField({ integer: true, positive: true, nullable: true }).optional(),
 });
 
-export type AddSupplierItemSiteFormData = z.infer<typeof addSupplierItemSiteSchema>;
-export type UpdateSupplierItemSiteFormData = z.infer<typeof updateSupplierItemSiteSchema>;
+export type AddSupplierSiteItemFormData = z.infer<typeof addSupplierSiteItemSchema>;
+export type UpdateSupplierSiteItemFormData = z.infer<typeof updateSupplierSiteItemSchema>;
+
+export interface AddSupplierSiteItemPayload {
+  siteId: string;
+  isPreferred?: boolean;
+  leadTimeDays?: number;
+}
+
+export interface UpdateSupplierSiteItemPayload {
+  isPreferred?: boolean;
+  leadTimeDays?: number | null;
+  followDefaultLeadTime?: boolean;
+}
+
+export interface UpdateSupplierSiteItemVars {
+  supplierSiteItemId: string;
+  data: UpdateSupplierSiteItemPayload;
+}
+
+export interface BulkSetSupplierSiteItemPreferredPayload {
+  supplierItemIds: string[];
+  siteIds: string[];
+  isPreferred: boolean;
+}
+
+export interface AddSupplierSiteItemPricePayload {
+  unitPrice?: CurrencyValue;
+  mrpId?: string;
+  schemeBuyQty?: number;
+  schemeFreeQty?: number;
+  taxInclusive?: boolean;
+  validFrom: string;
+  validTo?: string | null;
+  note?: string;
+}
+
+export interface UpdateSupplierSiteItemPricePayload {
+  unitPrice?: CurrencyValue;
+  mrpId?: string | null;
+  schemeBuyQty?: number | null;
+  schemeFreeQty?: number | null;
+  taxInclusive?: boolean;
+  validTo?: string | null;
+}

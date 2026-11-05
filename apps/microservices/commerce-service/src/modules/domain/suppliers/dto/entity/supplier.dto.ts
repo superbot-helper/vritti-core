@@ -1,5 +1,10 @@
-import { CurrencyAmountDto } from '@vritti/api-sdk/money';
+import {
+  SupplierSiteItemTermsDto,
+  type SupplierSiteItemTermsRow,
+} from '@domain/supplier-items/dto/entity/supplier-site-item-terms.dto';
+import type { CurrencyAmountDto } from '@vritti/api-sdk/money';
 import type {
+  PartyIdentifierType,
   PartyLicense,
   PartyLicenseType,
   PartyTaxRegistration,
@@ -8,18 +13,6 @@ import type {
   TaxRegistrationType,
 } from '@/db/schema';
 import type { SupplierDetailRow, SupplierWithParty } from '../../repositories/suppliers.repository';
-
-export type SiteTermsRow = {
-  itemSiteId: string | null;
-  siteIsPreferred: boolean | null;
-  siteLeadTimeDays: number | null;
-  siteIsLeadTimeOverridden: boolean | null;
-  currentUnitPrice: bigint | null;
-  currentCurrencyCode: string | null;
-  currentSchemeBuyQty: number | null;
-  currentSchemeFreeQty: number | null;
-  currentTaxInclusive: boolean | null;
-};
 
 export class SupplierItemDto {
   id: string;
@@ -31,7 +24,7 @@ export class SupplierItemDto {
   // The least the supplier sells per order, in the item's unit
   minOrderQuantity: number | null;
   // Days from order to delivery, which every site follows unless it sets its own
-  leadTimeDays: number | null;
+  defaultLeadTimeDays: number | null;
   siteCount: number;
   // Sites where this supplier is the preferred one for the item
   preferredSiteCount: number;
@@ -49,7 +42,7 @@ export class SupplierItemDto {
     dto.uomId = entity.uomId;
     dto.uomSymbol = uomSymbol ?? '';
     dto.minOrderQuantity = entity.minOrderQuantity ?? null;
-    dto.leadTimeDays = entity.leadTimeDays ?? null;
+    dto.defaultLeadTimeDays = entity.defaultLeadTimeDays ?? null;
     dto.siteCount = Number(entity.siteCount ?? 0);
     dto.preferredSiteCount = Number(entity.preferredSiteCount ?? 0);
     return dto;
@@ -93,89 +86,6 @@ export class SupplierItemDetailDto extends SupplierItemDto {
   }
 }
 
-// One site's terms for a supplier item — its operational settings and the price in force today
-export class SiteSupplierItemTermsDto {
-  itemSiteId: string | null;
-  isPreferred: boolean;
-  leadTimeDays: number | null;
-  isLeadTimeOverridden: boolean;
-  minOrderQuantity: number | null;
-  unitPrice: CurrencyAmountDto | null;
-  schemeBuyQty: number | null;
-  schemeFreeQty: number | null;
-  hasScheme: boolean;
-  taxInclusive: boolean;
-
-  // The minimum order is the supplier item's own, the same at every site
-  static assign<T extends SiteSupplierItemTermsDto>(
-    dto: T,
-    row: SiteTermsRow & { minOrderQuantity: number | null },
-  ): T {
-    dto.itemSiteId = row.itemSiteId ?? null;
-    dto.isPreferred = row.siteIsPreferred ?? false;
-    dto.leadTimeDays = row.siteLeadTimeDays ?? null;
-    dto.isLeadTimeOverridden = row.siteIsLeadTimeOverridden ?? false;
-    dto.minOrderQuantity = row.minOrderQuantity ?? null;
-    dto.unitPrice = row.currentCurrencyCode
-      ? CurrencyAmountDto.from(row.currentUnitPrice, row.currentCurrencyCode)
-      : null;
-    dto.schemeBuyQty = row.currentSchemeBuyQty ?? null;
-    dto.schemeFreeQty = row.currentSchemeFreeQty ?? null;
-    dto.hasScheme = dto.schemeBuyQty != null && dto.schemeFreeQty != null;
-    dto.taxInclusive = row.currentTaxInclusive ?? false;
-    return dto;
-  }
-}
-
-export class SiteSupplierItemDto extends SupplierItemDto {
-  itemSiteId: string | null;
-  isPreferred: boolean;
-  isLeadTimeOverridden: boolean;
-  unitPrice: CurrencyAmountDto | null;
-  schemeBuyQty: number | null;
-  schemeFreeQty: number | null;
-  hasScheme: boolean;
-  taxInclusive: boolean;
-
-  static fromSite(
-    entity: SupplierItem & SiteTermsRow,
-    itemName?: string | null,
-    uomSymbol?: string | null,
-  ): SiteSupplierItemDto {
-    const dto = new SiteSupplierItemDto();
-    Object.assign(dto, SupplierItemDto.from(entity, itemName, uomSymbol));
-    return SiteSupplierItemTermsDto.assign(dto, entity);
-  }
-}
-
-export class SiteSupplierItemDetailDto extends SupplierItemDetailDto {
-  itemSiteId: string | null;
-  isPreferred: boolean;
-  isLeadTimeOverridden: boolean;
-  unitPrice: CurrencyAmountDto | null;
-  schemeBuyQty: number | null;
-  schemeFreeQty: number | null;
-  hasScheme: boolean;
-  taxInclusive: boolean;
-
-  static fromSiteDetail(
-    entity: SupplierItem &
-      SiteTermsRow & {
-        supplierCode: string | null;
-        supplierCurrencyCode: string;
-        supplierCurrencyCodes: string[];
-        priceCount: number;
-        pricedSiteCount: number;
-      },
-    itemName: string | null,
-    uomSymbol: string | null,
-  ): SiteSupplierItemDetailDto {
-    const dto = new SiteSupplierItemDetailDto();
-    Object.assign(dto, SupplierItemDetailDto.fromDetail(entity, itemName, uomSymbol));
-    return SiteSupplierItemTermsDto.assign(dto, entity);
-  }
-}
-
 // An item's supplier link with the session site's terms; site fields are empty outside a site workspace
 export class InventoryItemSupplierDto {
   id: string;
@@ -187,7 +97,7 @@ export class InventoryItemSupplierDto {
   uomSymbol: string;
   // Sites the supplier item is set up at
   siteCount: number;
-  itemSiteId: string | null;
+  supplierSiteItemId: string | null;
   isPreferred: boolean;
   leadTimeDays: number | null;
   isLeadTimeOverridden: boolean;
@@ -199,7 +109,7 @@ export class InventoryItemSupplierDto {
   taxInclusive: boolean;
 
   static from(
-    entity: SupplierItem & SiteTermsRow & { siteCount: number },
+    entity: SupplierItem & SupplierSiteItemTermsRow & { siteCount: number },
     supplierName?: string | null,
     supplierCode?: string | null,
     uomSymbol?: string | null,
@@ -213,7 +123,7 @@ export class InventoryItemSupplierDto {
     dto.uomId = entity.uomId;
     dto.uomSymbol = uomSymbol ?? '';
     dto.siteCount = entity.siteCount;
-    return SiteSupplierItemTermsDto.assign(dto, entity);
+    return SupplierSiteItemTermsDto.assign(dto, entity);
   }
 }
 
@@ -293,6 +203,8 @@ export class SupplierDto {
 
 export class SupplierDetailDto extends SupplierDto {
   partyType: PartyType;
+  partyTaxId: string | null;
+  partyTaxIdType: PartyIdentifierType | null;
   registrations: SupplierRegistrationDto[];
   licenses: SupplierLicenseDto[];
   enrolledSiteCount: number;
@@ -302,6 +214,8 @@ export class SupplierDetailDto extends SupplierDto {
     const dto = new SupplierDetailDto();
     Object.assign(dto, SupplierDto.from(entity));
     dto.partyType = entity.partyType;
+    dto.partyTaxId = entity.partyTaxId ?? null;
+    dto.partyTaxIdType = entity.partyTaxIdType ?? null;
     dto.registrations = entity.registrations.map(SupplierRegistrationDto.from);
     dto.licenses = entity.licenses.map(SupplierLicenseDto.from);
     dto.enrolledSiteCount = entity.enrolledSiteCount;

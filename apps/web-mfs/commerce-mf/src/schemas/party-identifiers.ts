@@ -12,6 +12,10 @@ const IDENTIFIER_TYPES = [
   'DUNS',
   'LEI',
   'CIN',
+  'TIN',
+  'EIN',
+  'UTR',
+  'ABN',
 ] as const;
 
 export type IdentifierType = (typeof IDENTIFIER_TYPES)[number];
@@ -19,8 +23,8 @@ export type IdentifierType = (typeof IDENTIFIER_TYPES)[number];
 export const identifierTypeSchema = z.enum(IDENTIFIER_TYPES);
 
 export const IDENTIFIER_TYPE_LABELS: Record<IdentifierType, string> = {
-  PAN: 'PAN',
-  AADHAAR: 'Aadhaar',
+  PAN: 'PAN (India)',
+  AADHAAR: 'Aadhaar (India)',
   PASSPORT: 'Passport',
   DRIVING_LICENSE: 'Driving License',
   VOTER_ID: 'Voter ID',
@@ -28,8 +32,15 @@ export const IDENTIFIER_TYPE_LABELS: Record<IdentifierType, string> = {
   NATIONAL_ID: 'National ID',
   DUNS: 'DUNS',
   LEI: 'LEI',
-  CIN: 'CIN',
+  CIN: 'CIN (India)',
+  TIN: 'TIN',
+  EIN: 'EIN (US)',
+  UTR: 'UTR (UK)',
+  ABN: 'ABN (Australia)',
 };
+
+// Identifier types that are a party's tax identification number in some country
+export const TAX_ID_IDENTIFIER_TYPES: IdentifierType[] = ['PAN', 'TIN', 'EIN', 'UTR', 'ABN'];
 
 export const IDENTIFIER_TYPE_OPTIONS = IDENTIFIER_TYPES.map((value) => ({
   value,
@@ -44,9 +55,11 @@ const PERSON_IDENTIFIER_TYPES: IdentifierType[] = [
   'VOTER_ID',
   'CIVIL_ID',
   'NATIONAL_ID',
+  'TIN',
+  'UTR',
 ];
 
-const COMPANY_IDENTIFIER_TYPES: IdentifierType[] = ['PAN', 'CIN', 'LEI', 'DUNS'];
+const COMPANY_IDENTIFIER_TYPES: IdentifierType[] = ['PAN', 'CIN', 'LEI', 'DUNS', 'TIN', 'EIN', 'UTR', 'ABN'];
 
 export const PERSON_IDENTIFIER_TYPE_OPTIONS = PERSON_IDENTIFIER_TYPES.map((value) => ({
   value,

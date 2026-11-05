@@ -546,7 +546,7 @@ export function ApiClearVariantTaxClass() {
   return applyDecorators(
     ApiOperation({
       summary: "Drop a variant's tax class override",
-      description: "Resynchronises the variant with its offering's tax class and re-enrols it in future cascades.",
+      description: "Resynchronises the variant with its offering's tax class and re-enrolls it in future cascades.",
     }),
     ApiParam({ name: 'variantId', description: 'Variant identifier' }),
     ApiResponse({ status: 200, description: 'Override cleared.' }),
@@ -586,7 +586,7 @@ export function ApiClearVariantFulfilment() {
   return applyDecorators(
     ApiOperation({
       summary: "Drop a variant's fulfilment override",
-      description: "Resynchronises the variant with its offering's type and re-enrols it in future cascades.",
+      description: "Resynchronises the variant with its offering's type and re-enrolls it in future cascades.",
     }),
     ApiParam({ name: 'variantId', description: 'Variant identifier' }),
     ApiResponse({ status: 200, description: 'Override cleared.' }),

@@ -4,11 +4,15 @@ import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import type { AxiosError } from 'axios';
 import type { SupplierQuotationDetail, SupplierQuotationsTableResponse } from '@/schemas/supplier-quotations';
 import {
+  getSupplierEnrollmentQuotationsTable,
   getSupplierQuotation,
   getSupplierQuotationsTable,
-  getSupplierSiteQuotationsTable,
 } from '@/services/legal-entity/supplier-quotations.service';
-import { SUPPLIER_QUOTATION_KEY, SUPPLIER_QUOTATIONS_TABLE_KEY, SUPPLIER_SITE_QUOTATIONS_TABLE_KEY } from './keys';
+import {
+  SUPPLIER_ENROLLMENT_QUOTATIONS_TABLE_KEY,
+  SUPPLIER_QUOTATION_KEY,
+  SUPPLIER_QUOTATIONS_TABLE_KEY,
+} from './keys';
 
 // Fetches a supplier's quotations; self-gates on the quotations view permission
 export function useSupplierQuotationsTable(
@@ -24,13 +28,13 @@ export function useSupplierQuotationsTable(
   });
 }
 
-// Fetches a supplier's quotations posted to one site; waits for the site and self-gates on the quotations view
+// Fetches a supplier's quotations posted to the enrollment's site; waits for the site and self-gates on the quotations view
 // permission
-export function useSupplierSiteQuotationsTable(supplierId: string, siteId: string | undefined) {
+export function useSupplierEnrollmentQuotationsTable(supplierId: string, siteId: string | undefined) {
   const { available } = usePermission(LE_SUPPLIERS.quotations.view);
   return useQuery<SupplierQuotationsTableResponse, AxiosError>({
-    queryKey: SUPPLIER_SITE_QUOTATIONS_TABLE_KEY(supplierId, siteId ?? ''),
-    queryFn: () => getSupplierSiteQuotationsTable(supplierId, siteId as string),
+    queryKey: SUPPLIER_ENROLLMENT_QUOTATIONS_TABLE_KEY(supplierId, siteId ?? ''),
+    queryFn: () => getSupplierEnrollmentQuotationsTable(supplierId, siteId as string),
     enabled: available && !!siteId,
   });
 }

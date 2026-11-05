@@ -4,10 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@vritti/quantum-ui/Car
 import { DetailField } from '@vritti/quantum-ui/DetailField';
 import { Empty } from '@vritti/quantum-ui/Empty';
 import { Plus, Truck } from 'lucide-react';
-import type { SupplierAtSiteData } from '@/schemas/site-suppliers';
+import type { SupplierEnrollmentDetail } from '@/schemas/supplier-enrollments';
+import { EnrollmentStatusBadges } from '../EnrollmentStatusBadges';
+import { TaxIdField } from '../TaxIdField';
 
 interface OverviewTabProps {
-  supplier: SupplierAtSiteData;
+  supplier: SupplierEnrollmentDetail;
   enrollPermission: string;
   onEnroll: () => void;
 }
@@ -20,16 +22,17 @@ export const OverviewTab = ({ supplier, enrollPermission, onEnroll }: OverviewTa
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-6">
-          <DetailField label="Company" type="string" value={supplier.partyName} />
-          <DetailField label="Code" type="string" mono value={supplier.code} />
+          <DetailField label="Name" type="string" value={supplier.partyName} />
+          <DetailField label="Code" type="string" mono value={supplier.supplierCode} />
+          <TaxIdField taxId={supplier.partyTaxId} taxIdType={supplier.partyTaxIdType} />
           <DetailField label="Currency" type="string" mono value={supplier.currencyCode} />
           <DetailField
             label="Status"
             type="string"
             value={
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={supplier.isActive ? 'success' : 'outline'}>
-                  {supplier.isActive ? 'Active' : 'Inactive'}
+                <Badge variant={supplier.isSupplierActive ? 'success' : 'outline'}>
+                  {supplier.isSupplierActive ? 'Active' : 'Inactive'}
                 </Badge>
                 {supplier.purchasingBlocked && <Badge variant="destructive">Purchasing Blocked</Badge>}
                 {supplier.paymentBlocked && <Badge variant="destructive">Payment Blocked</Badge>}
@@ -45,9 +48,10 @@ export const OverviewTab = ({ supplier, enrollPermission, onEnroll }: OverviewTa
         <CardTitle>Enrollment</CardTitle>
       </CardHeader>
       <CardContent>
-        {supplier.enrollmentId ? (
+        {supplier.enrollmentStatus === 'ENROLLED' ? (
           <div className="grid grid-cols-2 gap-6">
             {supplier.siteName && <DetailField label="Site" type="string" value={supplier.siteName} />}
+            <DetailField label="Status" type="string" value={<EnrollmentStatusBadges flags={supplier} />} />
             <DetailField label="Payment Term" type="string" value={supplier.paymentTermName} />
             <DetailField label="Tax Registration" type="string" mono value={supplier.registrationNumber} />
             <DetailField label="Bank Account" type="string" value={supplier.bankAccountName} />

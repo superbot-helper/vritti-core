@@ -15,6 +15,7 @@ import type React from 'react';
 import { Suspense, startTransition, useCallback, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ContextFilterSkeleton } from '@/components/ContextFilterSkeleton';
+import { SiteContextFilter } from '@/components/prices/SiteContextFilter';
 import { PriceTrendChip } from '@/components/suppliers/PriceTrendChip';
 import {
   LE_INVENTORY_ITEM_PRICES_TABLE_KEY,
@@ -22,7 +23,6 @@ import {
   useInventoryItemPricesTableSites,
 } from '@/hooks/legal-entity/inventory-items';
 import type { ItemSupplierPriceComparisonRow, PricesTableContext } from '@/schemas/suppliers';
-import { SiteFilter } from '@/selectors/site';
 import { workspaceBase } from '@/utils/workspace';
 
 interface PricesTableTabProps {
@@ -247,13 +247,5 @@ const PricesTableSiteFilter: React.FC<PricesTableSiteFilterProps> = ({ inventory
   } = useInventoryItemPricesTableSites(inventoryItemId, context);
   if (!siteId) return null;
 
-  return (
-    <SiteFilter
-      value={siteId}
-      onChange={(result) => onChange(String(result.value))}
-      siteIds={siteIds}
-      mode="context"
-      clearable={false}
-    />
-  );
+  return <SiteContextFilter value={siteId} siteIds={siteIds} onChange={onChange} />;
 };

@@ -28,10 +28,17 @@ part of the tenancy contract.
 |---|---|---|
 | owns its workspace scope, and parent workspaces should see child rows | `...workspaceScopeColumns` | `...workspaceHierarchyPolicies()` |
 | owns its workspace scope, reach is upward only | `...workspaceScopeColumns` | `...workspaceScopePolicies('<name>')` |
+| is owned by a legal entity and never by a site (`legal_entity_id` NOT NULL, no `site_id`) | `legalEntityId` | `...legalEntityOwnedPolicies()` |
+| is a site document (`legal_entity_id` and `site_id` both always set) | `legalEntityId`, `siteId` | `...siteDocumentPolicies()` |
 | has no scope columns — scope derived from an ancestor that does | — | `...scopeFromOwnerPolicies({ … })` |
 | is org-wide with no workspace dimension at all | — | `orgIsolationPolicy()` |
 
 `workspaceHierarchyPolicies` is bidirectional: an LE workspace also sees the rows its sites own.
+For LE-owned rows a site may see only once they are shared with it (e.g. a quotation posted to the site), pass
+`workspaceHierarchyPolicies({ sharedThrough: { table: <link>, fk: (link) => link.<parentFk>, id: table.id } })`. The link
+table must be a site document (`siteDocumentPolicies()`, so a site reads only its own link rows) and its policies must
+not read the parent back — otherwise Postgres reports infinite recursion. Annotate the link's FK callback
+`(): AnyPgColumn => parent.id` to break the circular type.
 `workspaceScopePolicies` is ancestor-or-self only. Choose on that question, not on habit.
 
 Each helper already includes `orgIsolationPolicy()`. Do not add it again alongside them.

@@ -23,13 +23,13 @@ import { useAuth } from '../../providers/AuthProvider';
 import { usePermissionContext } from '../../providers/PermissionProvider';
 import type { WorkspaceKind } from '../../utils/workspace';
 import { isUuid, workspaceKindOf } from '../../utils/workspace';
+import { EnrolledSiteSwitcher } from './switchers/EnrolledSiteSwitcher';
 import { InventoryItemSwitcher } from './switchers/InventoryItemSwitcher';
 import { OfferingSwitcher } from './switchers/OfferingSwitcher';
 import { PaymentTermSwitcher } from './switchers/PaymentTermSwitcher';
 import { RepositorySwitcher } from './switchers/RepositorySwitcher';
 import { SmsProviderSwitcher } from './switchers/SmsProviderSwitcher';
 import { SupplierItemSwitcher } from './switchers/SupplierItemSwitcher';
-import { SupplierSiteSwitcher } from './switchers/SupplierSiteSwitcher';
 import { SupplierSwitcher } from './switchers/SupplierSwitcher';
 import { VariantSwitcher } from './switchers/VariantSwitcher';
 import { WhatsappAccountSwitcher } from './switchers/WhatsappAccountSwitcher';
@@ -148,10 +148,19 @@ export const TopBar = () => {
               </Link>
               <ChevronRight className="size-3.5 text-muted-foreground/60 shrink-0" />
               <Breadcrumb
-                maxItems={4}
+                maxItems={6}
                 routes={entityLabels}
                 hideSegment={(segment, index, all) =>
-                  !!workspaceKindOf(segment.raw) && !!all[index + 1] && isUuid(all[index + 1].raw)
+                  (!!workspaceKindOf(segment.raw) && !!all[index + 1] && isUuid(all[index + 1].raw)) ||
+                  // A site supplier's site item — `/site/<id>/suppliers/<supplier>/site-items/<item>` — has no page at
+                  // `site-items` itself
+                  (segment.raw === 'site-items' && all[index - 2]?.raw === 'suppliers' && !!all[index + 1]) ||
+                  // A site supplier's quotation — `/site/<id>/suppliers/<supplier>/quotations/<quotation>` — has no page at
+                  // `quotations` itself; the LE one does (its supplier's Quotations tab)
+                  (segment.raw === 'quotations' &&
+                    all[0]?.raw === 'site' &&
+                    all[index - 2]?.raw === 'suppliers' &&
+                    !!all[index + 1])
                 }
                 renderSegment={(segment) => {
                   // Workspaces mount at `/<kind>/<id>`, features at `/<kind>/<id>/<routePrefix>/*`
@@ -159,13 +168,13 @@ export const TopBar = () => {
                   if (parts.length === 3 && workspaceKindOf(parts[1]) && isUuid(segment.raw)) {
                     return renderWorkspaceIdentity();
                   }
-                  // An LE supplier's site view — `/<kind>/<id>/suppliers/<supplier>/sites/<site>` — switches between
-                  // the sites the supplier is enrolled at
-                  if (parts.length === 7 && parts[3] === 'suppliers' && parts[5] === 'sites') {
+                  // An LE supplier's enrollment view — `/<kind>/<id>/suppliers/<supplier>/enrollments/<site>` — switches
+                  // between the legal entity's sites
+                  if (parts.length === 7 && parts[3] === 'suppliers' && parts[5] === 'enrollments') {
                     const supplier = parseSlug(parts[4]);
                     if (supplier) {
                       return (
-                        <SupplierSiteSwitcher
+                        <EnrolledSiteSwitcher
                           key={segment.raw}
                           siteId={parseSlug(segment.raw)?.id ?? segment.raw}
                           supplierId={supplier.id}

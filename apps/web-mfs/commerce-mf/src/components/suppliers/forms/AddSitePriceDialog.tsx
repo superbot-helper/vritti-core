@@ -14,12 +14,11 @@ import { useForm } from 'react-hook-form';
 import { type AddSupplierItemPriceFormData, addSupplierItemPriceSchema } from '@/schemas/suppliers';
 import { CurrencySelector } from '@/selectors/currency';
 import { InventoryItemMrpSelector } from '@/selectors/inventory-item-mrp';
-import type { SupplierSiteBinding } from '../bindings';
-import type { SupplierSiteRef } from '../types';
+import type { SupplierSiteItemPageBinding } from '../bindings';
 
 interface AddSitePriceDialogProps {
-  binding: SupplierSiteBinding;
-  supplierRef: SupplierSiteRef;
+  siteItemPage: SupplierSiteItemPageBinding;
+  supplierId: string;
   itemId: string;
   inventoryItemId: string;
   uomId: string;
@@ -31,8 +30,8 @@ interface AddSitePriceDialogProps {
 }
 
 export const AddSitePriceDialog: React.FC<AddSitePriceDialogProps> = ({
-  binding,
-  supplierRef,
+  siteItemPage,
+  supplierId,
   itemId,
   inventoryItemId,
   uomId,
@@ -58,8 +57,8 @@ export const AddSitePriceDialog: React.FC<AddSitePriceDialogProps> = ({
     form.resetField('mrpId');
   };
 
-  const addMutation = binding.useAddSitePrice(supplierRef, itemId, { onSuccess });
-  const canSetMrp = usePermission(binding.permissions.mrp.edit).available;
+  const addMutation = siteItemPage.useAddSitePrice(supplierId, itemId, { onSuccess });
+  const canSetMrp = usePermission(siteItemPage.prices.permissions.mrp.edit).available;
 
   return (
     <Form
@@ -93,7 +92,7 @@ export const AddSitePriceDialog: React.FC<AddSitePriceDialogProps> = ({
             <CurrencyField name="unitPrice" label="Unit Price" currencyCode={currency} />
             <InventoryItemMrpSelector
               name="mrpId"
-              permission={binding.permissions.mrp.edit}
+              permission={siteItemPage.prices.permissions.mrp.edit}
               label="MRP (optional)"
               placeholder="Select MRP"
               inventoryItemId={inventoryItemId}

@@ -128,9 +128,13 @@ export class PartiesDomainService {
     });
   }
 
-  // Returns paginated active tax registration options of a party for select dropdowns
-  findRegistrationsForSelect(query: SelectOptionsQueryDto, partyId: string): Promise<SelectQueryResult> {
-    return this.repository.findRegistrationOptionsForSelect(partyId, query);
+  // Returns paginated active tax registration options of a party for select dropdowns; salesTaxOnly keeps GSTIN and VAT
+  findRegistrationsForSelect(
+    query: SelectOptionsQueryDto,
+    partyId: string,
+    options?: { salesTaxOnly?: boolean },
+  ): Promise<SelectQueryResult> {
+    return this.repository.findRegistrationOptionsForSelect(partyId, query, options);
   }
 
   // Creates a COMPANY party and returns it as a CompanyDto

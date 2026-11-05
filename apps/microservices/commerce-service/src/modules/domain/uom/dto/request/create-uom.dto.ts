@@ -29,7 +29,6 @@ export class CreateUomDto {
   @IsPositive()
   uomQty?: number;
 
-  @IsOptional()
   @IsBoolean()
-  allowDecimal?: boolean;
+  allowDecimal: boolean;
 }

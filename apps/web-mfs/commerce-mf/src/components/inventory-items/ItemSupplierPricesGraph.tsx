@@ -1,13 +1,11 @@
-import { Empty } from '@vritti/quantum-ui/Empty';
 import { useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
+import type { LineChartEmptyState } from '@vritti/quantum-ui/LineChart';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import { pluralize } from '@vritti/quantum-ui/pluralize';
 import { SelectFilter } from '@vritti/quantum-ui/Select';
 import { isoTodayDate } from '@vritti/quantum-ui/timezone';
-import { LineChart as LineChartIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
-import { PriceChartSkeleton } from '@/components/suppliers/PriceChartSkeleton';
 import { PriceCurrencyFilter } from '@/components/suppliers/PriceCurrencyFilter';
 import { PriceRangePicker } from '@/components/suppliers/PriceRangePicker';
 import { type PriceSeries, PriceSeriesChart } from '@/components/suppliers/PriceSeriesChart';
@@ -24,8 +22,8 @@ interface ItemSupplierPricesGraphProps {
   onSelectionChange: (selection: PriceGraphSelection) => void;
   // Controls before the others, e.g. a site picker
   filters?: React.ReactNode;
-  // Shown in place of the chart when no supplier has a price to chart
-  emptyState: React.ReactNode;
+  // What the chart says inside its frame when no supplier has a price to chart
+  emptyState: LineChartEmptyState;
   // Where the supplier and MRP pick lists live, at the graph's site; absent until there is a site
   optionsEndpointBase: string | undefined;
   // Who may see MRPs; the MRP filter is hidden from everyone else
@@ -136,25 +134,23 @@ export const ItemSupplierPricesGraph: React.FC<ItemSupplierPricesGraphProps> = (
         </div>
       </div>
 
-      {isLoading && !graph ? (
-        <PriceChartSkeleton />
-      ) : supplierCount === 0 ? (
-        emptyState
-      ) : suppliers.length === 0 ? (
-        <Empty
-          icon={<LineChartIcon className="size-6" />}
-          title="No prices in this currency"
-          description="None of the suppliers drawn has prices in this currency at these MRPs. Change the supplier, MRP or currency filter."
-        />
-      ) : (
-        <PriceSeriesChart
-          series={suppliers}
-          currencyCode={currency ?? ''}
-          noun="supplier"
-          range={range}
-          today={today}
-        />
-      )}
+      <PriceSeriesChart
+        series={suppliers}
+        currencyCode={currency ?? ''}
+        noun="supplier"
+        range={range}
+        today={today}
+        isLoading={isLoading && !graph}
+        emptyState={
+          supplierCount === 0
+            ? emptyState
+            : {
+                title: 'No prices in this currency',
+                description:
+                  'None of the suppliers drawn has prices in this currency at these MRPs. Change the supplier, MRP or currency filter.',
+              }
+        }
+      />
 
       {supplierCount > MAX_CHARTED_SUPPLIERS && (
         <p className="text-xs text-muted-foreground">

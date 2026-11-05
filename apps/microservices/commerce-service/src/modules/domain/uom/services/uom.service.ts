@@ -229,7 +229,7 @@ export class UomDomainService {
       baseUnitId: data.baseUnitId ?? null,
       baseUomQty: data.baseUomQty ?? 1,
       uomQty: data.uomQty ?? 1,
-      allowDecimal: data.allowDecimal ?? true,
+      allowDecimal: data.allowDecimal,
     });
 
     this.logger.log(`Created UOM: ${entity.name} (${entity.symbol})`);

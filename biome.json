@@ -15,7 +15,8 @@
   "files": {
     "includes": [
       "**",
-      "!libs/create-vap-payload/source/**"
+      "!libs/create-vap-payload/source/**",
+      "!**/db/migrations/**/snapshot.json"
     ]
   },
   "formatter": {

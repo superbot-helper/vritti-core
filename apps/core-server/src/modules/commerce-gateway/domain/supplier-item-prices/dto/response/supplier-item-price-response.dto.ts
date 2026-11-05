@@ -14,12 +14,6 @@ export class SupplierItemPriceResponseDto {
   @ApiProperty({ description: 'Site the price applies to' })
   siteId: string;
 
-  @ApiPropertyOptional({ description: 'Name of the site', nullable: true })
-  siteName?: string | null;
-
-  @ApiPropertyOptional({ description: 'Code of the site', nullable: true })
-  siteCode?: string | null;
-
   @ApiProperty({ type: CurrencyAmountDto, description: 'Unit price for this validity window' })
   unitPrice: CurrencyAmountDto;
 

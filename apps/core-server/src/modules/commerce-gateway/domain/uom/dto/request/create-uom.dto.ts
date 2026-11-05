@@ -46,8 +46,7 @@ export class CreateUomDto {
   @IsPositive()
   uomQty?: number;
 
-  @ApiPropertyOptional({ description: 'Whether this unit allows decimal quantities', default: false })
-  @IsOptional()
+  @ApiProperty({ description: 'Whether this unit allows decimal quantities' })
   @IsBoolean()
-  allowDecimal?: boolean;
+  allowDecimal: boolean;
 }

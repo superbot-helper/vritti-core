@@ -5,46 +5,50 @@ import { Select } from '@vritti/quantum-ui/Select';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
 import { useForm } from 'react-hook-form';
+import { usePartyHasSalesTaxRegistration } from '@/hooks/organization/party-tax-registrations';
 import {
-  type SupplierAtSiteData,
-  type UpdateSiteEnrollmentFormData,
-  updateSiteEnrollmentSchema,
-} from '@/schemas/site-suppliers';
+  type EnrolledSupplierEnrollmentRow,
+  type SupplierEnrollmentKey,
+  type UpdateSupplierEnrollmentFormData,
+  updateSupplierEnrollmentSchema,
+} from '@/schemas/supplier-enrollments';
 import { PartyCommunicationSelector } from '@/selectors/party-communication';
 import { PaymentTermSelector } from '@/selectors/payment-term';
-import type { SupplierSiteBinding } from '../bindings';
-import type { SupplierSiteRef } from '../types';
+import type { SupplierEnrollmentBinding } from '../bindings';
+import { NoTaxIdentityAlert } from '../NoTaxIdentityAlert';
+import { TaxIdField } from '../TaxIdField';
 
 interface EditEnrollmentDialogProps {
-  binding: SupplierSiteBinding;
-  supplierRef: SupplierSiteRef;
-  supplier: SupplierAtSiteData;
-  enrollmentId: string;
+  binding: SupplierEnrollmentBinding;
+  pair: SupplierEnrollmentKey;
+  enrollment: EnrolledSupplierEnrollmentRow;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
 export const EditEnrollmentDialog: React.FC<EditEnrollmentDialogProps> = ({
   binding,
-  supplierRef,
-  supplier,
-  enrollmentId,
+  pair,
+  enrollment,
   onSuccess,
   onCancel,
 }) => {
-  const form = useForm<UpdateSiteEnrollmentFormData>({
-    resolver: zodResolver(updateSiteEnrollmentSchema),
+  const form = useForm<UpdateSupplierEnrollmentFormData>({
+    resolver: zodResolver(updateSupplierEnrollmentSchema),
     defaultValues: {
-      paymentTermId: supplier.paymentTermId ?? undefined,
-      partyTaxRegistrationId: supplier.partyTaxRegistrationId ?? undefined,
-      partyBankAccountId: supplier.partyBankAccountId ?? undefined,
-      orderRelationshipId: supplier.orderRelationshipId ?? undefined,
-      orderEmailCommunicationId: supplier.orderEmailCommunicationId ?? undefined,
-      orderPhoneCommunicationId: supplier.orderPhoneCommunicationId ?? undefined,
+      paymentTermId: enrollment.paymentTermId,
+      partyTaxRegistrationId: enrollment.partyTaxRegistrationId ?? undefined,
+      partyBankAccountId: enrollment.partyBankAccountId ?? undefined,
+      orderRelationshipId: enrollment.orderRelationshipId ?? undefined,
+      orderEmailCommunicationId: enrollment.orderEmailCommunicationId,
+      orderPhoneCommunicationId: enrollment.orderPhoneCommunicationId,
     },
   });
 
-  const updateMutation = binding.useUpdateEnrollment(supplierRef, { onSuccess });
+  const party = binding.useSupplierParty(pair.supplierId);
+  const partyId = party?.partyId;
+  const { data: hasSalesTaxRegistration } = usePartyHasSalesTaxRegistration(partyId);
+  const updateMutation = binding.useUpdateEnrollment({ onSuccess });
 
   return (
     <Form
@@ -52,10 +56,10 @@ export const EditEnrollmentDialog: React.FC<EditEnrollmentDialogProps> = ({
       mutation={updateMutation}
       onCancel={onCancel}
       transformSubmit={(data) => ({
-        enrollmentId,
+        ...pair,
         data: {
           paymentTermId: data.paymentTermId,
-          partyTaxRegistrationId: data.partyTaxRegistrationId,
+          partyTaxRegistrationId: data.partyTaxRegistrationId ?? null,
           partyBankAccountId: data.partyBankAccountId || null,
           orderRelationshipId: data.orderRelationshipId || null,
           orderEmailCommunicationId: data.orderEmailCommunicationId,
@@ -65,33 +69,40 @@ export const EditEnrollmentDialog: React.FC<EditEnrollmentDialogProps> = ({
     >
       <FormSection title="Enrollment" contentClassName="block">
         <div className="flex flex-col gap-4">
+          <NoTaxIdentityAlert partyTaxId={party?.partyTaxId} hasSalesTaxRegistration={hasSalesTaxRegistration} />
           <PaymentTermSelector name="paymentTermId" />
           <Select
             name="partyTaxRegistrationId"
             label="Tax Registration"
-            placeholder="Select the registration this site is billed under"
+            placeholder="Select the registration the site is billed under"
+            description="Leave empty if the supplier is unregistered"
             searchable
-            optionsEndpoint="commerce-api/select-api/party-tax-registrations"
-            params={{ partyId: supplier.partyId }}
+            clearable
+            disabled={!partyId}
+            optionsEndpoint={partyId ? 'commerce-api/select-api/party-tax-registrations' : undefined}
+            params={partyId ? { partyId, salesTaxOnly: true } : undefined}
           />
+          <TaxIdField taxId={party?.partyTaxId} taxIdType={party?.partyTaxIdType} />
           <Select
             name="partyBankAccountId"
             label="Bank Account"
             placeholder="Select a bank account"
             searchable
-            optionsEndpoint="commerce-api/select-api/party-bank-accounts"
-            params={{ partyId: supplier.partyId }}
+            disabled={!partyId}
+            optionsEndpoint={partyId ? 'commerce-api/select-api/party-bank-accounts' : undefined}
+            params={partyId ? { partyId } : undefined}
           />
           <Select
             name="orderRelationshipId"
             label="Order Contact"
             placeholder="Select an order contact"
             searchable
-            optionsEndpoint="commerce-api/select-api/party-contacts"
-            params={{ partyId: supplier.partyId, function: 'ORDER' }}
+            disabled={!partyId}
+            optionsEndpoint={partyId ? 'commerce-api/select-api/party-contacts' : undefined}
+            params={partyId ? { partyId, function: 'ORDER' } : undefined}
           />
-          <PartyCommunicationSelector name="orderEmailCommunicationId" partyId={supplier.partyId} channel="EMAIL" />
-          <PartyCommunicationSelector name="orderPhoneCommunicationId" partyId={supplier.partyId} channel="PHONE" />
+          <PartyCommunicationSelector name="orderEmailCommunicationId" partyId={partyId} channel="EMAIL" />
+          <PartyCommunicationSelector name="orderPhoneCommunicationId" partyId={partyId} channel="PHONE" />
         </div>
       </FormSection>
       <DialogActions>

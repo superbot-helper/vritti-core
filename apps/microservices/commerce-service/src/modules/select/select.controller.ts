@@ -13,8 +13,8 @@ import { LocationsDomainService } from '@domain/locations/services/locations.ser
 import { OfferingVariantsDomainService } from '@domain/offering-variants/services/offering-variants.service';
 import { OfferingsDomainService } from '@domain/offerings/services/offerings.service';
 import { PartiesDomainService } from '@domain/parties/services/parties.service';
-import { PartyCommunicationsDomainService } from '@domain/party-communications/services/party-communications.service';
 import { PartyBankAccountsDomainService } from '@domain/party-bank-accounts/services/party-bank-accounts.service';
+import { PartyCommunicationsDomainService } from '@domain/party-communications/services/party-communications.service';
 import { PartyRelationshipsDomainService } from '@domain/party-relationships/services/party-relationships.service';
 import { PaymentTermsDomainService } from '@domain/payment-terms/services/payment-terms.service';
 import { PosTerminalsDomainService } from '@domain/pos-terminals/services/pos-terminals.service';
@@ -44,6 +44,7 @@ import { OfferingsSelectQueryDto } from './dto/request/offerings-select-query.dt
 import { PartyCommunicationSelectQueryDto } from './dto/request/party-communication-select-query.dto';
 import { PartyContactSelectQueryDto } from './dto/request/party-contact-select-query.dto';
 import { PartySelectQueryDto } from './dto/request/party-select-query.dto';
+import { PartyTaxRegistrationSelectQueryDto } from './dto/request/party-tax-registration-select-query.dto';
 import { PaymentTermsSelectQueryDto } from './dto/request/payment-terms-select-query.dto';
 import { PurchaseOrderItemsSelectQueryDto } from './dto/request/purchase-order-items-select-query.dto';
 import { PurchaseOrdersSelectQueryDto } from './dto/request/purchase-orders-select-query.dto';
@@ -166,10 +167,10 @@ export class SelectController {
 
   // Returns paginated tax registration options of a party for the select component
   @MessagePattern({ cmd: 'select.partyTaxRegistrations' })
-  async partyTaxRegistrations(@Payload() data: PartySelectQueryDto): Promise<SelectQueryResult> {
-    const { partyId, ...query } = data;
-    this.logger.log(`select.partyTaxRegistrations — partyId: ${partyId}`);
-    return this.partiesService.findRegistrationsForSelect(query, partyId);
+  async partyTaxRegistrations(@Payload() data: PartyTaxRegistrationSelectQueryDto): Promise<SelectQueryResult> {
+    const { partyId, salesTaxOnly, ...query } = data;
+    this.logger.log(`select.partyTaxRegistrations — partyId: ${partyId}, salesTaxOnly: ${salesTaxOnly ?? false}`);
+    return this.partiesService.findRegistrationsForSelect(query, partyId, { salesTaxOnly });
   }
 
   // Returns paginated bank account options of a party for the select component
@@ -291,9 +292,9 @@ export class SelectController {
   // Returns paginated supplier options for the select component
   @MessagePattern({ cmd: 'select.suppliers' })
   async suppliers(@Payload() data: SuppliersSelectQueryDto): Promise<SelectQueryResult> {
-    const { siteId, enrollmentStatus, ...query } = data;
+    const { activeOnly, ...query } = data;
     this.logger.log('select.suppliers');
-    return this.suppliersService.findForSelect(query, { siteId, enrollmentStatus });
+    return this.suppliersService.findForSelect(query, { activeOnly });
   }
 
   // Returns paginated tax class options for the select component

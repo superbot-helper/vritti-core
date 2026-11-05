@@ -1,4 +1,4 @@
-import { SupplierSiteDetail } from '@/components/suppliers/SupplierSiteDetail';
+import { SupplierEnrollmentDetail } from '@/components/suppliers/SupplierEnrollmentDetail';
 import { binding } from './binding';
 
-export const SupplierDetailPage = () => <SupplierSiteDetail binding={binding} />;
+export const SupplierDetailPage = () => <SupplierEnrollmentDetail binding={binding} />;

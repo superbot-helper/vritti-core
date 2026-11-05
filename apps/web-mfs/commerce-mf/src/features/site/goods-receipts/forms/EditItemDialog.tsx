@@ -28,7 +28,7 @@ const EditItemForm = ({
   onSuccess: () => void;
   onCancel: () => void;
 }) => {
-  const workspaceCurrency = useWorkspaceCurrency() ?? 'INR';
+  const workspaceCurrency = useWorkspaceCurrency();
   // PO remaining (ordered − received) caps the ordered qty for PO-linked items; null (un-linked) → uncapped.
   const maxQuantity = item.poRemainingQuantity ?? undefined;
   const form = useForm<UpdateGoodsReceiptItemFormData>({

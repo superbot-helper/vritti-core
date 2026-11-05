@@ -1,12 +1,31 @@
 import type { AuthStatusResponse } from '@services/user.service';
 import { useQueryClient } from '@tanstack/react-query';
 import { clearToken, scheduleTokenRefresh, setToken } from '@vritti/quantum-ui/axios';
+import { setWorkspaceCurrency } from '@vritti/quantum-ui/currency';
 import { useSSE } from '@vritti/quantum-ui/hooks';
+import { setWorkspaceTimeZone } from '@vritti/quantum-ui/timezone';
 import { useEffect, useRef, useState } from 'react';
 
 type AuthEvents = {
   'auth-state': AuthStatusResponse;
 };
+
+// Records every workspace's currency and timezone before the payload renders a workspace screen; a site prices in its
+// legal entity's currency, and the org and its site groups in the org default
+function recordWorkspaceSettings({ org, sites = [], legalEntities = [], siteGroups = [] }: AuthStatusResponse) {
+  for (const site of sites) {
+    setWorkspaceTimeZone(site.id, site.timezone);
+    setWorkspaceCurrency(site.id, site.currencyCode);
+  }
+  for (const le of legalEntities) {
+    setWorkspaceCurrency(le.id, le.currencyCode);
+  }
+  if (!org) return;
+  setWorkspaceCurrency(org.id, org.defaultCurrencyCode);
+  for (const group of siteGroups) {
+    setWorkspaceCurrency(group.id, org.defaultCurrencyCode);
+  }
+}
 
 // Streams auth status via SSE — replaces one-shot query + handles session-revocation in real time
 export function useAuthStatusStream(enabled = true) {
@@ -26,6 +45,7 @@ export function useAuthStatusStream(enabled = true) {
 
     if (eventType === 'auth-state') {
       const response = data as AuthStatusResponse;
+      if (response.isAuthenticated) recordWorkspaceSettings(response);
       setAuthState(response);
       setIsLoading(false);
 

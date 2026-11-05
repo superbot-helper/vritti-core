@@ -4,7 +4,7 @@ import { buildSlug } from '@vritti/quantum-ui/slug';
 import { ChevronsUpDown, Truck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePermissionContext } from '@/providers/PermissionProvider';
-import { SupplierSelector } from '@/utils/RemoteSelectors';
+import { SiteSupplierSelector, SupplierSelector } from '@/utils/RemoteSelectors';
 
 interface SupplierSwitcherProps {
   // The raw `name~uuid` breadcrumb segment; the id addresses the API, the slug is the fallback label
@@ -20,13 +20,14 @@ export const SupplierSwitcher = ({ segment, basePath }: SupplierSwitcherProps) =
   const navigate = useNavigate();
   const current = idOf(segment);
   const { workspace } = usePermissionContext();
-  // In a site workspace each supplier shows whether it is enrolled there; the list itself is never narrowed
-  const siteId = workspace?.kind === 'site' ? (workspace.id ?? undefined) : undefined;
+  // In a site workspace each supplier shows whether it is enrolled there; the list itself is never narrowed, so inactive
+  // suppliers stay reachable too
+  const Selector = workspace?.kind === 'site' ? SiteSupplierSelector : SupplierSelector;
 
   return (
-    <SupplierSelector
+    <Selector
       value={current}
-      params={siteId ? { siteId } : undefined}
+      activeOnly={false}
       // The anchor replaces the trigger but not the surrounding Field, so a label would still render above it
       label={undefined}
       searchPlaceholder="Find supplier..."

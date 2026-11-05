@@ -41,10 +41,9 @@ export class CreateUomInput {
   @IsPositive()
   uomQty?: number;
 
-  @Field(() => Boolean, { nullable: true })
-  @IsOptional()
+  @Field(() => Boolean)
   @IsBoolean()
-  allowDecimal?: boolean;
+  allowDecimal: boolean;
 }
 
 // All fields optional for a partial update (PartialType keeps the @Field metadata).

@@ -44,6 +44,6 @@ export class SitePriceHistoryResponseDto {
 
 // Each window carries its own currency; a supplier can requote an item in another of its currencies
 export class SupplierItemPriceHistoryResponseDto {
-  @ApiProperty({ type: [SitePriceHistoryResponseDto] })
+  @ApiProperty({ type: [SitePriceHistoryResponseDto], description: 'The charted sites with prices in the window' })
   sites: SitePriceHistoryResponseDto[];
 }

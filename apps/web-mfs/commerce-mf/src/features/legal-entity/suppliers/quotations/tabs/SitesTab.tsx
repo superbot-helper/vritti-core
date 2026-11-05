@@ -12,17 +12,15 @@ import {
 import { Dialog } from '@vritti/quantum-ui/Dialog';
 import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
 import { Building2, Send, Undo2 } from 'lucide-react';
+import type React from 'react';
 import { useCallback, useMemo } from 'react';
+import type { QuotationSlotProps } from '@/components/suppliers/types';
 import { SUPPLIER_QUOTATION_KEY, useRemoveSupplierQuotationFromSite } from '@/hooks/legal-entity/supplier-quotations';
-import type { SupplierQuotationDetail, SupplierQuotationSiteData } from '@/schemas/supplier-quotations';
+import type { SupplierQuotationSiteData } from '@/schemas/supplier-quotations';
 import { PostQuotationSiteDialog } from '../forms/PostQuotationSiteDialog';
 
-interface SitesTabProps {
-  supplierId: string;
-  quotation: SupplierQuotationDetail;
-}
-
-export const SitesTab = ({ supplierId, quotation }: SitesTabProps) => {
+// The sites the quotation is posted to: posting writes a site's prices, removing it takes them back
+export const SitesTab: React.FC<QuotationSlotProps> = ({ supplierId, quotation }) => {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const postDialog = useDialog();

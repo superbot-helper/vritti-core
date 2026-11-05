@@ -12,14 +12,13 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useCreateGoodsReceipt } from '@/hooks/site/goods-receipts/useCreateGoodsReceipt';
-import { useSiteId } from '@/hooks/site/useSiteId';
 import {
   type CreateGoodsReceiptFormData,
   createGoodsReceiptSchema,
   type GoodsReceiptData,
 } from '@/schemas/goods-receipts';
 import { PurchaseOrderSelector } from '@/selectors/purchase-order';
-import { SupplierSelector } from '@/selectors/supplier';
+import { SiteSupplierSelector } from '@/selectors/site-supplier';
 
 interface CreateGoodsReceiptDialogProps {
   onSuccess: (receipt: GoodsReceiptData) => void;
@@ -34,7 +33,6 @@ interface PoSelection {
 
 export const CreateGoodsReceiptDialog: React.FC<CreateGoodsReceiptDialogProps> = ({ onSuccess, onCancel }) => {
   const workspaceCurrency = useWorkspaceCurrency();
-  const siteId = useSiteId();
   const timeZone = useWorkspaceTimeZone();
   const form = useForm<CreateGoodsReceiptFormData>({
     resolver: zodResolver(createGoodsReceiptSchema),
@@ -111,11 +109,11 @@ export const CreateGoodsReceiptDialog: React.FC<CreateGoodsReceiptDialogProps> =
         exchangeRate: showRateField && !fixedFromPo ? data.exchangeRate : undefined,
       })}
     >
-      <SupplierSelector
+      <SiteSupplierSelector
         name="supplierId"
         label="Supplier"
         placeholder="Select supplier"
-        params={{ siteId, enrollmentStatus: 'ENROLLED' }}
+        enrollmentStatus="ENROLLED"
         onOptionSelect={handleSupplierSelect}
       />
       <PurchaseOrderSelector

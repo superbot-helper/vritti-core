@@ -1,0 +1,1 @@
+ALTER TABLE "commerce"."supplier_quotation_sites" ALTER COLUMN "legal_entity_id" SET NOT NULL;

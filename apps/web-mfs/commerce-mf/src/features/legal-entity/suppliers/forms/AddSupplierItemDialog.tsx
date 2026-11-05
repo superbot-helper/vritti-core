@@ -1,14 +1,15 @@
 import { Button } from '@vritti/quantum-ui/Button';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
-import { Form } from '@vritti/quantum-ui/Form';
+import { Form, FormSection } from '@vritti/quantum-ui/Form';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
+import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useAddSupplierItem } from '@/hooks/legal-entity/suppliers';
 import { type AddSupplierItemFormData, addSupplierItemSchema } from '@/schemas/suppliers';
+import { EnrolledSiteSelector } from '@/selectors/enrolled-site';
 import { InventoryItemSelector } from '@/selectors/inventory-item';
-import { SupplierSiteSelector } from '@/selectors/supplier-site';
 import { UomSelector } from '@/selectors/uom';
 
 interface AddSupplierItemDialogProps {
@@ -28,6 +29,7 @@ export const AddSupplierItemDialog: React.FC<AddSupplierItemDialogProps> = ({ su
 
   const addMutation = useAddSupplierItem(supplierId, { onSuccess });
   const inventoryItemId = useWatch({ control: form.control, name: 'inventoryItemId' });
+  const [allowDecimal, setAllowDecimal] = useState(true);
 
   return (
     <Form
@@ -40,48 +42,69 @@ export const AddSupplierItemDialog: React.FC<AddSupplierItemDialogProps> = ({ su
         supplierItemCode: data.supplierItemCode,
         uomId: data.uomId,
         minOrderQuantity: data.minOrderQuantity,
-        leadTimeDays: data.leadTimeDays,
+        defaultLeadTimeDays: data.defaultLeadTimeDays,
         siteIds: data.siteIds,
       })}
     >
-      <InventoryItemSelector
-        name="inventoryItemId"
-        label="Inventory Item"
-        placeholder="Select item"
-        onOptionSelect={() => form.resetField('uomId')}
-        params={{ excludeOnSupplierId: supplierId }}
-      />
-      <UomSelector
-        name="uomId"
-        label="Unit of Measure"
-        placeholder={inventoryItemId ? 'Select unit' : 'Select inventory item first'}
-        disabled={!inventoryItemId}
-        params={inventoryItemId ? { inventoryItemId, supplierId } : undefined}
-      />
-      <TextField name="supplierItemCode" label="Supplier Item Code" placeholder="Supplier's code for this item" />
-      <TextField
-        name="minOrderQuantity"
-        label="Min Order Qty (optional)"
-        type="number"
-        positive
-        placeholder="e.g. 10"
-        description="The least the supplier sells per order, in this unit"
-      />
-      <TextField
-        name="leadTimeDays"
-        label="Lead Time (days, optional)"
-        type="number"
-        integer
-        positive
-        placeholder="e.g. 5"
-        description="Every site follows it unless the site sets its own"
-      />
-      <SupplierSiteSelector
-        name="siteIds"
-        supplierId={supplierId}
-        multiple
-        description="Sites that buy this item from the supplier. Preferred, lead time and min order are set per site."
-      />
+      <div className="space-y-6">
+        <FormSection title="Item">
+          <div className="col-span-2">
+            <InventoryItemSelector
+              name="inventoryItemId"
+              label="Inventory Item"
+              placeholder="Select item"
+              onOptionSelect={() => form.resetField('uomId')}
+              params={{ excludeOnSupplierId: supplierId }}
+            />
+          </div>
+          <UomSelector
+            name="uomId"
+            label="Unit of Measure"
+            placeholder={inventoryItemId ? 'Select unit' : 'Select inventory item first'}
+            disabled={!inventoryItemId}
+            params={inventoryItemId ? { inventoryItemId, supplierId } : undefined}
+            onOptionSelect={(option) => setAllowDecimal(option?.additionals?.allowDecimal !== false)}
+            description="The unit the supplier sells and prices it in"
+          />
+          <TextField
+            name="supplierItemCode"
+            label="Supplier Item Code"
+            placeholder="Optional"
+            description="The supplier's own code for this item"
+          />
+        </FormSection>
+
+        <FormSection title="Ordering Terms">
+          <TextField
+            name="minOrderQuantity"
+            label="Min Order Qty"
+            type="number"
+            positive
+            integer={!allowDecimal}
+            placeholder="Optional, e.g. 10"
+            description="The least the supplier sells per order, in this unit"
+          />
+          <TextField
+            name="defaultLeadTimeDays"
+            label="Default Lead Time (days)"
+            type="number"
+            integer
+            positive
+            placeholder="Optional, e.g. 5"
+            description="Every site follows it unless the site sets its own"
+          />
+        </FormSection>
+
+        <FormSection title="Sites" contentClassName="block">
+          <EnrolledSiteSelector
+            name="siteIds"
+            label="Sites"
+            supplierId={supplierId}
+            multiple
+            description="Enrolled sites that buy this item from the supplier. Preferred and lead time can be set per site."
+          />
+        </FormSection>
+      </div>
       <DialogActions>
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel

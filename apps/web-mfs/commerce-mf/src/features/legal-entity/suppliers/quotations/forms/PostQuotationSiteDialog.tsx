@@ -6,7 +6,7 @@ import type React from 'react';
 import { useForm } from 'react-hook-form';
 import { usePostSupplierQuotationToSite } from '@/hooks/legal-entity/supplier-quotations';
 import { type PostSupplierQuotationSiteFormData, postSupplierQuotationSiteSchema } from '@/schemas/supplier-quotations';
-import { SupplierSiteSelector } from '@/selectors/supplier-site';
+import { EnrolledSiteSelector } from '@/selectors/enrolled-site';
 
 interface PostQuotationSiteDialogProps {
   supplierId: string;
@@ -32,7 +32,7 @@ export const PostQuotationSiteDialog: React.FC<PostQuotationSiteDialogProps> = (
       onCancel={onCancel}
       transformSubmit={(data) => data.siteId}
     >
-      <SupplierSiteSelector
+      <EnrolledSiteSelector
         name="siteId"
         label="Site"
         placeholder="Select an enrolled site"

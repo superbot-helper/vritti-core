@@ -5,7 +5,6 @@ import {
   decimal,
   index,
   integer,
-  pgPolicy,
   timestamp,
   uniqueIndex,
   uuid,
@@ -16,7 +15,7 @@ import { inventoryItems } from './inventory-items';
 import { parties } from './parties';
 import { paymentTerms } from './payment-terms';
 import { uom } from './uom';
-import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
+import { legalEntityOwnedPolicies, organizationIdColumn, scopeFromOwnerPolicies } from './workspace-scope';
 
 export const suppliers = commerceSchema.table(
   'suppliers',
@@ -51,23 +50,7 @@ export const suppliers = commerceSchema.table(
     uniqueIndex('uq_suppliers_le_party').on(table.legalEntityId, table.partyId),
     index('idx_suppliers_le').on(table.organizationId, table.legalEntityId),
     index('idx_suppliers_party').on(table.partyId),
-    orgIsolationPolicy(),
-    pgPolicy('le_read', {
-      for: 'select',
-      using: sql`legal_entity_id = (select current_setting('app.le_id', true)::uuid)`,
-    }),
-    pgPolicy('le_write', {
-      for: 'insert',
-      withCheck: sql`legal_entity_id = (select current_setting('app.le_id', true)::uuid)`,
-    }),
-    pgPolicy('le_update', {
-      for: 'update',
-      using: sql`legal_entity_id = (select current_setting('app.le_id', true)::uuid)`,
-    }),
-    pgPolicy('le_delete', {
-      for: 'delete',
-      using: sql`legal_entity_id = (select current_setting('app.le_id', true)::uuid)`,
-    }),
+    ...legalEntityOwnedPolicies(),
   ],
 );
 
@@ -89,7 +72,7 @@ export const supplierItems = commerceSchema.table(
     // The least the supplier sells of the item per order, in the supplier item's unit
     minOrderQuantity: decimal('min_order_quantity', { precision: 12, scale: 3, mode: 'number' }),
     // Days from order to delivery; every site of the item follows it unless the site overrides it
-    leadTimeDays: integer('lead_time_days'),
+    defaultLeadTimeDays: integer('default_lead_time_days'),
     uomId: uuid('uom_id')
       .notNull()
       .references(() => uom.id, { onDelete: 'restrict' }),
@@ -102,6 +85,7 @@ export const supplierItems = commerceSchema.table(
   (table) => [
     uniqueIndex('uq_supplier_items_supplier_item_uom').on(table.supplierId, table.inventoryItemId, table.uomId),
     index('idx_supplier_items_supplier').on(table.supplierId),
+    ...scopeFromOwnerPolicies({ owner: suppliers, fk: table.supplierId }),
   ],
 );
 

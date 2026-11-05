@@ -864,7 +864,7 @@ input CreateUomInput {
   baseUnitId: ID
   baseUomQty: Int
   uomQty: Int
-  allowDecimal: Boolean
+  allowDecimal: Boolean!
 }
 
 input UpdateUomInput {

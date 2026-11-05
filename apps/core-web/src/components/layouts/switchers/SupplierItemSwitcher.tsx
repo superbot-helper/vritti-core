@@ -13,7 +13,7 @@ interface SupplierItemSwitcherProps {
   supplierId: string;
   // The supplier root, e.g. `/le/<id>/suppliers/<supplierSlug>`
   basePath: string;
-  // The item tab open now (overview, sites, prices), kept when switching items
+  // The item tab open now (overview, site-items, prices), kept when switching items
   tab: string | undefined;
 }
 

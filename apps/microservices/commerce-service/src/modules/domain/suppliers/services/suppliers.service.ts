@@ -1,4 +1,3 @@
-import type { SiteEnrollmentStatus } from '@domain/supplier-sites/dto/entity/site-supplier-list-row.dto';
 import { Injectable, Logger } from '@nestjs/common';
 import { type FieldMap, FilterOperators, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
 import { and, arrayOverlaps, asc, not, sql } from '@vritti/api-sdk/drizzle-orm';
@@ -28,7 +27,7 @@ export class SuppliersDomainService {
     purchasingBlocked: { column: suppliers.purchasingBlocked, type: 'boolean' },
     paymentBlocked: { column: suppliers.paymentBlocked, type: 'boolean' },
     isActive: { column: suppliers.isActive, type: 'boolean' },
-    paymentTermId: { column: suppliers.defaultPaymentTermId, type: 'string' },
+    defaultPaymentTermId: { column: suppliers.defaultPaymentTermId, type: 'string' },
     currency: {
       multiExpression: (values, operator) =>
         operator === FilterOperators.IS_NOT_ANY_OF
@@ -68,10 +67,10 @@ export class SuppliersDomainService {
     return { result: rows.map((row) => SupplierDto.from(row)), count };
   }
 
-  // Returns paginated supplier options; a site adds each supplier's enrollment status there and can filter on it
+  // Returns paginated supplier options; activeOnly drops inactive suppliers and pricedItem keeps those priced at a site
   findForSelect(
     query: SelectOptionsQueryDto,
-    options?: { siteId?: string; enrollmentStatus?: SiteEnrollmentStatus; pricedItem?: PricedItemAtSite },
+    options?: { pricedItem?: PricedItemAtSite; activeOnly?: boolean },
   ): Promise<SelectQueryResult> {
     return this.repository.findForSelect(
       {
@@ -95,7 +94,7 @@ export class SuppliersDomainService {
 
   // Creates a new supplier referencing an existing party for its identity
   async create(data: CreateSupplierDto): Promise<CreateResponseDto<SupplierDto>> {
-    await this.repository.assertPaymentTermUsable(data.defaultPaymentTermId);
+    await this.repository.assertDefaultPaymentTermUsable(data.defaultPaymentTermId);
     await this.repository.assertPartyFree(data.partyId);
     const entity = await this.repository.create({
       partyId: data.partyId,
@@ -126,7 +125,6 @@ export class SuppliersDomainService {
   // Updates a supplier's commercial terms and block flags
   async update(id: string, data: Omit<UpdateSupplierDto, 'id'>): Promise<SuccessResponseDto> {
     const existing = await this.repository.findByIdOrThrow(id);
-    await this.repository.assertPaymentTermUsable(data.defaultPaymentTermId);
 
     if (Object.keys(data).length > 0) {
       await this.repository.update(id, data);
@@ -146,6 +144,41 @@ export class SuppliersDomainService {
     await this.repository.update(id, { currencyCode: data.currencyCode, currencyCodes });
     this.logger.log(`Set supplier ${id} currencies to ${currencyCodes.join(', ')} (default ${data.currencyCode})`);
     return { success: true, message: `Supplier currencies set to ${currencyCodes.join(', ')}.` };
+  }
+
+  // Sets the payment term new site enrollments of a supplier start from
+  async setDefaultPaymentTerm(id: string, defaultPaymentTermId: string): Promise<SuccessResponseDto> {
+    const existing = await this.repository.findWithPartyOrThrow(id);
+    await this.repository.assertDefaultPaymentTermUsable(defaultPaymentTermId);
+    await this.repository.update(id, { defaultPaymentTermId });
+    return { success: true, message: `Default payment term of "${existing.partyName}" updated.` };
+  }
+
+  // Sets the default payment term of several suppliers at once
+  async bulkSetDefaultPaymentTerm(ids: string[], defaultPaymentTermId: string): Promise<SuccessResponseDto> {
+    await this.repository.assertDefaultPaymentTermUsable(defaultPaymentTermId);
+    const updated = await this.repository.bulkSetDefaultPaymentTerm([...new Set(ids)], defaultPaymentTermId);
+    return { success: true, message: `Default payment term updated for ${pluralize('supplier', updated, true)}.` };
+  }
+
+  // Blocks or unblocks new purchase orders and goods receipts from a supplier at every site
+  async setPurchasingBlocked(id: string, purchasingBlocked: boolean): Promise<SuccessResponseDto> {
+    const existing = await this.repository.findWithPartyOrThrow(id);
+    await this.repository.update(id, { purchasingBlocked });
+    return {
+      success: true,
+      message: `Purchasing ${purchasingBlocked ? 'blocked' : 'unblocked'} for "${existing.partyName}".`,
+    };
+  }
+
+  // Blocks or unblocks payments to a supplier
+  async setPaymentBlocked(id: string, paymentBlocked: boolean): Promise<SuccessResponseDto> {
+    const existing = await this.repository.findWithPartyOrThrow(id);
+    await this.repository.update(id, { paymentBlocked });
+    return {
+      success: true,
+      message: `Payments ${paymentBlocked ? 'blocked' : 'unblocked'} for "${existing.partyName}".`,
+    };
   }
 
   // Activates or deactivates a supplier

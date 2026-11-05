@@ -28,5 +28,5 @@ export class UpdateSupplierItemDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  leadTimeDays?: number | null;
+  defaultLeadTimeDays?: number | null;
 }

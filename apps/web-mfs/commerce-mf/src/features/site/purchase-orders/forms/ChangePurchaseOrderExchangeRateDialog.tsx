@@ -79,7 +79,7 @@ export const ChangePurchaseOrderExchangeRateDialog: React.FC<ChangePurchaseOrder
       {exchangeRateType === 'FIXED' ? (
         <TextField
           name="exchangeRate"
-          label={`Exchange Rate (${purchaseOrder.currencyCode} → ${workspaceCurrency ?? 'site currency'})`}
+          label={`Exchange Rate (${purchaseOrder.currencyCode} → ${workspaceCurrency})`}
           type="number"
           placeholder="e.g. 83.250000"
           positive

@@ -8,8 +8,8 @@ import {
   parties,
   type SupplierItemPrice,
   supplierItemPrices,
-  supplierItemSites,
   supplierItems,
+  supplierSiteItems,
   suppliers,
   uom,
 } from '@/db/schema';
@@ -38,10 +38,10 @@ export class SupplierItemPricesDomainRepository extends PrimaryBaseRepository<ty
     super(database, supplierItemPrices);
   }
 
-  // Returns paginated price timeline rows of a supplier item — one site's rows, or every site's when none is given
+  // Returns paginated price timeline rows of a supplier item at one site
   findPricesForTable(
     supplierItemId: string,
-    siteId: string | null,
+    siteId: string,
     options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
   ): Promise<{ result: SupplierItemPriceRow[]; count: number }> {
     return this.findAllAndCount<SupplierItemPriceRow>({
@@ -49,7 +49,7 @@ export class SupplierItemPricesDomainRepository extends PrimaryBaseRepository<ty
       leftJoin: { table: inventoryItemMrps, on: eq(inventoryItemMrps.id, supplierItemPrices.mrpId) },
       where: and(
         eq(supplierItemPrices.supplierItemId, supplierItemId),
-        siteId ? eq(supplierItemPrices.siteId, siteId) : undefined,
+        eq(supplierItemPrices.siteId, siteId),
         options.where,
       ),
       orderBy: options.orderBy?.length ? options.orderBy : [desc(supplierItemPrices.validFrom)],
@@ -94,11 +94,10 @@ export class SupplierItemPricesDomainRepository extends PrimaryBaseRepository<ty
     });
   }
 
-  // Every price window of a supplier item, unpaged — optionally narrowed to sites and to windows overlapping a date
-  // range — ordered by site then start date
+  // A supplier item's price windows at the given sites overlapping a date range, unpaged, ordered by site then start date
   async findPriceHistory(
     supplierItemId: string,
-    options: { siteIds?: string[]; from?: string; to?: string },
+    options: { siteIds: string[]; from: string; to: string },
   ): Promise<SupplierItemPrice[]> {
     const rows = await this.db
       .select()
@@ -106,15 +105,22 @@ export class SupplierItemPricesDomainRepository extends PrimaryBaseRepository<ty
       .where(
         and(
           eq(supplierItemPrices.supplierItemId, supplierItemId),
-          options.siteIds?.length ? inArray(supplierItemPrices.siteId, options.siteIds) : undefined,
-          options.to ? sql`${supplierItemPrices.validFrom} <= ${options.to}::date` : undefined,
-          options.from
-            ? sql`(${supplierItemPrices.validTo} IS NULL OR ${supplierItemPrices.validTo} >= ${options.from}::date)`
-            : undefined,
+          inArray(supplierItemPrices.siteId, options.siteIds),
+          sql`${supplierItemPrices.validFrom} <= ${options.to}::date`,
+          sql`(${supplierItemPrices.validTo} IS NULL OR ${supplierItemPrices.validTo} >= ${options.from}::date)`,
         ),
       )
       .orderBy(asc(supplierItemPrices.siteId), asc(supplierItemPrices.validFrom));
     return rows as SupplierItemPrice[];
+  }
+
+  // The sites where a supplier item has prices
+  async findSiteIdsWithSupplierItemPrices(supplierItemId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectDistinct({ siteId: supplierItemPrices.siteId })
+      .from(supplierItemPrices)
+      .where(eq(supplierItemPrices.supplierItemId, supplierItemId));
+    return rows.map((row) => row.siteId);
   }
 
   // The sites where any supplier has priced an inventory item
@@ -168,13 +174,13 @@ export class SupplierItemPricesDomainRepository extends PrimaryBaseRepository<ty
   // The supplier items set up as preferred for an inventory item at a site
   async findPreferredSupplierItemIdsAtSite(inventoryItemId: string, siteId: string): Promise<string[]> {
     const rows = await this.db
-      .select({ supplierItemId: supplierItemSites.supplierItemId })
-      .from(supplierItemSites)
+      .select({ supplierItemId: supplierSiteItems.supplierItemId })
+      .from(supplierSiteItems)
       .where(
         and(
-          eq(supplierItemSites.inventoryItemId, inventoryItemId),
-          eq(supplierItemSites.siteId, siteId),
-          eq(supplierItemSites.isPreferred, true),
+          eq(supplierSiteItems.inventoryItemId, inventoryItemId),
+          eq(supplierSiteItems.siteId, siteId),
+          eq(supplierSiteItems.isPreferred, true),
         ),
       );
     return rows.map((row) => row.supplierItemId);
@@ -348,31 +354,9 @@ export class SupplierItemPricesDomainRepository extends PrimaryBaseRepository<ty
   // The sites a supplier item is set up at — a price can only be added where the item is carried
   async findCarriedSiteIds(supplierItemId: string): Promise<string[]> {
     const rows = await this.db
-      .select({ siteId: supplierItemSites.siteId })
-      .from(supplierItemSites)
-      .where(eq(supplierItemSites.supplierItemId, supplierItemId));
+      .select({ siteId: supplierSiteItems.siteId })
+      .from(supplierSiteItems)
+      .where(eq(supplierSiteItems.supplierItemId, supplierItemId));
     return rows.map((row) => row.siteId);
-  }
-
-  // A site's price in force today for a supplier's item in a unit, or undefined when the supplier does not carry it
-  // or has no price there
-  async resolvePriceFor(
-    supplierId: string,
-    inventoryItemId: string,
-    uomId: string,
-    siteId: string,
-  ): Promise<SupplierItemPrice | undefined> {
-    const [item] = await this.db
-      .select({ id: supplierItems.id })
-      .from(supplierItems)
-      .where(
-        and(
-          eq(supplierItems.supplierId, supplierId),
-          eq(supplierItems.inventoryItemId, inventoryItemId),
-          eq(supplierItems.uomId, uomId),
-        ),
-      )
-      .limit(1);
-    return item ? this.resolvePrice(item.id, siteId) : undefined;
   }
 }

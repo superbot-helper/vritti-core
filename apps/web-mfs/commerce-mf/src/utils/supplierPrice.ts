@@ -1,4 +1,5 @@
 import { addMonths, format, parseISO, subMonths } from '@vritti/quantum-ui/date-fns';
+import type { LineChartEmptyState } from '@vritti/quantum-ui/LineChart';
 import type { PriceGraphSelection, PriceWindow, SupplierItemPriceRow } from '@/schemas/suppliers';
 
 // Mirrors the backend frozen-row rule: a price whose start date has arrived only accepts a new end date
@@ -56,6 +57,12 @@ export function priceGraphState(selection: PriceGraphSelection) {
     pagination: { limit: 20, offset: 0 },
   };
 }
+
+// What a price chart says inside its frame when no price falls in its window
+export const NO_PRICES_IN_RANGE: LineChartEmptyState = {
+  title: 'No prices in this period',
+  description: 'Widen the date range, or add a price on the Prices tab.',
+};
 
 // The default chart window: two months back to one month ahead, so recent moves and scheduled changes both show
 export function defaultPriceRange(today: string): PriceRange {

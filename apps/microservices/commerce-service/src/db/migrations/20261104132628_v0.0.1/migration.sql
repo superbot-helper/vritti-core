@@ -1,0 +1,1 @@
+ALTER TABLE "commerce"."supplier_items" RENAME COLUMN "lead_time_days" TO "default_lead_time_days";

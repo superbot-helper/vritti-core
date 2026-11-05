@@ -205,26 +205,26 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.parties.id,
     }),
     supplierItems: r.many.supplierItems(),
-    supplierSites: r.many.supplierSites(),
+    supplierEnrollments: r.many.supplierEnrollments(),
     purchaseOrders: r.many.purchaseOrders(),
     goodsReceipts: r.many.goodsReceipts(),
     inventoryItemQuants: r.many.inventoryItemQuants(),
   },
-  supplierSites: {
+  supplierEnrollments: {
     supplier: r.one.suppliers({
-      from: r.supplierSites.supplierId,
+      from: r.supplierEnrollments.supplierId,
       to: r.suppliers.id,
     }),
     taxRegistration: r.one.partyTaxRegistrations({
-      from: r.supplierSites.partyTaxRegistrationId,
+      from: r.supplierEnrollments.partyTaxRegistrationId,
       to: r.partyTaxRegistrations.id,
     }),
     bankAccount: r.one.partyBankAccounts({
-      from: r.supplierSites.partyBankAccountId,
+      from: r.supplierEnrollments.partyBankAccountId,
       to: r.partyBankAccounts.id,
     }),
     orderRelationship: r.one.partyRelationships({
-      from: r.supplierSites.orderRelationshipId,
+      from: r.supplierEnrollments.orderRelationshipId,
       to: r.partyRelationships.id,
     }),
   },
@@ -317,7 +317,7 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.uom.id,
     }),
     prices: r.many.supplierItemPrices(),
-    siteOverrides: r.many.supplierItemSites(),
+    siteItems: r.many.supplierSiteItems(),
   },
   supplierItemPrices: {
     supplierItem: r.one.supplierItems({
@@ -325,9 +325,9 @@ export const relations = defineRelations(schema, (r) => ({
       to: r.supplierItems.id,
     }),
   },
-  supplierItemSites: {
+  supplierSiteItems: {
     supplierItem: r.one.supplierItems({
-      from: r.supplierItemSites.supplierItemId,
+      from: r.supplierSiteItems.supplierItemId,
       to: r.supplierItems.id,
     }),
   },

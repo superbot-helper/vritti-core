@@ -1,69 +1,82 @@
-import type { SiteSupplierListRowDto } from '@domain/supplier-sites/dto/entity/site-supplier-list-row.dto';
-import type { SupplierAtSiteDto } from '@domain/supplier-sites/dto/entity/supplier-at-site.dto';
-import type { SupplierSiteDto } from '@domain/supplier-sites/dto/entity/supplier-site.dto';
-import { EnrollSupplierDto } from '@domain/supplier-sites/dto/request/enroll-supplier.dto';
-import { UpdateSiteEnrollmentDto } from '@domain/supplier-sites/dto/request/update-site-enrollment.dto';
-import { SupplierSitesDomainService } from '@domain/supplier-sites/services/supplier-sites.service';
+import type { SupplierEnrollmentDto } from '@domain/supplier-enrollments/dto/entity/supplier-enrollment.dto';
+import type { SupplierEnrollmentDetailDto } from '@domain/supplier-enrollments/dto/entity/supplier-enrollment-detail.dto';
+import type { SupplierEnrollmentRowDto } from '@domain/supplier-enrollments/dto/entity/supplier-enrollment-row.dto';
+import { CreateSupplierEnrollmentDto } from '@domain/supplier-enrollments/dto/request/create-supplier-enrollment.dto';
+import { SetSupplierEnrollmentActiveDto } from '@domain/supplier-enrollments/dto/request/set-supplier-enrollment-active.dto';
+import { SupplierEnrollmentSelectQueryDto } from '@domain/supplier-enrollments/dto/request/supplier-enrollment-select-query.dto';
+import { UpdateSupplierEnrollmentDto } from '@domain/supplier-enrollments/dto/request/update-supplier-enrollment.dto';
+import { SupplierEnrollmentsDomainService } from '@domain/supplier-enrollments/services/supplier-enrollments.service';
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import type { TableViewState } from '@vritti/api-sdk/data-table';
 import { type NatsHeaders, RpcNatsHeaders, RpcSiteId } from '@vritti/api-sdk/nats';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
-import { SiteSuppliersService } from './services/site-suppliers.service';
+import type { SelectQueryResult } from '@vritti/api-sdk/select';
 
 @Controller()
 export class SiteSuppliersController {
   private readonly logger = new Logger(SiteSuppliersController.name);
 
-  constructor(
-    private readonly service: SupplierSitesDomainService,
-    private readonly siteService: SiteSuppliersService,
-  ) {}
+  constructor(private readonly service: SupplierEnrollmentsDomainService) {}
 
-  // Returns every supplier of the legal entity with the caller site's enrollment status
+  // Returns every supplier of the legal entity with its enrollment at the caller's site
   @MessagePattern({ cmd: 'site.suppliers.table' })
   table(
     @Payload() state: TableViewState,
     @RpcNatsHeaders() headers: NatsHeaders,
-  ): Promise<{ result: SiteSupplierListRowDto[]; count: number }> {
+  ): Promise<{ result: SupplierEnrollmentRowDto[]; count: number }> {
     this.logger.log('site.suppliers.table');
     return this.service.findForSiteTable(headers.legalEntityId, headers.siteId, state);
   }
 
-  // Enrolls a supplier for the caller's site
-  @MessagePattern({ cmd: 'site.suppliers.enroll' })
-  enroll(@Payload() dto: EnrollSupplierDto, @RpcSiteId() siteId: string): Promise<CreateResponseDto<SupplierSiteDto>> {
-    this.logger.log(`site.suppliers.enroll — supplierId: ${dto.supplierId}`);
-    return this.service.enroll(dto.supplierId, siteId, {
-      paymentTermId: dto.paymentTermId,
-      partyTaxRegistrationId: dto.partyTaxRegistrationId,
-      partyBankAccountId: dto.partyBankAccountId ?? null,
-      orderRelationshipId: dto.orderRelationshipId ?? null,
-      orderEmailCommunicationId: dto.orderEmailCommunicationId,
-      orderPhoneCommunicationId: dto.orderPhoneCommunicationId,
-    });
-  }
-
-  // Updates the caller site's enrollment picks and active flag
-  @MessagePattern({ cmd: 'site.suppliers.updateEnrollment' })
-  updateEnrollment(@Payload() dto: UpdateSiteEnrollmentDto, @RpcSiteId() siteId: string): Promise<SuccessResponseDto> {
-    const { supplierId, ...data } = dto;
-    return this.siteService.updateEnrollment(supplierId, siteId, data);
-  }
-
-  // Removes the caller site's enrollment
-  @MessagePattern({ cmd: 'site.suppliers.unenroll' })
-  unenroll(@Payload() data: { supplierId: string }, @RpcSiteId() siteId: string): Promise<SuccessResponseDto> {
-    return this.siteService.unenroll(data.supplierId, siteId);
-  }
-
-  // Returns the caller site's view of a supplier (enrollment + commercial identity)
+  // Returns a supplier's enrollment at the caller's site with its commercial identity, enrolled or not
   @MessagePattern({ cmd: 'site.suppliers.findById' })
   findById(
     @Payload() data: { supplierId: string },
     @RpcNatsHeaders() headers: NatsHeaders,
-  ): Promise<SupplierAtSiteDto> {
+  ): Promise<SupplierEnrollmentDetailDto> {
     this.logger.log(`site.suppliers.findById — supplierId: ${data.supplierId}`);
-    return this.service.findAtSite(headers.legalEntityId, headers.siteId, data.supplierId);
+    return this.service.findDetail(headers.legalEntityId, headers.siteId, data.supplierId);
+  }
+
+  // Enrolls a supplier at the caller's site
+  @MessagePattern({ cmd: 'site.suppliers.create' })
+  create(
+    @Payload() dto: CreateSupplierEnrollmentDto,
+    @RpcSiteId() siteId: string,
+  ): Promise<CreateResponseDto<SupplierEnrollmentDto>> {
+    this.logger.log(`site.suppliers.create — supplierId: ${dto.supplierId}`);
+    return this.service.create({ ...dto, siteId });
+  }
+
+  // Updates a supplier's enrollment picks and flags at the caller's site
+  @MessagePattern({ cmd: 'site.suppliers.update' })
+  update(@Payload() dto: UpdateSupplierEnrollmentDto, @RpcSiteId() siteId: string): Promise<SuccessResponseDto> {
+    this.logger.log(`site.suppliers.update — supplierId: ${dto.supplierId}`);
+    return this.service.update({ ...dto, siteId });
+  }
+
+  // Activates or deactivates a supplier's own enrollment at the caller's site
+  @MessagePattern({ cmd: 'site.suppliers.setActive' })
+  setActive(@Payload() dto: SetSupplierEnrollmentActiveDto, @RpcSiteId() siteId: string): Promise<SuccessResponseDto> {
+    this.logger.log(`site.suppliers.setActive — supplierId: ${dto.supplierId}, isActive: ${dto.isActive}`);
+    return this.service.setActive({ ...dto, siteId });
+  }
+
+  // Removes a supplier's enrollment at the caller's site
+  @MessagePattern({ cmd: 'site.suppliers.delete' })
+  delete(@Payload() data: { supplierId: string }, @RpcSiteId() siteId: string): Promise<SuccessResponseDto> {
+    this.logger.log(`site.suppliers.delete — supplierId: ${data.supplierId}`);
+    return this.service.delete(data.supplierId, siteId);
+  }
+
+  // Returns supplier options for a picker at the caller's site with each one's enrollment status there
+  @MessagePattern({ cmd: 'site.suppliers.select' })
+  select(
+    @Payload() query: SupplierEnrollmentSelectQueryDto,
+    @RpcNatsHeaders() headers: NatsHeaders,
+  ): Promise<SelectQueryResult> {
+    this.logger.log('site.suppliers.select');
+    return this.service.findSuppliersForSelect(headers.legalEntityId, headers.siteId, query);
   }
 }

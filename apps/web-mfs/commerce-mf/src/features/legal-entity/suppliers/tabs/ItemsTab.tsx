@@ -22,11 +22,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SUPPLIER_ITEMS_TABLE_KEY, useSupplierItemsTable } from '@/hooks/legal-entity/suppliers';
 import type { SupplierItemData } from '@/schemas/suppliers';
-import { SupplierSiteFilter } from '@/selectors/supplier-site';
+import { EnrolledSiteFilter } from '@/selectors/enrolled-site';
 import { AddSupplierItemDialog } from '../forms/AddSupplierItemDialog';
-import { SetSupplierItemLeadTimeDialog } from '../forms/SetSupplierItemLeadTimeDialog';
+import { SetSupplierItemDefaultLeadTimeDialog } from '../forms/SetSupplierItemDefaultLeadTimeDialog';
 import { SetSupplierItemMinOrderDialog } from '../forms/SetSupplierItemMinOrderDialog';
-import { SetSupplierItemPreferredDialog } from '../forms/SetSupplierItemPreferredDialog';
+import { SetSupplierSiteItemPreferredDialog } from '../forms/SetSupplierSiteItemPreferredDialog';
 
 interface ItemsTabProps {
   supplierId: string;
@@ -41,7 +41,7 @@ export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
   const addItemDialog = useDialog();
   const setPreferredDialog = useDialog();
   const setMinOrderDialog = useDialog();
-  const setLeadTimeDialog = useDialog();
+  const setDefaultLeadTimeDialog = useDialog();
   const [targetIds, setTargetIds] = useState<string[]>([]);
   const { data: response, isLoading } = useSupplierItemsTable(supplierId);
 
@@ -64,9 +64,9 @@ export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
         cell: ({ row }) => row.original.uomSymbol,
       },
       {
-        accessorKey: 'leadTimeDays',
-        header: 'Lead Time',
-        cell: ({ row }) => (row.original.leadTimeDays != null ? `${row.original.leadTimeDays} d` : '—'),
+        accessorKey: 'defaultLeadTimeDays',
+        header: 'Default Lead Time',
+        cell: ({ row }) => (row.original.defaultLeadTimeDays != null ? `${row.original.defaultLeadTimeDays} d` : '—'),
       },
       {
         accessorKey: 'minOrderQuantity',
@@ -146,8 +146,13 @@ export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
           searchAll: true,
         }}
         filters={[
-          <SupplierSiteFilter key="sites" supplierId={supplierId} />,
-          <ValueFilter key="leadTimeDays" name="leadTimeDays" label="Lead Time (days)" fieldType="number" />,
+          <EnrolledSiteFilter key="sites" supplierId={supplierId} />,
+          <ValueFilter
+            key="defaultLeadTimeDays"
+            name="defaultLeadTimeDays"
+            label="Default Lead Time (days)"
+            fieldType="number"
+          />,
           <ValueFilter key="minOrderQuantity" name="minOrderQuantity" label="Min Order" fieldType="number" />,
           <SelectFilter
             key="isPreferred"
@@ -164,7 +169,7 @@ export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
             <Button
               size="sm"
               variant="outline"
-              permission={LE_SUPPLIERS.sites.items.edit}
+              permission={LE_SUPPLIERS.siteItems.edit}
               startAdornment={<Star className="size-4" />}
               onClick={() => {
                 setTargetIds(rows.map((r) => r.original.id));
@@ -192,10 +197,10 @@ export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
               startAdornment={<Clock className="size-4" />}
               onClick={() => {
                 setTargetIds(rows.map((r) => r.original.id));
-                setLeadTimeDialog.open();
+                setDefaultLeadTimeDialog.open();
               }}
             >
-              Set Lead Time
+              Set Default Lead Time
             </Button>
           </>
         )}
@@ -229,7 +234,7 @@ export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
         title="Set Preferred Supplier"
         description="Choose the sites where this supplier is preferred for the selected items."
         content={(close) => (
-          <SetSupplierItemPreferredDialog
+          <SetSupplierSiteItemPreferredDialog
             supplierId={supplierId}
             supplierItemIds={targetIds}
             onSuccess={() => {
@@ -260,12 +265,12 @@ export const ItemsTab = ({ supplierId }: ItemsTabProps) => {
       />
 
       <Dialog
-        handle={setLeadTimeDialog}
+        handle={setDefaultLeadTimeDialog}
         icon={Clock}
-        title="Set Lead Time"
-        description={`Set the lead time for ${pluralize('selected item', targetIds.length, true)}; sites with their own lead time keep it.`}
+        title="Set Default Lead Time"
+        description={`Set the default lead time for ${pluralize('selected item', targetIds.length, true)}; sites with their own lead time keep it.`}
         content={(close) => (
-          <SetSupplierItemLeadTimeDialog
+          <SetSupplierItemDefaultLeadTimeDialog
             supplierId={supplierId}
             supplierItemIds={targetIds}
             onSuccess={() => {

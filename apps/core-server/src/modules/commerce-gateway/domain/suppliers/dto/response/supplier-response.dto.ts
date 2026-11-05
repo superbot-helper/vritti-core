@@ -35,8 +35,23 @@ export class SupplierResponseDto {
   @ApiPropertyOptional({ description: 'Additional notes', nullable: true })
   notes: string | null;
 
+  @ApiProperty({ description: 'Whether purchasing from this supplier is blocked at every site' })
+  purchasingBlocked: boolean;
+
+  @ApiProperty({ description: 'Whether payments to this supplier are blocked from every site' })
+  paymentBlocked: boolean;
+
   @ApiProperty({ description: 'Whether the supplier is active' })
   isActive: boolean;
+
+  @ApiPropertyOptional({
+    description: "The party's tax ID (PAN, TIN, EIN, UTR or ABN) from its identifiers, when on record; detail only",
+    nullable: true,
+  })
+  partyTaxId?: string | null;
+
+  @ApiPropertyOptional({ description: 'The identifier type of partyTaxId; detail only', nullable: true })
+  partyTaxIdType?: string | null;
 
   @ApiProperty({ description: 'ISO timestamp of creation' })
   createdAt: string;

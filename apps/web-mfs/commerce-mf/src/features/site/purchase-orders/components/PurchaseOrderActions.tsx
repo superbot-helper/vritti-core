@@ -135,7 +135,7 @@ export const PurchaseOrderActions = ({ po, poItemIds }: PurchaseOrderActionsProp
     [po],
   );
 
-  const isCrossCurrency = !!workspaceCurrency && po.currencyCode !== workspaceCurrency;
+  const isCrossCurrency = po.currencyCode !== workspaceCurrency;
   const isPreReceipt = po.status === 'DRAFT' || po.status === 'SENT' || po.status === 'CONFIRMED';
   const canChangeExchangeRate = isCrossCurrency && isPreReceipt && !po.goodsReceiptExists;
   const canChangeConversionRate = isPreReceipt && !po.goodsReceiptExists && Object.keys(po.conversionRates).length > 0;

@@ -56,7 +56,7 @@ const AddLotForm = ({
           permission={SITE_INVENTORY_ITEMS.mrp.edit}
           label="MRP"
           description="Printed MRP per primary unit for this batch"
-          currencyCode={workspaceCurrency ?? undefined}
+          currencyCode={workspaceCurrency}
         />
       )}
 

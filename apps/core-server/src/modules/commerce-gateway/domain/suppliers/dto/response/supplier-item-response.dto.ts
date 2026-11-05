@@ -23,10 +23,10 @@ export class SupplierItemResponseDto {
   minOrderQuantity: number | null;
 
   @ApiPropertyOptional({
-    description: 'Days from order to delivery, which every site follows unless it sets its own',
+    description: 'Default days from order to delivery, which every site follows unless it sets its own',
     nullable: true,
   })
-  leadTimeDays: number | null;
+  defaultLeadTimeDays: number | null;
 
   @ApiProperty({ description: 'Number of sites that carry this item' })
   siteCount: number;

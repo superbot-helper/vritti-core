@@ -1,0 +1,2 @@
+ALTER TABLE "core"."media" ALTER COLUMN "status" SET DEFAULT 'PENDING'::"core"."media_status";--> statement-breakpoint
+ALTER TABLE "core"."organizations" ALTER COLUMN "plan" SET DEFAULT 'FREE'::"core"."org_plan";

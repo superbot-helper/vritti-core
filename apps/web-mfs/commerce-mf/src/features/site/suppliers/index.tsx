@@ -1,9 +1,11 @@
 import { Suspense } from 'react';
 import type { RouteObject } from 'react-router-dom';
-import { SupplierSiteDetailSkeleton } from '@/components/suppliers/SupplierSiteDetailSkeleton';
+import { SupplierQuotationPageSkeleton } from '@/components/suppliers/quotations/SupplierQuotationPageSkeleton';
+import { SupplierEnrollmentDetailSkeleton } from '@/components/suppliers/SupplierEnrollmentDetailSkeleton';
 import { SupplierSiteItemDetailSkeleton } from '@/components/suppliers/SupplierSiteItemDetailSkeleton';
+import { SupplierQuotationPage } from './quotations/SupplierQuotationPage';
 import { SupplierDetailPage } from './SupplierDetailPage';
-import { SupplierItemDetailPage } from './SupplierItemDetailPage';
+import { SupplierSiteItemDetailPage } from './SupplierSiteItemDetailPage';
 import { SuppliersPage } from './SuppliersPage';
 
 const routes: RouteObject[] = [
@@ -11,16 +13,24 @@ const routes: RouteObject[] = [
   {
     path: ':supplierSlug',
     element: (
-      <Suspense fallback={<SupplierSiteDetailSkeleton />}>
+      <Suspense fallback={<SupplierEnrollmentDetailSkeleton />}>
         <SupplierDetailPage />
       </Suspense>
     ),
   },
   {
-    path: ':supplierSlug/:itemSlug',
+    path: ':supplierSlug/quotations/:quotationSlug',
+    element: (
+      <Suspense fallback={<SupplierQuotationPageSkeleton />}>
+        <SupplierQuotationPage />
+      </Suspense>
+    ),
+  },
+  {
+    path: ':supplierSlug/site-items/:itemSlug',
     element: (
       <Suspense fallback={<SupplierSiteItemDetailSkeleton />}>
-        <SupplierItemDetailPage />
+        <SupplierSiteItemDetailPage />
       </Suspense>
     ),
   },

@@ -1,7 +1,5 @@
 import { LE_INVENTORY_ITEMS } from '@vritti/commerce-permissions/inventory-items';
-import { Empty } from '@vritti/quantum-ui/Empty';
 import { SelectFilter } from '@vritti/quantum-ui/Select';
-import { Store } from 'lucide-react';
 import type React from 'react';
 import { Suspense } from 'react';
 import { ContextFilterSkeleton } from '@/components/ContextFilterSkeleton';
@@ -41,17 +39,12 @@ export const PriceGraphTab: React.FC<PriceGraphTabProps> = ({ inventoryItemId })
           />
         </Suspense>
       }
-      emptyState={
-        <Empty
-          icon={<Store className="size-6" />}
-          title={siteId ? 'No prices in this period' : 'No prices yet'}
-          description={
-            siteId
-              ? 'No supplier has a price for this item at the selected site in these dates. Widen the date range.'
-              : "No supplier has priced this item at any of this legal entity's sites."
-          }
-        />
-      }
+      emptyState={{
+        title: siteId ? 'No prices in this period' : 'No prices yet',
+        description: siteId
+          ? 'No supplier has a price for this item at the selected site in these dates. Widen the date range.'
+          : "No supplier has priced this item at any of this legal entity's sites.",
+      }}
     />
   );
 };

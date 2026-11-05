@@ -1,7 +1,6 @@
 import { AddSupplierItemDto } from '@domain/supplier-items/dto/request/add-supplier-item.dto';
-import { BulkSetSupplierItemLeadTimeDto } from '@domain/supplier-items/dto/request/bulk-set-supplier-item-lead-time.dto';
+import { BulkSetSupplierItemDefaultLeadTimeDto } from '@domain/supplier-items/dto/request/bulk-set-supplier-item-default-lead-time.dto';
 import { BulkSetSupplierItemMinOrderDto } from '@domain/supplier-items/dto/request/bulk-set-supplier-item-min-order.dto';
-import { BulkSetSupplierItemPreferredDto } from '@domain/supplier-items/dto/request/bulk-set-supplier-item-preferred.dto';
 import { UpdateSupplierItemDto } from '@domain/supplier-items/dto/request/update-supplier-item.dto';
 import { SupplierItemsDomainService } from '@domain/supplier-items/services/supplier-items.service';
 import type { SupplierItemDetailDto, SupplierItemDto } from '@domain/suppliers/dto/entity/supplier.dto';
@@ -55,21 +54,15 @@ export class SuppliersItemsController {
     return this.domainService.unlinkItem(data.supplierId, data.supplierItemId);
   }
 
-  @MessagePattern({ cmd: 'le.suppliers.bulkSetItemPreferred' })
-  bulkSetItemPreferred(@Payload() dto: BulkSetSupplierItemPreferredDto): Promise<SuccessResponseDto> {
-    this.logger.log('suppliers.bulkSetItemPreferred');
-    return this.domainService.bulkSetPreferred(dto);
-  }
-
   @MessagePattern({ cmd: 'le.suppliers.bulkSetItemMinOrder' })
   bulkSetItemMinOrder(@Payload() dto: BulkSetSupplierItemMinOrderDto): Promise<SuccessResponseDto> {
     this.logger.log('suppliers.bulkSetItemMinOrder');
     return this.domainService.bulkSetMinOrder(dto);
   }
 
-  @MessagePattern({ cmd: 'le.suppliers.bulkSetItemLeadTime' })
-  bulkSetItemLeadTime(@Payload() dto: BulkSetSupplierItemLeadTimeDto): Promise<SuccessResponseDto> {
-    this.logger.log('suppliers.bulkSetItemLeadTime');
-    return this.domainService.bulkSetLeadTime(dto);
+  @MessagePattern({ cmd: 'le.suppliers.bulkSetItemDefaultLeadTime' })
+  bulkSetItemDefaultLeadTime(@Payload() dto: BulkSetSupplierItemDefaultLeadTimeDto): Promise<SuccessResponseDto> {
+    this.logger.log('suppliers.bulkSetItemDefaultLeadTime');
+    return this.domainService.bulkSetDefaultLeadTime(dto);
   }
 }

@@ -1,18 +1,26 @@
 import { Button } from '@vritti/quantum-ui/Button';
 import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form, FormSection } from '@vritti/quantum-ui/Form';
+import { useWorkspaceCurrency } from '@vritti/quantum-ui/hooks';
+import { RadioGroup } from '@vritti/quantum-ui/RadioGroup';
 import { Switch } from '@vritti/quantum-ui/Switch';
 import { TextArea } from '@vritti/quantum-ui/TextArea';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useCreateSupplier } from '@/hooks/legal-entity/suppliers';
-import { type CreateSupplierFormData, createSupplierSchema } from '@/schemas/suppliers';
+import {
+  type CreateSupplierFormData,
+  createSupplierSchema,
+  SUPPLIER_PARTY_TYPE_OPTIONS,
+  type SupplierPartyType,
+} from '@/schemas/suppliers';
 import { CompanySelector } from '@/selectors/company';
 import { CurrencySelector } from '@/selectors/currency';
 import { PaymentTermSelector } from '@/selectors/payment-term';
+import { PersonSelector } from '@/selectors/person';
 
 interface AddSupplierDialogProps {
   onSuccess: () => void;
@@ -20,12 +28,13 @@ interface AddSupplierDialogProps {
 }
 
 export const AddSupplierDialog: React.FC<AddSupplierDialogProps> = ({ onSuccess, onCancel }) => {
+  const workspaceCurrency = useWorkspaceCurrency();
   const form = useForm<CreateSupplierFormData>({
     resolver: zodResolver(createSupplierSchema),
     defaultValues: {
       code: '',
-      currencyCodes: ['INR'],
-      currencyCode: 'INR',
+      currencyCodes: [workspaceCurrency],
+      currencyCode: workspaceCurrency,
       notes: '',
       purchasingBlocked: false,
       paymentBlocked: false,
@@ -33,6 +42,8 @@ export const AddSupplierDialog: React.FC<AddSupplierDialogProps> = ({ onSuccess,
     },
   });
 
+  // Which party picker shows; UI state only, the API takes just the party
+  const [partyType, setPartyType] = useState<SupplierPartyType>('COMPANY');
   const createMutation = useCreateSupplier({ onSuccess });
   const currencyCodes = useWatch({ control: form.control, name: 'currencyCodes' });
   const defaultCurrency = useWatch({ control: form.control, name: 'currencyCode' });
@@ -62,8 +73,24 @@ export const AddSupplierDialog: React.FC<AddSupplierDialogProps> = ({ onSuccess,
       })}
     >
       <div className="space-y-6">
-        <FormSection title="Company" contentClassName="block">
-          <CompanySelector name="partyId" />
+        <FormSection title="Supplier" contentClassName="block">
+          <div className="flex flex-col gap-4">
+            <RadioGroup
+              label="Supplier Type"
+              orientation="horizontal"
+              options={SUPPLIER_PARTY_TYPE_OPTIONS}
+              value={partyType}
+              onValueChange={(value) => {
+                setPartyType(value === 'PERSON' ? 'PERSON' : 'COMPANY');
+                form.resetField('partyId');
+              }}
+            />
+            {partyType === 'COMPANY' ? (
+              <CompanySelector name="partyId" label="Supplier" />
+            ) : (
+              <PersonSelector name="partyId" label="Supplier" />
+            )}
+          </div>
         </FormSection>
 
         <FormSection title="Commercial Terms" contentClassName="block">

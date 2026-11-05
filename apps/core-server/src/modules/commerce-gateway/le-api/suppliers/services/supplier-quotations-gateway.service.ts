@@ -39,19 +39,19 @@ export class SupplierQuotationsGatewayService {
   }
 
   // Returns a supplier's quotations posted to one of the LE's sites, for the site view's table
-  async findForSiteTable(
+  async findEnrollmentQuotationsTable(
     supplierId: string,
     siteId: string,
     userId: string,
   ): Promise<SupplierQuotationTableResponseDto> {
-    this.logger.log(`le.suppliers.quotations.table — supplierId: ${supplierId}, siteId: ${siteId}`);
+    this.logger.log(`le.suppliers.enrollments.quotations.table — supplierId: ${supplierId}, siteId: ${siteId}`);
     const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
       userId,
       `commerce-le-supplier-${supplierId}-site-${siteId}-quotations`,
     );
     const { result, count } = await this.nats.send<{ result: SupplierQuotationResponseDto[]; count: number }>(
       'commerce',
-      'le.suppliers.quotations.table',
+      'le.suppliers.enrollments.quotations.table',
       { supplierId, siteId, ...state },
     );
     return { result, count, state, activeViewId };

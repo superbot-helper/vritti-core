@@ -1,5 +1,6 @@
 import { InventoryItemMrpsDomainService } from '@domain/inventory-item-mrps/services/inventory-item-mrps.service';
 import { InventoryItemsDomainService } from '@domain/inventory-items/services/inventory-items.service';
+import { SupplierEnrollmentsDomainService } from '@domain/supplier-enrollments/services/supplier-enrollments.service';
 import {
   type QuotationPriceLine,
   SupplierItemPricesDomainService,
@@ -14,7 +15,6 @@ import type { CreateSupplierQuotationDto } from '@domain/supplier-quotations/dto
 import type { UpdateSupplierQuotationDto } from '@domain/supplier-quotations/dto/request/update-supplier-quotation.dto';
 import type { UpdateSupplierQuotationItemDto } from '@domain/supplier-quotations/dto/request/update-supplier-quotation-item.dto';
 import { SupplierQuotationsDomainService } from '@domain/supplier-quotations/services/supplier-quotations.service';
-import { SupplierSitesDomainService } from '@domain/supplier-sites/services/supplier-sites.service';
 import { SuppliersDomainService } from '@domain/suppliers/services/suppliers.service';
 import { Injectable, Logger } from '@nestjs/common';
 import type { TableViewState } from '@vritti/api-sdk/data-table';
@@ -35,18 +35,14 @@ export class LeSupplierQuotationsService {
     private readonly quotations: SupplierQuotationsDomainService,
     private readonly supplierItems: SupplierItemsDomainService,
     private readonly supplierItemPrices: SupplierItemPricesDomainService,
-    private readonly supplierSites: SupplierSitesDomainService,
+    private readonly supplierEnrollments: SupplierEnrollmentsDomainService,
     private readonly suppliers: SuppliersDomainService,
     private readonly inventoryItems: InventoryItemsDomainService,
     private readonly mrps: InventoryItemMrpsDomainService,
   ) {}
 
-  table(
-    supplierId: string,
-    state: TableViewState,
-    siteId?: string,
-  ): Promise<{ result: SupplierQuotationDto[]; count: number }> {
-    return this.quotations.findForSupplierTable(supplierId, state, siteId);
+  table(supplierId: string, state: TableViewState): Promise<{ result: SupplierQuotationDto[]; count: number }> {
+    return this.quotations.findForSupplierTable(supplierId, state);
   }
 
   findById(id: string): Promise<SupplierQuotationDetailDto> {
@@ -135,7 +131,7 @@ export class LeSupplierQuotationsService {
         detail: 'Add at least one line before posting the quotation.',
       });
     }
-    if (!(await this.supplierSites.isEnrolled(quotation.supplierId, siteId))) {
+    if (!(await this.supplierEnrollments.isEnrolled(quotation.supplierId, siteId))) {
       throw new BadRequestException({
         label: 'Supplier Not Enrolled',
         detail: 'Enroll the supplier at this site before posting the quotation to it.',

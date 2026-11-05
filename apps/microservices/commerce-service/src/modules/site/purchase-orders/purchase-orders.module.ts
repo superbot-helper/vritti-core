@@ -2,9 +2,9 @@ import { GoodsReceiptsDomainModule } from '@domain/goods-receipts/goods-receipts
 import { InventoryItemSitesDomainModule } from '@domain/inventory-item-sites/inventory-item-sites.module';
 import { PurchaseOrderItemsDomainModule } from '@domain/purchase-order-items/purchase-order-items.module';
 import { PurchaseOrdersDomainModule } from '@domain/purchase-orders/purchase-orders.module';
+import { SupplierEnrollmentsDomainModule } from '@domain/supplier-enrollments/supplier-enrollments.module';
 import { SupplierItemPricesDomainModule } from '@domain/supplier-item-prices/supplier-item-prices.module';
 import { SupplierItemsDomainModule } from '@domain/supplier-items/supplier-items.module';
-import { SupplierSitesDomainModule } from '@domain/supplier-sites/supplier-sites.module';
 import { SuppliersDomainModule } from '@domain/suppliers/suppliers.module';
 import { UomConversionsDomainModule } from '@domain/uom-conversions/uom-conversions.module';
 import { Module } from '@nestjs/common';
@@ -23,7 +23,7 @@ import { PurchaseOrdersService } from './root/services/purchase-orders-root.serv
     SuppliersDomainModule,
     SupplierItemsDomainModule,
     SupplierItemPricesDomainModule,
-    SupplierSitesDomainModule,
+    SupplierEnrollmentsDomainModule,
     UomConversionsDomainModule,
   ],
   controllers: [PurchaseOrdersRootController, PurchaseOrdersItemsController, PurchaseOrdersGoodsReceiptsController],

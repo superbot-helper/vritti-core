@@ -93,27 +93,6 @@ export class SupplierItemPricesDomainService {
     private readonly repository: SupplierItemPricesDomainRepository,
   ) {}
 
-  // Returns a site's price prefill for a (supplier, item, uom)
-  async findItemPrice(
-    supplierId: string,
-    inventoryItemId: string,
-    uomId: string,
-    siteId: string,
-  ): Promise<{
-    unitPrice: CurrencyAmountDto | null;
-    schemeBuyQty: number | null;
-    schemeFreeQty: number | null;
-    taxInclusive: boolean;
-  }> {
-    const resolved = await this.repository.resolvePriceFor(supplierId, inventoryItemId, uomId, siteId);
-    return {
-      unitPrice: resolved ? CurrencyAmountDto.from(resolved.unitPrice, resolved.currencyCode) : null,
-      schemeBuyQty: resolved?.schemeBuyQty ?? null,
-      schemeFreeQty: resolved?.schemeFreeQty ?? null,
-      taxInclusive: resolved?.taxInclusive ?? false,
-    };
-  }
-
   // Returns a site's price row effective on a date, or null when unpriced
   async resolvePrice(supplierItemId: string, siteId: string, onDate?: string): Promise<SupplierItemPriceDto | null> {
     await this.requirePriceContext(supplierItemId);
@@ -127,10 +106,10 @@ export class SupplierItemPricesDomainService {
     return row ? SupplierItemPriceDto.from(row) : null;
   }
 
-  // Returns the paginated price timeline of a supplier item — one site's rows, or every site's when none is given
+  // Returns the paginated price timeline of a supplier item at one site
   async findPricesForTable(
     supplierItemId: string,
-    siteId: string | null,
+    siteId: string,
     state: TableViewState,
   ): Promise<{ result: SupplierItemPriceDto[]; count: number }> {
     await this.requirePriceContext(supplierItemId);
@@ -172,11 +151,11 @@ export class SupplierItemPricesDomainService {
     return { result: result.map((row) => ItemSupplierPriceDto.fromItemRow(row)), count };
   }
 
-  // Every price window of a supplier item grouped by site, with each site's price in force, the one it replaced and
-  // the next scheduled — unpaged, for charts; RLS limits a site workspace to its own rows
+  // A supplier item's price windows at the given sites within a date range, grouped by site, with each site's price in
+  // force, the one it replaced and the next scheduled — unpaged, for charts; RLS limits a site workspace to its own rows
   async findPriceHistory(
     supplierItemId: string,
-    options: { siteIds?: string[]; from?: string; to?: string },
+    options: { siteIds: string[]; from: string; to: string },
   ): Promise<SupplierItemPriceHistoryDto> {
     await this.requirePriceContext(supplierItemId);
 
@@ -190,6 +169,11 @@ export class SupplierItemPricesDomainService {
     return {
       sites: [...bySite].map(([siteId, windows]) => SitePriceHistoryDto.from(siteId, windows, today)),
     };
+  }
+
+  // The sites where a supplier item has prices
+  findSiteIdsWithSupplierItemPrices(supplierItemId: string): Promise<string[]> {
+    return this.repository.findSiteIdsWithSupplierItemPrices(supplierItemId);
   }
 
   // The sites where any supplier has priced an inventory item

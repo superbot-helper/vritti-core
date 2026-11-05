@@ -1,29 +1,29 @@
-import {
-  type SiteEnrollmentStatus,
-  SiteEnrollmentStatusValues,
-} from '@domain/supplier-sites/dto/entity/site-supplier-list-row.dto';
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import { and, asc, desc, eq, getColumns, inArray, notInArray, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import type { AnyPgColumn } from '@vritti/api-sdk/drizzle-pg-core';
 import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import { pluralize } from '@vritti/api-sdk/pluralize';
 import { type FindForSelectConfig, type SelectQueryResult } from '@vritti/api-sdk/select';
 import {
+  type PartyIdentifierType,
   type PartyLicense,
   type PartyTaxRegistration,
   type PartyType,
   PurchaseOrderStatusValues,
   parties,
+  partyIdentifiers,
   partyLicenses,
   partyTaxRegistrations,
   paymentTerms,
   purchaseOrders,
   type Supplier,
+  supplierEnrollments,
   supplierItemPrices,
   supplierItems,
   supplierQuotations,
-  supplierSites,
   suppliers,
+  TaxIdIdentifierTypes,
 } from '@/db/schema';
 
 // Narrows a supplier pick list to the suppliers with a price for an inventory item at a site within a date window
@@ -34,10 +34,23 @@ export interface PricedItemAtSite {
   to?: string;
 }
 
+// One field of the party's tax ID — the primary active identifier of a tax-ID type — or null when it has none on record
+const partyTaxIdField = <T>(column: AnyPgColumn) =>
+  sql<T | null>`(
+    SELECT ${column} FROM ${partyIdentifiers}
+    WHERE ${partyIdentifiers.partyId} = ${suppliers.partyId}
+      AND ${inArray(partyIdentifiers.idType, TaxIdIdentifierTypes)}
+      AND ${partyIdentifiers.isActive} = true
+    ORDER BY ${partyIdentifiers.isPrimary} DESC, ${partyIdentifiers.createdAt} ASC
+    LIMIT 1
+  )`;
+
 export type SupplierWithParty = Supplier & { partyName: string; defaultPaymentTermName: string };
 
 export type SupplierDetailRow = SupplierWithParty & {
   partyType: PartyType;
+  partyTaxId: string | null;
+  partyTaxIdType: PartyIdentifierType | null;
   registrations: PartyTaxRegistration[];
   licenses: PartyLicense[];
   enrolledSiteCount: number;
@@ -58,22 +71,13 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
     super(database, suppliers);
   }
 
-  // Paginated supplier options; given a site, each option carries its enrollment status there (`enrollmentStatus`
-  // additional) and `enrollmentStatus` narrows to enrolled or not-enrolled suppliers
+  // Paginated supplier options; activeOnly drops inactive suppliers and pricedItem keeps those priced at a site
   override findForSelect(
     config: FindForSelectConfig,
-    options?: { siteId?: string; enrollmentStatus?: SiteEnrollmentStatus; pricedItem?: PricedItemAtSite },
+    options?: { pricedItem?: PricedItemAtSite; activeOnly?: boolean },
   ): Promise<SelectQueryResult> {
-    const siteId = options?.siteId;
-    const enrolledAtSite = siteId
-      ? sql`EXISTS (SELECT 1 FROM ${supplierSites} ss WHERE ss.supplier_id = ${suppliers.id} AND ss.site_id = ${siteId}::uuid)`
-      : undefined;
     const conditions: SQL[] = [];
-    if (enrolledAtSite && options?.enrollmentStatus) {
-      conditions.push(
-        options.enrollmentStatus === SiteEnrollmentStatusValues.ENROLLED ? enrolledAtSite : sql`NOT ${enrolledAtSite}`,
-      );
-    }
+    if (options?.activeOnly) conditions.push(eq(suppliers.isActive, true));
     const priced = options?.pricedItem;
     if (priced) {
       conditions.push(sql`EXISTS (
@@ -91,11 +95,6 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
       ...config,
       joins: [{ table: parties, on: eq(parties.id, suppliers.partyId), type: 'inner' }],
       conditions,
-      additionalExpressions: enrolledAtSite
-        ? {
-            enrollmentStatus: sql<SiteEnrollmentStatus>`CASE WHEN ${enrolledAtSite} THEN ${SiteEnrollmentStatusValues.ENROLLED} ELSE ${SiteEnrollmentStatusValues.NOT_ENROLLED} END`,
-          }
-        : undefined,
     });
   }
 
@@ -144,10 +143,12 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
         ...getColumns(suppliers),
         partyName: parties.displayName,
         partyType: parties.partyType,
+        partyTaxId: partyTaxIdField<string>(partyIdentifiers.idValue),
+        partyTaxIdType: partyTaxIdField<PartyIdentifierType>(partyIdentifiers.idType),
         defaultPaymentTermName: paymentTerms.name,
         enrolledSiteCount: sql<number>`(
-          SELECT count(*)::int FROM ${supplierSites} ss
-          WHERE ss.supplier_id = ${suppliers}.id
+          SELECT count(*)::int FROM ${supplierEnrollments} se
+          WHERE se.supplier_id = ${suppliers}.id
         )`.mapWith(Number),
         itemCount: sql<number>`(
           SELECT count(*)::int FROM ${supplierItems} si
@@ -183,8 +184,7 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
   }
 
   // Rejects a default payment term that is not a published term of the caller's organization
-  async assertPaymentTermUsable(id: string | null | undefined): Promise<void> {
-    if (!id) return;
+  async assertDefaultPaymentTermUsable(id: string): Promise<void> {
     const [term] = await this.db
       .select({ isPublished: paymentTerms.isPublished })
       .from(paymentTerms)
@@ -192,7 +192,7 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
       .limit(1);
     if (term?.isPublished === true) return;
     throw new BadRequestException({
-      label: 'Invalid Payment Term',
+      label: 'Invalid Default Payment Term',
       detail: 'The selected default payment term does not exist or is still a draft.',
       errors: [{ field: 'defaultPaymentTermId', message: 'Pick a published payment term' }],
     });
@@ -203,7 +203,7 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
     if (!(await this.exists(eq(suppliers.partyId, partyId)))) return;
     throw new ConflictException({
       label: 'Already A Supplier',
-      detail: 'This company is already a supplier for this legal entity.',
+      detail: 'This party is already a supplier for this legal entity.',
       errors: [{ field: 'partyId', message: 'Already a supplier' }],
     });
   }
@@ -302,6 +302,16 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
     const rows = await this.db
       .update(suppliers)
       .set({ isActive })
+      .where(inArray(suppliers.id, ids))
+      .returning({ id: suppliers.id });
+    return rows.length;
+  }
+
+  // Sets the default payment term of suppliers by ID; returns how many changed
+  async bulkSetDefaultPaymentTerm(ids: string[], defaultPaymentTermId: string): Promise<number> {
+    const rows = await this.db
+      .update(suppliers)
+      .set({ defaultPaymentTermId })
       .where(inArray(suppliers.id, ids))
       .returning({ id: suppliers.id });
     return rows.length;

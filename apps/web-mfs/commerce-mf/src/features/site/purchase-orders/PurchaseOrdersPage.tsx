@@ -21,7 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { PURCHASE_ORDERS_TABLE_KEY, usePurchaseOrdersTable } from '@/hooks/site/purchase-orders';
 import type { PurchaseOrderData } from '@/schemas/purchase-orders';
 import { purchaseOrderStatusConfig } from '@/schemas/purchase-orders';
-import { SupplierFilter } from '@/selectors/supplier';
+import { SiteSupplierFilter } from '@/selectors/site-supplier';
 import { CreatePurchaseOrderDialog } from './forms/CreatePurchaseOrderDialog';
 
 export const PurchaseOrdersPage = () => {
@@ -122,7 +122,7 @@ export const PurchaseOrdersPage = () => {
             multiple
             options={Object.entries(purchaseOrderStatusConfig).map(([value, { label }]) => ({ label, value }))}
           />,
-          <SupplierFilter key="supplierId" />,
+          <SiteSupplierFilter key="supplierId" />,
         ]}
         toolbarActions={{
           actions: (

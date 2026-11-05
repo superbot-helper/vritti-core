@@ -25,7 +25,7 @@ export class SitePriceHistoryDto {
   next: PriceWindowDto | null;
   windows: PriceWindowDto[];
 
-  // Builds one site's history from its windows (ascending by validFrom) as of a calendar day
+  // Builds one site's price history from its windows (ascending by validFrom) as of a calendar day
   static from(siteId: string, windows: PriceWindowDto[], today: string): SitePriceHistoryDto {
     const dto = new SitePriceHistoryDto();
     dto.siteId = siteId;

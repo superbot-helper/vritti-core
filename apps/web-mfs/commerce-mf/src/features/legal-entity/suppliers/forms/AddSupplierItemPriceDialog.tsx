@@ -16,7 +16,7 @@ import { useAddSupplierItemPrice } from '@/hooks/legal-entity/suppliers';
 import { type AddLeSupplierItemPriceFormData, addLeSupplierItemPriceSchema } from '@/schemas/suppliers';
 import { CurrencySelector } from '@/selectors/currency';
 import { InventoryItemMrpSelector } from '@/selectors/inventory-item-mrp';
-import { SupplierItemSiteSelector } from '@/selectors/supplier-item-site';
+import { SupplierSiteItemSelector } from '@/selectors/supplier-site-item';
 
 interface AddSupplierItemPriceDialogProps {
   supplierId: string;
@@ -81,7 +81,7 @@ export const AddSupplierItemPriceDialog: React.FC<AddSupplierItemPriceDialogProp
     >
       <FormSection title="Price" contentClassName="block">
         <div className="flex flex-col gap-4">
-          <SupplierItemSiteSelector
+          <SupplierSiteItemSelector
             name="siteIds"
             supplierId={supplierId}
             itemId={itemId}

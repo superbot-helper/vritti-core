@@ -42,7 +42,7 @@ export class AddSupplierItemDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  leadTimeDays?: number;
+  defaultLeadTimeDays?: number;
 
   @ApiProperty({ type: [String], description: 'Enrolled sites to set the item up at' })
   @IsArray()

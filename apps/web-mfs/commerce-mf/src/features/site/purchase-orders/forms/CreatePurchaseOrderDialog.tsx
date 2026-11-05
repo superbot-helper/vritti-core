@@ -14,10 +14,9 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useCreatePurchaseOrder } from '@/hooks/site/purchase-orders';
-import { useSiteId } from '@/hooks/site/useSiteId';
 import { type CreatePurchaseOrderFormData, createPurchaseOrderSchema } from '@/schemas/purchase-orders';
 import { CurrencySelector } from '@/selectors/currency';
-import { SupplierSelector } from '@/selectors/supplier';
+import { SiteSupplierSelector } from '@/selectors/site-supplier';
 
 interface CreatePurchaseOrderDialogProps {
   onSuccess: () => void;
@@ -32,7 +31,6 @@ const EXCHANGE_RATE_TYPE_OPTIONS = [
 export const CreatePurchaseOrderDialog: React.FC<CreatePurchaseOrderDialogProps> = ({ onSuccess, onCancel }) => {
   const workspaceCurrency = useWorkspaceCurrency();
 
-  const siteId = useSiteId();
   const timeZone = useWorkspaceTimeZone();
   const form = useForm<CreatePurchaseOrderFormData>({
     resolver: zodResolver(createPurchaseOrderSchema),
@@ -50,7 +48,7 @@ export const CreatePurchaseOrderDialog: React.FC<CreatePurchaseOrderDialogProps>
   const currencyCode = form.watch('currencyCode');
   const exchangeRateType = form.watch('exchangeRateType');
   const minExpectedDate = orderDate ? parse(orderDate, 'yyyy-MM-dd', new Date()) : undefined;
-  const needsExchangeRate = !!currencyCode && !!workspaceCurrency && currencyCode !== workspaceCurrency;
+  const needsExchangeRate = !!currencyCode && currencyCode !== workspaceCurrency;
 
   const createMutation = useCreatePurchaseOrder({ onSuccess });
 
@@ -85,11 +83,7 @@ export const CreatePurchaseOrderDialog: React.FC<CreatePurchaseOrderDialogProps>
         notes: data.notes,
       })}
     >
-      <SupplierSelector
-        name="supplierId"
-        params={{ siteId, enrollmentStatus: 'ENROLLED' }}
-        onOptionSelect={handleSupplierSelect}
-      />
+      <SiteSupplierSelector name="supplierId" enrollmentStatus="ENROLLED" onOptionSelect={handleSupplierSelect} />
       <CurrencySelector
         name="currencyCode"
         includeCodes={supplierCurrencies}

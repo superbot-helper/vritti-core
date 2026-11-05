@@ -39,7 +39,7 @@ export class AddSupplierItemDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  leadTimeDays?: number;
+  defaultLeadTimeDays?: number;
 
   @IsArray()
   @ArrayNotEmpty()

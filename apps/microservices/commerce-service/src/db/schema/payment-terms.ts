@@ -41,8 +41,8 @@ export const paymentTerms = commerceSchema.table(
 export type PaymentTerm = typeof paymentTerms.$inferSelect;
 export type NewPaymentTerm = typeof paymentTerms.$inferInsert;
 
-export const paymentTermLines = commerceSchema.table(
-  'payment_term_lines',
+export const paymentTermRules = commerceSchema.table(
+  'payment_term_rules',
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     organizationId: organizationIdColumn,
@@ -60,11 +60,11 @@ export const paymentTermLines = commerceSchema.table(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    unique('uq_payment_term_lines_term_due_days').on(table.paymentTermId, table.dueDays),
-    check('payment_term_lines_percent_chk', sql`${table.percent} > 0 AND ${table.percent} <= 100`),
-    check('payment_term_lines_due_days_chk', sql`${table.dueDays} >= 0`),
+    unique('uq_payment_term_rules_term_due_days').on(table.paymentTermId, table.dueDays),
+    check('payment_term_rules_percent_chk', sql`${table.percent} > 0 AND ${table.percent} <= 100`),
+    check('payment_term_rules_due_days_chk', sql`${table.dueDays} >= 0`),
     check(
-      'payment_term_lines_discount_chk',
+      'payment_term_rules_discount_chk',
       sql`(${table.discountPercent} IS NULL) = (${table.discountDays} IS NULL)
         AND (${table.discountPercent} IS NULL OR (${table.discountPercent} > 0 AND ${table.discountPercent} < 100))
         AND (${table.discountDays} IS NULL OR (${table.discountDays} >= 0 AND ${table.discountDays} <= ${table.dueDays}))`,
@@ -73,5 +73,5 @@ export const paymentTermLines = commerceSchema.table(
   ],
 );
 
-export type PaymentTermLine = typeof paymentTermLines.$inferSelect;
-export type NewPaymentTermLine = typeof paymentTermLines.$inferInsert;
+export type PaymentTermRule = typeof paymentTermRules.$inferSelect;
+export type NewPaymentTermRule = typeof paymentTermRules.$inferInsert;

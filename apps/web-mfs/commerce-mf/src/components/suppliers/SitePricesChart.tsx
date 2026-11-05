@@ -10,15 +10,17 @@ interface SitePricesChartProps {
   currencyCode: string;
   range: PriceRange;
   today: string;
+  isLoading?: boolean;
 }
 
 // Every given site's price for one supplier item, a line per site
-export const SitePricesChart: React.FC<SitePricesChartProps> = ({ sites, currencyCode, range, today }) => (
+export const SitePricesChart: React.FC<SitePricesChartProps> = ({ sites, currencyCode, range, today, isLoading }) => (
   <PriceSeriesChart
     series={sites.map((site) => ({ ...site, id: site.siteId, label: site.siteName }))}
     currencyCode={currencyCode}
     noun="site"
     range={range}
     today={today}
+    isLoading={isLoading}
   />
 );

@@ -15,7 +15,7 @@ interface OverviewTabProps {
 
 export const OverviewTab = ({ po, status }: OverviewTabProps) => {
   const workspaceCurrency = useWorkspaceCurrency();
-  const isCrossCurrency = !!workspaceCurrency && workspaceCurrency !== po.currencyCode;
+  const isCrossCurrency = workspaceCurrency !== po.currencyCode;
 
   return (
     <Card>

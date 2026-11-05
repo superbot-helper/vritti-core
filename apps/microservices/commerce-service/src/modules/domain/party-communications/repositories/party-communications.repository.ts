@@ -13,12 +13,9 @@ import {
   partyCommunicationApps,
   partyCommunications,
   partyFunctions,
-  supplierSites,
+  supplierEnrollments,
 } from '@/db/schema';
-import type {
-  PartyCommunicationAppDto,
-  PartyCommunicationFunction,
-} from '../dto/entity/party-communication.dto';
+import type { PartyCommunicationAppDto, PartyCommunicationFunction } from '../dto/entity/party-communication.dto';
 
 export type PartyCommunicationRow = PartyCommunication & {
   apps: PartyCommunicationAppDto[];
@@ -203,12 +200,17 @@ export class PartyCommunicationsDomainRepository extends PrimaryBaseRepository<t
     });
   }
 
-  // Returns true when a supplier site uses the communication as its order email or order phone
-  async isUsedBySupplierSite(id: string): Promise<boolean> {
+  // Returns true when a supplier enrollment uses the communication as its order email or order phone
+  async isUsedBySupplierEnrollment(id: string): Promise<boolean> {
     const [row] = await this.db
       .select({ one: sql<number>`1` })
-      .from(supplierSites)
-      .where(or(eq(supplierSites.orderEmailCommunicationId, id), eq(supplierSites.orderPhoneCommunicationId, id)))
+      .from(supplierEnrollments)
+      .where(
+        or(
+          eq(supplierEnrollments.orderEmailCommunicationId, id),
+          eq(supplierEnrollments.orderPhoneCommunicationId, id),
+        ),
+      )
       .limit(1);
     return Boolean(row);
   }

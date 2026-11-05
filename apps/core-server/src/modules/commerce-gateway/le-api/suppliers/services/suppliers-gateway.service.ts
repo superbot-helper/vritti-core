@@ -1,27 +1,32 @@
-import type { SiteSupplierItemResponseDto } from '@commerce/supplier-sites/dto/response/site-supplier-item-response.dto';
-import type { SiteSupplierItemTableResponseDto } from '@commerce/supplier-sites/dto/response/site-supplier-item-table-response.dto';
-import type { SupplierAtSiteResponseDto } from '@commerce/supplier-sites/dto/response/supplier-at-site-response.dto';
+import type { CreateSupplierEnrollmentDto } from '@commerce/supplier-enrollments/dto/request/create-supplier-enrollment.dto';
+import type { SupplierEnrollmentSitesSelectQueryDto } from '@commerce/supplier-enrollments/dto/request/supplier-enrollment-sites-select-query.dto';
+import type { UpdateSupplierEnrollmentDto } from '@commerce/supplier-enrollments/dto/request/update-supplier-enrollment.dto';
+import type { SupplierEnrollmentDetailResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-detail-response.dto';
+import type { SupplierEnrollmentResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-response.dto';
+import {
+  type SupplierEnrollmentRowResponseDto,
+  SupplierEnrollmentStatusValues,
+} from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-row-response.dto';
+import type { SupplierEnrollmentTableResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-table-response.dto';
+import type { AddSupplierSiteItemDto } from '@commerce/supplier-items/dto/request/add-supplier-site-item.dto';
+import type { BulkSetSupplierSiteItemPreferredDto } from '@commerce/supplier-items/dto/request/bulk-set-supplier-site-item-preferred.dto';
+import type { UpdateSupplierSiteItemDto } from '@commerce/supplier-items/dto/request/update-supplier-site-item.dto';
+import type { SupplierSiteItemResponseDto } from '@commerce/supplier-items/dto/response/supplier-site-item-response.dto';
+import type { SupplierSiteItemRowResponseDto } from '@commerce/supplier-items/dto/response/supplier-site-item-row-response.dto';
+import type { SupplierSiteItemRowTableResponseDto } from '@commerce/supplier-items/dto/response/supplier-site-item-row-table-response.dto';
+import type { SupplierSiteItemTableResponseDto } from '@commerce/supplier-items/dto/response/supplier-site-item-table-response.dto';
 import type { AddSupplierItemDto } from '@commerce/suppliers/dto/request/add-supplier-item.dto';
-import type { AddSupplierItemSiteDto } from '@commerce/suppliers/dto/request/add-supplier-item-site.dto';
-import type { AddSupplierSiteDto } from '@commerce/suppliers/dto/request/add-supplier-site.dto';
 import type { BulkSetSupplierActiveDto } from '@commerce/suppliers/dto/request/bulk-set-supplier-active.dto';
-import type { BulkSetSupplierItemLeadTimeDto } from '@commerce/suppliers/dto/request/bulk-set-supplier-item-lead-time.dto';
+import type { BulkSetSupplierDefaultPaymentTermDto } from '@commerce/suppliers/dto/request/bulk-set-supplier-default-payment-term.dto';
+import type { BulkSetSupplierItemDefaultLeadTimeDto } from '@commerce/suppliers/dto/request/bulk-set-supplier-item-default-lead-time.dto';
 import type { BulkSetSupplierItemMinOrderDto } from '@commerce/suppliers/dto/request/bulk-set-supplier-item-min-order.dto';
-import type { BulkSetSupplierItemPreferredDto } from '@commerce/suppliers/dto/request/bulk-set-supplier-item-preferred.dto';
 import type { ChangeSupplierCurrencyDto } from '@commerce/suppliers/dto/request/change-supplier-currency.dto';
 import type { CreateSupplierDto } from '@commerce/suppliers/dto/request/create-supplier.dto';
 import type { UpdateSupplierDto } from '@commerce/suppliers/dto/request/update-supplier.dto';
 import type { UpdateSupplierItemDto } from '@commerce/suppliers/dto/request/update-supplier-item.dto';
-import type { UpdateSupplierItemSiteDto } from '@commerce/suppliers/dto/request/update-supplier-item-site.dto';
-import type { UpdateSupplierSiteDto } from '@commerce/suppliers/dto/request/update-supplier-site.dto';
 import type { SupplierItemResponseDto } from '@commerce/suppliers/dto/response/supplier-item-response.dto';
-import type { SupplierItemSiteResponseDto } from '@commerce/suppliers/dto/response/supplier-item-site-response.dto';
-import type { SupplierItemSiteTableResponseDto } from '@commerce/suppliers/dto/response/supplier-item-site-table-response.dto';
 import type { SupplierItemTableResponseDto } from '@commerce/suppliers/dto/response/supplier-item-table-response.dto';
 import type { SupplierResponseDto } from '@commerce/suppliers/dto/response/supplier-response.dto';
-import type { SupplierSiteResponseDto } from '@commerce/suppliers/dto/response/supplier-site-response.dto';
-import type { SupplierSiteRowResponseDto } from '@commerce/suppliers/dto/response/supplier-site-row-response.dto';
-import type { SupplierSiteTableResponseDto } from '@commerce/suppliers/dto/response/supplier-site-table-response.dto';
 import type { SupplierTableResponseDto } from '@commerce/suppliers/dto/response/supplier-table-response.dto';
 import { SiteDomainRepository } from '@domain/site/repositories/site.repository';
 import { Injectable, Logger } from '@nestjs/common';
@@ -29,6 +34,7 @@ import { DataTableStateService, FilterOperators, type TableViewState } from '@vr
 import { BadRequestException } from '@vritti/api-sdk/exceptions';
 import { NatsClientService } from '@vritti/api-sdk/nats';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import type { SelectQueryResult } from '@vritti/api-sdk/select';
 import { OwnerNameService } from '@/owner-names/owner-name.service';
 
 @Injectable()
@@ -103,6 +109,35 @@ export class SuppliersGatewayService {
     return this.nats.send('commerce', 'le.suppliers.setActive', { id, isActive });
   }
 
+  // Sets the default payment term of several suppliers at once
+  async bulkSetDefaultPaymentTerm(dto: BulkSetSupplierDefaultPaymentTermDto): Promise<SuccessResponseDto> {
+    this.logger.log(
+      `le.suppliers.bulkSetDefaultPaymentTerm — ${dto.ids.length} selected, paymentTermId: ${dto.defaultPaymentTermId}`,
+    );
+    return this.nats.send('commerce', 'le.suppliers.bulkSetDefaultPaymentTerm', {
+      ids: dto.ids,
+      defaultPaymentTermId: dto.defaultPaymentTermId,
+    });
+  }
+
+  // Sets the payment term new site enrollments of a supplier start from
+  async setDefaultPaymentTerm(id: string, defaultPaymentTermId: string): Promise<SuccessResponseDto> {
+    this.logger.log(`le.suppliers.setDefaultPaymentTerm — id: ${id}, paymentTermId: ${defaultPaymentTermId}`);
+    return this.nats.send('commerce', 'le.suppliers.setDefaultPaymentTerm', { id, defaultPaymentTermId });
+  }
+
+  // Blocks or unblocks new purchase orders and goods receipts from a supplier
+  async setPurchasingBlocked(id: string, purchasingBlocked: boolean): Promise<SuccessResponseDto> {
+    this.logger.log(`le.suppliers.setPurchasingBlocked — id: ${id}, purchasingBlocked: ${purchasingBlocked}`);
+    return this.nats.send('commerce', 'le.suppliers.setPurchasingBlocked', { id, purchasingBlocked });
+  }
+
+  // Blocks or unblocks payments to a supplier
+  async setPaymentBlocked(id: string, paymentBlocked: boolean): Promise<SuccessResponseDto> {
+    this.logger.log(`le.suppliers.setPaymentBlocked — id: ${id}, paymentBlocked: ${paymentBlocked}`);
+    return this.nats.send('commerce', 'le.suppliers.setPaymentBlocked', { id, paymentBlocked });
+  }
+
   // Deletes a supplier by ID
   async delete(id: string): Promise<SuccessResponseDto> {
     this.logger.log('le.suppliers.delete');
@@ -137,10 +172,13 @@ export class SuppliersGatewayService {
     return this.nats.send('commerce', 'le.suppliers.unlinkItem', { supplierId, supplierItemId });
   }
 
-  // Bulk-marks supplier items as preferred (or clears it)
-  async bulkSetItemPreferred(supplierId: string, dto: BulkSetSupplierItemPreferredDto): Promise<SuccessResponseDto> {
-    this.logger.log('le.suppliers.bulkSetItemPreferred');
-    return this.nats.send('commerce', 'le.suppliers.bulkSetItemPreferred', {
+  // Bulk-marks supplier items as preferred at the chosen sites (or clears it)
+  async bulkSetSiteItemsPreferred(
+    supplierId: string,
+    dto: BulkSetSupplierSiteItemPreferredDto,
+  ): Promise<SuccessResponseDto> {
+    this.logger.log('le.suppliers.siteItems.bulkSetPreferred');
+    return this.nats.send('commerce', 'le.suppliers.siteItems.bulkSetPreferred', {
       supplierId,
       supplierItemIds: dto.supplierItemIds,
       siteIds: dto.siteIds,
@@ -158,49 +196,60 @@ export class SuppliersGatewayService {
     });
   }
 
-  // Bulk-sets the lead time of supplier items (or clears it), applied to their sites that follow the item
-  async bulkSetItemLeadTime(supplierId: string, dto: BulkSetSupplierItemLeadTimeDto): Promise<SuccessResponseDto> {
-    this.logger.log('le.suppliers.bulkSetItemLeadTime');
-    return this.nats.send('commerce', 'le.suppliers.bulkSetItemLeadTime', {
+  // Bulk-sets the default lead time of supplier items (or clears it), applied to their sites that follow it
+  async bulkSetItemDefaultLeadTime(
+    supplierId: string,
+    dto: BulkSetSupplierItemDefaultLeadTimeDto,
+  ): Promise<SuccessResponseDto> {
+    this.logger.log('le.suppliers.bulkSetItemDefaultLeadTime');
+    return this.nats.send('commerce', 'le.suppliers.bulkSetItemDefaultLeadTime', {
       supplierId,
       supplierItemIds: dto.supplierItemIds,
-      leadTimeDays: dto.leadTimeDays ?? null,
+      defaultLeadTimeDays: dto.defaultLeadTimeDays ?? null,
     });
   }
 
   // Returns every site of the legal entity with the supplier's enrollment there; sites live in core, enrollments in
   // commerce, so the two are merged — and filtered, sorted and paged — here
-  async findSitesTable(
+  async findEnrollmentsTable(
     supplierId: string,
     userId: string,
     orgId: string,
     legalEntityId: string | undefined,
-  ): Promise<SupplierSiteTableResponseDto> {
-    this.logger.log(`le.suppliers.sitesTable — supplierId: ${supplierId}`);
-    if (!legalEntityId) {
-      throw new BadRequestException({
-        label: 'Missing Legal Entity Context',
-        detail: 'A legal entity workspace is required to list supplier sites.',
-      });
-    }
+  ): Promise<SupplierEnrollmentTableResponseDto> {
+    this.logger.log(`le.suppliers.enrollments.findAll — supplierId: ${supplierId}`);
+    const leId = SuppliersGatewayService.requireLegalEntity(legalEntityId);
     const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
       userId,
-      `commerce-supplier-${supplierId}-sites`,
+      `commerce-le-supplier-${supplierId}-enrollments`,
     );
-    const [sites, enrollments] = await Promise.all([
-      this.siteRepository.siblingsOrdered(orgId, legalEntityId),
-      this.nats.send<SupplierSiteResponseDto[]>('commerce', 'le.suppliers.enrollments', { supplierId }),
+    const [sites, enrollments, supplier] = await Promise.all([
+      this.siteRepository.siblingsOrdered(orgId, leId),
+      this.nats.send<SupplierEnrollmentResponseDto[]>('commerce', 'le.suppliers.enrollments.findAll', { supplierId }),
+      this.nats.send<SupplierResponseDto>('commerce', 'le.suppliers.findById', { id: supplierId }),
     ]);
     const enrollmentBySite = new Map(enrollments.map((enrollment) => [enrollment.siteId, enrollment]));
-    const rows = sites.map((site): SupplierSiteRowResponseDto => {
+    const rows = sites.map((site): SupplierEnrollmentRowResponseDto => {
       const enrollment = enrollmentBySite.get(site.id);
       return {
         id: enrollment?.id ?? null,
         supplierId,
+        supplierCode: supplier.code,
+        partyId: supplier.partyId,
+        partyName: supplier.partyName,
+        partyType: supplier.partyType ?? '',
         siteId: site.id,
         siteName: site.name,
         siteCode: site.code,
-        enrollmentStatus: enrollment ? 'ENROLLED' : 'NOT_ENROLLED',
+        enrollmentStatus: enrollment
+          ? SupplierEnrollmentStatusValues.ENROLLED
+          : SupplierEnrollmentStatusValues.NOT_ENROLLED,
+        isActive: enrollment?.isActive ?? null,
+        isSupplierActive: supplier.isActive,
+        purchasingBlocked: supplier.purchasingBlocked,
+        paymentBlocked: supplier.paymentBlocked,
+        currencyCode: supplier.currencyCode,
+        defaultPaymentTermId: supplier.defaultPaymentTermId,
         paymentTermId: enrollment?.paymentTermId ?? null,
         paymentTermName: enrollment?.paymentTermName ?? null,
         partyTaxRegistrationId: enrollment?.partyTaxRegistrationId ?? null,
@@ -210,17 +259,22 @@ export class SuppliersGatewayService {
         orderRelationshipId: enrollment?.orderRelationshipId ?? null,
         orderContactLabel: enrollment?.orderContactLabel ?? null,
         orderContactName: enrollment?.orderContactName ?? null,
-        createdAt: enrollment?.createdAt ?? null,
+        orderEmailCommunicationId: enrollment?.orderEmailCommunicationId ?? null,
+        orderEmail: enrollment?.orderEmail ?? null,
+        orderPhoneCommunicationId: enrollment?.orderPhoneCommunicationId ?? null,
+        orderPhone: enrollment?.orderPhone ?? null,
+        enrolledAt: enrollment?.createdAt ?? null,
       };
     });
 
     const filtered = rows.filter(
       (row) =>
-        SuppliersGatewayService.matchesSiteFilters(row, state) && SuppliersGatewayService.matchesSiteSearch(row, state),
+        SuppliersGatewayService.matchesEnrollmentFilters(row, state) &&
+        SuppliersGatewayService.matchesEnrollmentSearch(row, state),
     );
     const sort = state.sort[0];
     if (sort) {
-      const key = sort.field as keyof SupplierSiteRowResponseDto;
+      const key = sort.field as keyof SupplierEnrollmentRowResponseDto;
       const direction = sort.direction === 'desc' ? -1 : 1;
       filtered.sort((a, b) => direction * String(a[key] ?? '').localeCompare(String(b[key] ?? '')));
     }
@@ -228,8 +282,8 @@ export class SuppliersGatewayService {
     return { result: filtered.slice(offset, offset + limit), count: filtered.length, state, activeViewId };
   }
 
-  // Applies the Sites tab's enrollment-status filter (single or multi value, positive or negated)
-  private static matchesSiteFilters(row: SupplierSiteRowResponseDto, state: TableViewState): boolean {
+  // Applies the Enrollments tab's enrollment-status filter (single or multi value, positive or negated)
+  private static matchesEnrollmentFilters(row: SupplierEnrollmentRowResponseDto, state: TableViewState): boolean {
     return state.filters.every((filter) => {
       if (filter.field !== 'enrollmentStatus') return true;
       const values = Array.isArray(filter.value) ? filter.value.map(String) : [String(filter.value)];
@@ -241,82 +295,159 @@ export class SuppliersGatewayService {
   }
 
   // Matches the search box against the site's name and code
-  private static matchesSiteSearch(row: SupplierSiteRowResponseDto, state: TableViewState): boolean {
+  private static matchesEnrollmentSearch(row: SupplierEnrollmentRowResponseDto, state: TableViewState): boolean {
     const term = state.search?.value?.trim().toLowerCase();
     if (!term) return true;
     const columns =
       state.search?.columnId && state.search.columnId !== 'all' ? [state.search.columnId] : ['siteName', 'siteCode'];
     return columns.some((column) =>
-      String(row[column as keyof SupplierSiteRowResponseDto] ?? '')
+      String(row[column as keyof SupplierEnrollmentRowResponseDto] ?? '')
         .toLowerCase()
         .includes(term),
     );
   }
 
-  // Returns a supplier as one of the LE's sites sees it, with the site's name
-  async findAtSite(supplierId: string, siteId: string, orgId: string): Promise<SupplierAtSiteResponseDto> {
-    this.logger.log(`le.suppliers.findAtSite — supplierId: ${supplierId}, siteId: ${siteId}`);
-    const row = await this.nats.send<SupplierAtSiteResponseDto>('commerce', 'le.suppliers.findAtSite', {
-      supplierId,
-      siteId,
-    });
-    const [enriched] = await this.ownerNames.withSiteNames(orgId, [{ ...row, siteId }]);
+  // Returns the supplier's enrollment at one of the LE's sites, enrolled or not, with the site's name
+  async findEnrollment(
+    supplierId: string,
+    siteId: string,
+    orgId: string,
+  ): Promise<SupplierEnrollmentDetailResponseDto> {
+    this.logger.log(`le.suppliers.enrollments.findBySite — supplierId: ${supplierId}, siteId: ${siteId}`);
+    const row = await this.nats.send<SupplierEnrollmentDetailResponseDto>(
+      'commerce',
+      'le.suppliers.enrollments.findBySite',
+      { supplierId, siteId },
+    );
+    const [enriched] = await this.ownerNames.withSiteNames(orgId, [row]);
     return enriched;
   }
 
-  // Returns a supplier's items carried by one of the LE's sites
-  async findSiteItemsTable(
+  // Returns the LE's sites for a supplier's enrollment picker — enrolled (default), not enrolled, or all — named by core
+  async selectEnrollments(
+    query: SupplierEnrollmentSitesSelectQueryDto,
+    orgId: string,
+    legalEntityId: string | undefined,
+  ): Promise<SelectQueryResult> {
+    const { supplierId, enrollmentStatus = SupplierEnrollmentStatusValues.ENROLLED, activeOnly } = query;
+    this.logger.log(`le.suppliers.enrollments.select — supplierId: ${supplierId}, status: ${enrollmentStatus}`);
+    const enrolled = await this.nats.send<SelectQueryResult>('commerce', 'le.suppliers.enrollments.select', {
+      supplierId,
+      activeOnly,
+    });
+    const activeBySite = new Map(
+      enrolled.options.map((option) => [String(option.value), option.additionals?.isActive]),
+    );
+    const sites =
+      enrollmentStatus === SupplierEnrollmentStatusValues.ENROLLED
+        ? await this.ownerNames.withSiteNames(
+            orgId,
+            [...activeBySite.keys()].map((siteId) => ({ siteId })),
+          )
+        : (await this.siteRepository.siblingsOrdered(orgId, SuppliersGatewayService.requireLegalEntity(legalEntityId)))
+            .map((site) => ({ siteId: site.id, siteName: site.name, siteCode: site.code }))
+            .filter(
+              (site) =>
+                enrollmentStatus !== SupplierEnrollmentStatusValues.NOT_ENROLLED || !activeBySite.has(site.siteId),
+            );
+
+    const values = SuppliersGatewayService.splitIds(query.values);
+    const excludeIds = new Set(SuppliersGatewayService.splitIds(query.excludeIds));
+    const term = query.search?.trim().toLowerCase();
+    const matching = sites
+      .filter((site) =>
+        values.length > 0
+          ? values.includes(site.siteId)
+          : !excludeIds.has(site.siteId) &&
+            (!term || [site.siteName, site.siteCode].some((text) => text?.toLowerCase().includes(term))),
+      )
+      .sort((a, b) => (a.siteName ?? '').localeCompare(b.siteName ?? ''));
+    const limit = Number(query.limit) || 20;
+    const offset = values.length > 0 ? 0 : Number(query.offset) || 0;
+    const page = values.length > 0 ? matching : matching.slice(offset, offset + limit);
+    return {
+      options: page.map((site) => {
+        const isEnrolled = activeBySite.has(site.siteId);
+        return {
+          value: site.siteId,
+          label: site.siteName ?? site.siteId,
+          description: site.siteCode ?? undefined,
+          additionals: {
+            siteCode: site.siteCode,
+            enrollmentStatus: isEnrolled
+              ? SupplierEnrollmentStatusValues.ENROLLED
+              : SupplierEnrollmentStatusValues.NOT_ENROLLED,
+            isActive: isEnrolled ? (activeBySite.get(site.siteId) ?? null) : null,
+          },
+        };
+      }),
+      hasMore: values.length === 0 && offset + limit < matching.length,
+      totalCount: matching.length,
+    };
+  }
+
+  // Returns a supplier's site items at one of the LE's sites
+  async findEnrollmentSiteItemsTable(
     supplierId: string,
     siteId: string,
     userId: string,
-  ): Promise<SiteSupplierItemTableResponseDto> {
-    this.logger.log(`le.suppliers.siteItemsTable — supplierId: ${supplierId}, siteId: ${siteId}`);
+  ): Promise<SupplierSiteItemRowTableResponseDto> {
+    this.logger.log(`le.suppliers.enrollments.siteItems.table — supplierId: ${supplierId}, siteId: ${siteId}`);
     const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
       userId,
-      `commerce-le-supplier-${supplierId}-site-${siteId}-items`,
+      `commerce-le-supplier-${supplierId}-site-${siteId}-site-items`,
     );
 
-    const { result, count } = await this.nats.send<{ result: SiteSupplierItemResponseDto[]; count: number }>(
+    const { result, count } = await this.nats.send<{ result: SupplierSiteItemRowResponseDto[]; count: number }>(
       'commerce',
-      'le.suppliers.siteItemsTable',
+      'le.suppliers.enrollments.siteItems.table',
       { supplierId, siteId, ...state },
     );
 
     return { result, count, state, activeViewId };
   }
 
-  // Returns a supplier item as one of the LE's sites carries it
-  async findSiteItem(supplierItemId: string, siteId: string): Promise<SiteSupplierItemResponseDto> {
-    this.logger.log(`le.suppliers.findSiteItem — id: ${supplierItemId}, siteId: ${siteId}`);
-    return this.nats.send('commerce', 'le.suppliers.findSiteItem', { supplierItemId, siteId });
-  }
-
-  // Enrolls a site for a supplier after validating it belongs to the session legal entity
-  async addSite(
+  // Enrolls the supplier at one of the LE's sites after validating the site belongs to the session legal entity
+  async createEnrollment(
     supplierId: string,
-    dto: AddSupplierSiteDto,
+    dto: CreateSupplierEnrollmentDto,
     orgId: string,
     legalEntityId: string | undefined,
-  ): Promise<CreateResponseDto<SupplierSiteResponseDto>> {
+  ): Promise<CreateResponseDto<SupplierEnrollmentResponseDto>> {
+    if (!dto.siteId) {
+      throw new BadRequestException({
+        label: 'Site Required',
+        detail: 'Pick the site to enroll the supplier at.',
+        errors: [{ field: 'siteId', message: 'Site is required' }],
+      });
+    }
     await this.validateSiteInSessionLe(orgId, legalEntityId, dto.siteId);
-    this.logger.log(`le.suppliers.addSite — supplierId: ${supplierId}, siteId: ${dto.siteId}`);
-    return this.nats.send('commerce', 'le.suppliers.addSite', { supplierId, ...dto });
+    this.logger.log(`le.suppliers.enrollments.create — supplierId: ${supplierId}, siteId: ${dto.siteId}`);
+    return this.nats.send('commerce', 'le.suppliers.enrollments.create', { ...dto, supplierId });
   }
 
-  // Updates a supplier site enrollment
-  async updateSite(
+  // Updates the supplier's enrollment picks and flags at one of the LE's sites
+  async updateEnrollment(
     supplierId: string,
-    supplierSiteId: string,
-    dto: UpdateSupplierSiteDto,
+    siteId: string,
+    dto: UpdateSupplierEnrollmentDto,
   ): Promise<SuccessResponseDto> {
-    this.logger.log(`le.suppliers.updateSite — id: ${supplierSiteId}`);
-    return this.nats.send('commerce', 'le.suppliers.updateSite', { supplierId, supplierSiteId, ...dto });
+    this.logger.log(`le.suppliers.enrollments.update — supplierId: ${supplierId}, siteId: ${siteId}`);
+    return this.nats.send('commerce', 'le.suppliers.enrollments.update', { ...dto, supplierId, siteId });
   }
 
-  // Removes a supplier site enrollment
-  async removeSite(supplierId: string, supplierSiteId: string): Promise<SuccessResponseDto> {
-    this.logger.log(`le.suppliers.removeSite — id: ${supplierSiteId}`);
-    return this.nats.send('commerce', 'le.suppliers.removeSite', { supplierId, supplierSiteId });
+  // Activates or deactivates the supplier's own enrollment at one of the LE's sites
+  async setEnrollmentActive(supplierId: string, siteId: string, isActive: boolean): Promise<SuccessResponseDto> {
+    this.logger.log(
+      `le.suppliers.enrollments.setActive — supplierId: ${supplierId}, siteId: ${siteId}, isActive: ${isActive}`,
+    );
+    return this.nats.send('commerce', 'le.suppliers.enrollments.setActive', { supplierId, siteId, isActive });
+  }
+
+  // Removes the supplier's enrollment at one of the LE's sites
+  async deleteEnrollment(supplierId: string, siteId: string): Promise<SuccessResponseDto> {
+    this.logger.log(`le.suppliers.enrollments.delete — supplierId: ${supplierId}, siteId: ${siteId}`);
+    return this.nats.send('commerce', 'le.suppliers.enrollments.delete', { supplierId, siteId });
   }
 
   // Returns a single supplier item by ID
@@ -325,49 +456,49 @@ export class SuppliersGatewayService {
     return this.nats.send('commerce', 'le.suppliers.findItemById', { supplierItemId });
   }
 
-  // Returns per-site overrides of a supplier item, enriched with site names
-  async findItemSitesTable(
+  // Returns the site items of a supplier item, enriched with site names
+  async findSiteItemsTable(
     supplierItemId: string,
     userId: string,
     orgId: string,
-  ): Promise<SupplierItemSiteTableResponseDto> {
-    this.logger.log(`le.suppliers.itemSitesTable — supplierItemId: ${supplierItemId}`);
+  ): Promise<SupplierSiteItemTableResponseDto> {
+    this.logger.log(`le.suppliers.siteItems.table — supplierItemId: ${supplierItemId}`);
     const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
       userId,
-      `commerce-supplier-item-${supplierItemId}-sites`,
+      `commerce-le-supplier-item-${supplierItemId}-site-items`,
     );
 
-    const { result, count } = await this.nats.send<{ result: SupplierItemSiteResponseDto[]; count: number }>(
+    const { result, count } = await this.nats.send<{ result: SupplierSiteItemResponseDto[]; count: number }>(
       'commerce',
-      'le.suppliers.itemSitesTable',
+      'le.suppliers.siteItems.table',
       { supplierItemId, ...state },
     );
 
     return { result: await this.ownerNames.withSiteNames(orgId, result), count, state, activeViewId };
   }
 
-  // Adds a per-site override to a supplier item after validating the site belongs to the session legal entity
-  async addItemSite(
+  // Sets a supplier item up at a site after validating the site belongs to the session legal entity
+  async createSiteItem(
     supplierItemId: string,
-    dto: AddSupplierItemSiteDto,
+    dto: AddSupplierSiteItemDto,
     orgId: string,
     legalEntityId: string | undefined,
-  ): Promise<CreateResponseDto<SupplierItemSiteResponseDto>> {
+  ): Promise<CreateResponseDto<SupplierSiteItemResponseDto>> {
     await this.validateSiteInSessionLe(orgId, legalEntityId, dto.siteId);
-    this.logger.log(`le.suppliers.addItemSite — supplierItemId: ${supplierItemId}, siteId: ${dto.siteId}`);
-    return this.nats.send('commerce', 'le.suppliers.addItemSite', { supplierItemId, ...dto });
+    this.logger.log(`le.suppliers.siteItems.create — supplierItemId: ${supplierItemId}, siteId: ${dto.siteId}`);
+    return this.nats.send('commerce', 'le.suppliers.siteItems.create', { supplierItemId, ...dto });
   }
 
   // Updates a supplier item's settings at one site
-  async updateItemSite(supplierItemSiteId: string, dto: UpdateSupplierItemSiteDto): Promise<SuccessResponseDto> {
-    this.logger.log(`le.suppliers.updateItemSite — id: ${supplierItemSiteId}`);
-    return this.nats.send('commerce', 'le.suppliers.updateItemSite', { id: supplierItemSiteId, ...dto });
+  async updateSiteItem(supplierSiteItemId: string, dto: UpdateSupplierSiteItemDto): Promise<SuccessResponseDto> {
+    this.logger.log(`le.suppliers.siteItems.update — id: ${supplierSiteItemId}`);
+    return this.nats.send('commerce', 'le.suppliers.siteItems.update', { id: supplierSiteItemId, ...dto });
   }
 
   // Removes a supplier item from a site
-  async deleteItemSite(supplierItemSiteId: string): Promise<SuccessResponseDto> {
-    this.logger.log(`le.suppliers.deleteItemSite — id: ${supplierItemSiteId}`);
-    return this.nats.send('commerce', 'le.suppliers.deleteItemSite', { id: supplierItemSiteId });
+  async deleteSiteItem(supplierSiteItemId: string): Promise<SuccessResponseDto> {
+    this.logger.log(`le.suppliers.siteItems.delete — id: ${supplierSiteItemId}`);
+    return this.nats.send('commerce', 'le.suppliers.siteItems.delete', { id: supplierSiteItemId });
   }
 
   // Rejects site picks outside the session legal entity
@@ -376,19 +507,30 @@ export class SuppliersGatewayService {
     legalEntityId: string | undefined,
     siteId: string,
   ): Promise<void> {
-    if (!legalEntityId) {
-      throw new BadRequestException({
-        label: 'Missing Legal Entity Context',
-        detail: 'A legal entity workspace is required to manage supplier sites.',
-      });
-    }
-
+    const leId = SuppliersGatewayService.requireLegalEntity(legalEntityId);
     const [site] = await this.siteRepository.findByIds(orgId, [siteId]);
-    if (!site || site.legalEntityId !== legalEntityId) {
+    if (!site || site.legalEntityId !== leId) {
       throw new BadRequestException({
         label: 'Invalid Site',
         detail: 'The selected site does not belong to this legal entity.',
       });
     }
+  }
+
+  // Returns the session legal entity, rejecting requests made outside a legal entity workspace
+  private static requireLegalEntity(legalEntityId: string | undefined): string {
+    if (legalEntityId) return legalEntityId;
+    throw new BadRequestException({
+      label: 'Missing Legal Entity Context',
+      detail: 'A legal entity workspace is required to manage supplier enrollments.',
+    });
+  }
+
+  // Splits a comma-separated id list from a select query
+  private static splitIds(input?: string): string[] {
+    return (input ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
   }
 }

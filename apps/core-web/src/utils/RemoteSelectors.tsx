@@ -49,7 +49,7 @@ export const PaymentTermSelector = remoteSelector<
   Omit<SelectProps, 'optionsEndpoint'> & { allowUnpublished?: boolean }
 >('commerce/Selectors/PaymentTerm', 'PaymentTermSelector');
 
-export const SupplierSelector = remoteSelector<Omit<SelectProps, 'optionsEndpoint'>>(
+export const SupplierSelector = remoteSelector<Omit<SelectProps, 'optionsEndpoint'> & { activeOnly?: boolean }>(
   'commerce/Selectors/Supplier',
   'SupplierSelector',
 );
@@ -58,9 +58,16 @@ export const SupplierItemSelector = remoteSelector<
   Omit<SelectProps, 'optionsEndpoint' | 'params'> & { params?: { supplierId?: string } }
 >('commerce/Selectors/SupplierItem', 'SupplierItemSelector');
 
-export const SupplierSiteSelector = remoteSelector<
-  Omit<SelectProps, 'optionsEndpoint' | 'options'> & { supplierId: string; enrolledOnly?: boolean }
->('commerce/Selectors/SupplierSite', 'SupplierSiteSelector');
+export const SiteSupplierSelector = remoteSelector<
+  Omit<SelectProps, 'optionsEndpoint'> & { enrollmentStatus?: 'ENROLLED' | 'NOT_ENROLLED'; activeOnly?: boolean }
+>('commerce/Selectors/SiteSupplier', 'SiteSupplierSelector');
+
+export const EnrolledSiteSelector = remoteSelector<
+  Omit<SelectProps, 'optionsEndpoint'> & {
+    supplierId: string | undefined;
+    enrollmentStatus?: 'ENROLLED' | 'NOT_ENROLLED' | 'ALL';
+  }
+>('commerce/Selectors/EnrolledSite', 'EnrolledSiteSelector');
 
 export const RepositorySelector = remoteSelector<Omit<SelectProps, 'optionsEndpoint'>>(
   'gitea/Selectors/Repository',

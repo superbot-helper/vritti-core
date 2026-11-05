@@ -4,6 +4,7 @@ import { Form } from '@vritti/quantum-ui/Form';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useUpdateSupplierItem } from '@/hooks/legal-entity/suppliers';
 import { type SupplierItemData, type UpdateSupplierItemFormData, updateSupplierItemSchema } from '@/schemas/suppliers';
@@ -32,11 +33,13 @@ export const UpdateSupplierItemDialog: React.FC<UpdateSupplierItemDialogProps> =
       supplierItemCode: item.supplierItemCode ?? '',
       uomId: item.uomId,
       minOrderQuantity: item.minOrderQuantity ?? undefined,
-      leadTimeDays: item.leadTimeDays ?? undefined,
+      defaultLeadTimeDays: item.defaultLeadTimeDays ?? undefined,
     },
   });
 
   const updateMutation = useUpdateSupplierItem(supplierId, { onSuccess });
+  // A unit sold whole takes a whole-number minimum order; the server checks the current unit too
+  const [allowDecimal, setAllowDecimal] = useState(true);
 
   return (
     <Form
@@ -49,7 +52,7 @@ export const UpdateSupplierItemDialog: React.FC<UpdateSupplierItemDialogProps> =
           supplierItemCode: data.supplierItemCode ? data.supplierItemCode : null,
           uomId: data.uomId,
           minOrderQuantity: data.minOrderQuantity ?? null,
-          leadTimeDays: data.leadTimeDays ?? null,
+          defaultLeadTimeDays: data.defaultLeadTimeDays ?? null,
         },
       })}
     >
@@ -65,6 +68,7 @@ export const UpdateSupplierItemDialog: React.FC<UpdateSupplierItemDialogProps> =
         placeholder="Select unit"
         params={{ inventoryItemId: item.inventoryItemId, supplierId }}
         disabled={unitLocked}
+        onOptionSelect={(option) => setAllowDecimal(option?.additionals?.allowDecimal !== false)}
         description={unitLocked ? "Fixed once priced — the item's prices are per this unit" : undefined}
       />
       <TextField name="supplierItemCode" label="Supplier Item Code" placeholder="Supplier's code for this item" />
@@ -73,12 +77,13 @@ export const UpdateSupplierItemDialog: React.FC<UpdateSupplierItemDialogProps> =
         label="Min Order Qty (optional)"
         type="number"
         positive
+        integer={!allowDecimal}
         placeholder="e.g. 10"
         description="The least the supplier sells per order, in this unit"
       />
       <TextField
-        name="leadTimeDays"
-        label="Lead Time (days, optional)"
+        name="defaultLeadTimeDays"
+        label="Default Lead Time (days, optional)"
         type="number"
         integer
         positive

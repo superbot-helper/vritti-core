@@ -150,7 +150,7 @@ const PaymentScheduleCard = ({ paymentTerm }: RulesTabProps) => {
 const InvoicePreviewCard = ({ paymentTerm }: RulesTabProps) => {
   const formatters = useFormatters();
   const workspaceCurrency = useWorkspaceCurrency();
-  const [amount, setAmount] = useState<CurrencyValue>({ currency: workspaceCurrency ?? 'USD', value: '100000.00' });
+  const [amount, setAmount] = useState<CurrencyValue>({ currency: workspaceCurrency, value: '100000.00' });
   const timeZone = useWorkspaceTimeZone();
   const [documentDate, setDocumentDate] = useState(() => isoTodayDate(timeZone));
   const {

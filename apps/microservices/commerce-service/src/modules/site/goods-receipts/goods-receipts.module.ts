@@ -9,7 +9,7 @@ import { InventoryItemQuantsDomainModule } from '@domain/inventory-item-quants/i
 import { InventoryItemSitesDomainModule } from '@domain/inventory-item-sites/inventory-item-sites.module';
 import { InventoryItemsDomainModule } from '@domain/inventory-items/inventory-items.module';
 import { PurchaseOrderItemsDomainModule } from '@domain/purchase-order-items/purchase-order-items.module';
-import { SupplierSitesDomainModule } from '@domain/supplier-sites/supplier-sites.module';
+import { SupplierEnrollmentsDomainModule } from '@domain/supplier-enrollments/supplier-enrollments.module';
 import { SuppliersDomainModule } from '@domain/suppliers/suppliers.module';
 import { UomConversionsDomainModule } from '@domain/uom-conversions/uom-conversions.module';
 import { Module } from '@nestjs/common';
@@ -36,7 +36,7 @@ import { GoodsReceiptsService } from './root/services/goods-receipts-root.servic
     InventoryItemSitesDomainModule,
     PurchaseOrderItemsDomainModule,
     SuppliersDomainModule,
-    SupplierSitesDomainModule,
+    SupplierEnrollmentsDomainModule,
     UomConversionsDomainModule,
   ],
   controllers: [

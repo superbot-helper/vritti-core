@@ -20,6 +20,10 @@ export class PartyIdentifierResponseDto {
       'DUNS',
       'LEI',
       'CIN',
+      'TIN',
+      'EIN',
+      'UTR',
+      'ABN',
     ],
   })
   idType: string;

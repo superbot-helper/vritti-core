@@ -4,11 +4,15 @@ import { QuantsSelectQueryDto } from '@commerce/inventory-item-quants/dto/reques
 import { SerialsSelectQueryDto } from '@commerce/inventory-item-serials/dto/request/serials-select-query.dto';
 import { InventoryItemsSelectQueryDto } from '@commerce/inventory-items/dto/request/inventory-items-select-query.dto';
 import { LocationsSelectQueryDto } from '@commerce/locations/dto/request/locations-select-query.dto';
+import { PartyCommunicationSelectQueryDto } from '@commerce/parties/dto/request/party-communication-select-query.dto';
 import { PartyContactSelectQueryDto } from '@commerce/parties/dto/request/party-contact-select-query.dto';
 import { PartySelectQueryDto } from '@commerce/parties/dto/request/party-select-query.dto';
+import { PartyTaxRegistrationSelectQueryDto } from '@commerce/parties/dto/request/party-tax-registration-select-query.dto';
 import { PaymentTermsSelectQueryDto } from '@commerce/payment-terms/dto/request/payment-terms-select-query.dto';
 import { PurchaseOrderItemsSelectQueryDto } from '@commerce/purchase-orders/dto/request/purchase-order-items-select-query.dto';
 import { PurchaseOrderSelectQueryDto } from '@commerce/purchase-orders/dto/request/purchase-order-select-query.dto';
+import { SupplierEnrollmentSelectQueryDto } from '@commerce/supplier-enrollments/dto/request/supplier-enrollment-select-query.dto';
+import { SupplierEnrollmentSitesSelectQueryDto } from '@commerce/supplier-enrollments/dto/request/supplier-enrollment-sites-select-query.dto';
 import { SupplierItemsSelectQueryDto } from '@commerce/supplier-items/dto/request/supplier-items-select-query.dto';
 import { SuppliersSelectQueryDto } from '@commerce/suppliers/dto/request/suppliers-select-query.dto';
 import { UomSelectQueryDto } from '@commerce/uom/dto/request/uom-select-query.dto';
@@ -18,6 +22,8 @@ import { AuthType, Require } from '@vritti/api-sdk/auth';
 import { NatsClientService } from '@vritti/api-sdk/nats';
 import { SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
 import { SessionTypeValues } from '@/db/schema';
+import { LegalEntityId, OrgId } from '@/security/decorators';
+import { SuppliersGatewayService } from '../le-api/suppliers/services/suppliers-gateway.service';
 import {
   ApiAttributeTemplatesSelect,
   ApiCatalogsSelect,
@@ -37,6 +43,8 @@ import {
   ApiPosTerminalsSelect,
   ApiPurchaseOrderItemsSelect,
   ApiPurchaseOrdersSelect,
+  ApiSiteSuppliersSelect,
+  ApiSupplierEnrollmentsSelect,
   ApiSupplierItemsSelect,
   ApiSuppliersSelect,
   ApiTaxClassesSelect,
@@ -54,7 +62,10 @@ import { OfferingsSelectQueryDto } from './dto/offerings-select-query.dto';
 @Require(AuthType.Session, SessionTypeValues.WEB, SessionTypeValues.MOBILE)
 @Controller('select-api')
 export class SelectApiController {
-  constructor(private readonly nats: NatsClientService) {}
+  constructor(
+    private readonly nats: NatsClientService,
+    private readonly suppliersGatewayService: SuppliersGatewayService,
+  ) {}
 
   @Get('categories')
   @ApiCategoriesSelect()
@@ -170,6 +181,22 @@ export class SelectApiController {
     return this.nats.send<SelectQueryResult>('commerce', 'select.suppliers', query);
   }
 
+  @Get('site-suppliers')
+  @ApiSiteSuppliersSelect()
+  selectSiteSuppliers(@Query() query: SupplierEnrollmentSelectQueryDto): Promise<SelectQueryResult> {
+    return this.nats.send<SelectQueryResult>('commerce', 'site.suppliers.select', query);
+  }
+
+  @Get('supplier-enrollments')
+  @ApiSupplierEnrollmentsSelect()
+  selectSupplierEnrollments(
+    @Query() query: SupplierEnrollmentSitesSelectQueryDto,
+    @OrgId() orgId: string,
+    @LegalEntityId() legalEntityId: string | undefined,
+  ): Promise<SelectQueryResult> {
+    return this.suppliersGatewayService.selectEnrollments(query, orgId, legalEntityId);
+  }
+
   @Get('payment-terms')
   @ApiPaymentTermsSelect()
   selectPaymentTerms(@Query() query: PaymentTermsSelectQueryDto): Promise<SelectQueryResult> {
@@ -194,9 +221,9 @@ export class SelectApiController {
     return this.nats.send<SelectQueryResult>('commerce', 'select.companies', query);
   }
 
-  // Returns tax registration options of a party for select dropdowns
+  // Returns tax registration options of a party for select dropdowns, optionally only active GSTIN/VAT ones
   @Get('party-tax-registrations')
-  selectPartyTaxRegistrations(@Query() query: PartySelectQueryDto): Promise<SelectQueryResult> {
+  selectPartyTaxRegistrations(@Query() query: PartyTaxRegistrationSelectQueryDto): Promise<SelectQueryResult> {
     return this.nats.send<SelectQueryResult>('commerce', 'select.partyTaxRegistrations', query);
   }
 
@@ -204,6 +231,12 @@ export class SelectApiController {
   @Get('party-bank-accounts')
   selectPartyBankAccounts(@Query() query: PartySelectQueryDto): Promise<SelectQueryResult> {
     return this.nats.send<SelectQueryResult>('commerce', 'select.partyBankAccounts', query);
+  }
+
+  // Returns a party's email or phone options for select dropdowns, optionally only those holding a function
+  @Get('party-communications')
+  selectPartyCommunications(@Query() query: PartyCommunicationSelectQueryDto): Promise<SelectQueryResult> {
+    return this.nats.send<SelectQueryResult>('commerce', 'select.partyCommunications', query);
   }
 
   // Returns contact options of a party for select dropdowns, optionally filtered by function

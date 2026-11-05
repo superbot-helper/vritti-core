@@ -1,38 +1,24 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { LE_INVENTORY_ITEMS } from '@vritti/commerce-permissions/inventory-items';
 import { LE_SUPPLIERS } from '@vritti/commerce-permissions/suppliers';
-import { Badge } from '@vritti/quantum-ui/Badge';
 import { Button } from '@vritti/quantum-ui/Button';
-import {
-  type ColumnDef,
-  CurrencyCell,
-  DataTable,
-  type RowAction,
-  RowActions,
-  StringCell,
-  useDataTable,
-} from '@vritti/quantum-ui/DataTable';
+import type { RowAction } from '@vritti/quantum-ui/DataTable';
 import { Dialog } from '@vritti/quantum-ui/Dialog';
-import { useConfirm, useDialog, useFormatters } from '@vritti/quantum-ui/hooks';
-import { usePermission } from '@vritti/quantum-ui/PermissionGate';
+import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
 import { ListPlus, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+import type React from 'react';
+import { useCallback } from 'react';
+import { QuotationItemsTable } from '@/components/suppliers/quotations/QuotationItemsTable';
+import type { QuotationSlotProps } from '@/components/suppliers/types';
 import { SUPPLIER_QUOTATION_KEY, useRemoveSupplierQuotationItem } from '@/hooks/legal-entity/supplier-quotations';
-import type { SupplierQuotationDetail, SupplierQuotationItemData } from '@/schemas/supplier-quotations';
+import type { SupplierQuotationItemData } from '@/schemas/supplier-quotations';
 import { QuotationItemDialog } from '../forms/QuotationItemDialog';
-
-interface ItemsTabProps {
-  supplierId: string;
-  currencyCode: string;
-  quotation: SupplierQuotationDetail;
-}
 
 const LOCKED_TIP = 'Lines are fixed once the quotation is posted to a site';
 
-export const ItemsTab = ({ supplierId, currencyCode, quotation }: ItemsTabProps) => {
-  const queryClient = useQueryClient();
+// The quotation's lines, editable while it is a draft
+export const ItemsTab: React.FC<QuotationSlotProps> = ({ supplierId, quotation }) => {
+  const currencyCode = quotation.currencyCode;
   const confirm = useConfirm();
-  const fmt = useFormatters();
   const addDialog = useDialog();
   const removeMutation = useRemoveSupplierQuotationItem(supplierId, quotation.id);
   const isDraft = quotation.status === 'DRAFT';
@@ -50,106 +36,44 @@ export const ItemsTab = ({ supplierId, currencyCode, quotation }: ItemsTabProps)
     [confirm, removeMutation],
   );
 
-  const showMrp = usePermission(LE_INVENTORY_ITEMS.mrp.view).available;
-  const columns = useMemo<ColumnDef<SupplierQuotationItemData>[]>(
-    () => [
-      { accessorKey: 'inventoryItemName', header: 'Item' },
+  const lineActions = useCallback(
+    (item: SupplierQuotationItemData): RowAction[] => [
       {
-        accessorKey: 'supplierItemCode',
-        header: 'Supplier Code',
-        cell: ({ row }) => <StringCell value={row.original.supplierItemCode} mono />,
-      },
-      { accessorKey: 'uomSymbol', header: 'Unit', cell: ({ row }) => <StringCell value={row.original.uomSymbol} /> },
-      {
-        accessorKey: 'unitPrice',
-        header: 'Unit Price',
-        cell: ({ row }) => <CurrencyCell value={row.original.unitPrice} />,
-      },
-      ...(showMrp
-        ? [
-            {
-              accessorKey: 'mrp',
-              header: 'MRP',
-              cell: ({ row }: { row: { original: SupplierQuotationItemData } }) => (
-                <CurrencyCell value={row.original.mrp} />
-              ),
-            } satisfies ColumnDef<SupplierQuotationItemData>,
-          ]
-        : []),
-      {
-        id: 'scheme',
-        header: 'Scheme',
-        cell: ({ row }) =>
-          row.original.schemeBuyQty != null && row.original.schemeFreeQty != null ? (
-            <span className="font-mono">
-              {fmt.number(row.original.schemeBuyQty).primary} + {fmt.number(row.original.schemeFreeQty).primary}
-            </span>
-          ) : (
-            <StringCell value={null} />
+        id: 'edit',
+        icon: Pencil,
+        label: 'Edit',
+        permission: LE_SUPPLIERS.quotations.edit,
+        disabled: !isDraft,
+        disabledTip: LOCKED_TIP,
+        dialog: {
+          title: 'Edit Line',
+          className: 'max-w-2xl',
+          description: `Change the quoted terms for ${item.inventoryItemName}.`,
+          content: (close) => (
+            <QuotationItemDialog
+              supplierId={supplierId}
+              quotationId={quotation.id}
+              currencyCode={currencyCode}
+              item={item}
+              onSuccess={close}
+              onCancel={close}
+            />
           ),
-      },
-      {
-        accessorKey: 'taxInclusive',
-        header: 'Tax',
-        cell: ({ row }) => <Badge variant="outline">{row.original.taxInclusive ? 'Inclusive' : 'Exclusive'}</Badge>,
-      },
-      {
-        id: 'actions',
-        header: '',
-        enableHiding: false,
-        cell: ({ row }) => {
-          const item = row.original;
-          const actions: RowAction[] = [
-            {
-              id: 'edit',
-              icon: Pencil,
-              label: 'Edit',
-              permission: LE_SUPPLIERS.quotations.edit,
-              disabled: !isDraft,
-              disabledTip: LOCKED_TIP,
-              dialog: {
-                title: 'Edit Line',
-                className: 'max-w-2xl',
-                description: `Change the quoted terms for ${item.inventoryItemName}.`,
-                content: (close) => (
-                  <QuotationItemDialog
-                    supplierId={supplierId}
-                    quotationId={quotation.id}
-                    currencyCode={currencyCode}
-                    item={item}
-                    onSuccess={close}
-                    onCancel={close}
-                  />
-                ),
-              },
-            },
-            {
-              id: 'remove',
-              icon: Trash2,
-              label: 'Remove',
-              variant: 'destructive',
-              permission: LE_SUPPLIERS.quotations.edit,
-              disabled: !isDraft,
-              disabledTip: LOCKED_TIP,
-              onClick: () => handleRemove(item),
-            },
-          ];
-          return <RowActions actions={actions} />;
         },
       },
+      {
+        id: 'remove',
+        icon: Trash2,
+        label: 'Remove',
+        variant: 'destructive',
+        permission: LE_SUPPLIERS.quotations.edit,
+        disabled: !isDraft,
+        disabledTip: LOCKED_TIP,
+        onClick: () => handleRemove(item),
+      },
     ],
-    [showMrp, supplierId, currencyCode, quotation.id, isDraft, handleRemove, fmt],
+    [supplierId, quotation.id, currencyCode, isDraft, handleRemove],
   );
-
-  const { table } = useDataTable({
-    columns,
-    serverState: { result: quotation.items, count: quotation.items.length },
-    slug: 'commerce-supplier-quotation-items',
-    label: 'line',
-    enableRowSelection: false,
-    enableSorting: false,
-    onStatePush: () => queryClient.invalidateQueries({ queryKey: SUPPLIER_QUOTATION_KEY(supplierId, quotation.id) }),
-  });
 
   const addButton = (
     <Button
@@ -166,17 +90,14 @@ export const ItemsTab = ({ supplierId, currencyCode, quotation }: ItemsTabProps)
 
   return (
     <>
-      <DataTable
-        table={table}
-        mode="tab"
+      <QuotationItemsTable
+        quotation={quotation}
+        queryKey={SUPPLIER_QUOTATION_KEY(supplierId, quotation.id)}
         permission={LE_SUPPLIERS.quotations.view}
-        toolbarActions={{ actions: addButton }}
-        emptyStateConfig={{
-          icon: ListPlus,
-          title: 'No lines yet',
-          description: 'Add a line for each item the supplier quoted, with its price, MRP and scheme.',
-          action: addButton,
-        }}
+        mrpPermission={LE_INVENTORY_ITEMS.mrp.view}
+        lineActions={lineActions}
+        toolbarAction={addButton}
+        emptyDescription="Add a line for each item the supplier quoted, with its price, MRP and scheme."
       />
       <Dialog
         handle={addDialog}

@@ -226,22 +226,6 @@ export function getPurchaseOrderGoodsReceiptsTable(poId: string): Promise<GoodsR
     .then((r) => r.data);
 }
 
-// Fetches the site-resolved unit price for a supplier item.
-// Fetches the site-resolved unit price for a supplier item. Backend returns CurrencyAmountDto { currency, value (major
-// units) } | null.
-export function getSupplierItemPrice(
-  supplierId: string,
-  inventoryItemId: string,
-  uomId: string,
-): Promise<{ unitPrice: CurrencyValue | null }> {
-  return axios
-    .get<{ unitPrice: CurrencyValue | null }>('commerce-api/site/suppliers/items/price', {
-      params: { supplierId, inventoryItemId, uomId },
-      showSuccessToast: false,
-    } as Parameters<typeof axios.get>[1])
-    .then((r) => r.data);
-}
-
 // Sends a purchase order email with PDF attachment
 export function sendPurchaseOrderEmail({ id, email }: SendPurchaseOrderEmailPayload): Promise<SuccessResponse> {
   return axios.post<SuccessResponse>(`commerce-api/purchase-orders/${id}/send-email`, { email }).then((r) => r.data);

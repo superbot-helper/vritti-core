@@ -19,7 +19,7 @@ export const PartyCommunicationSelector = forwardRef<HTMLButtonElement, PartyCom
       ref={ref}
       label={CHANNEL_DEFAULTS[channel].label}
       placeholder={partyId ? CHANNEL_DEFAULTS[channel].placeholder : 'Select a supplier first'}
-      description="From the company's communications tagged Ordering"
+      description="From the supplier's communications tagged Ordering"
       searchable
       {...props}
       disabled={!partyId || props.disabled}

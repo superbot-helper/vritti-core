@@ -5,13 +5,12 @@ import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
 import { useForm } from 'react-hook-form';
 import { useChangePurchaseOrderSupplier } from '@/hooks/site/purchase-orders';
-import { useSiteId } from '@/hooks/site/useSiteId';
 import {
   type ChangePurchaseOrderSupplierFormData,
   changePurchaseOrderSupplierSchema,
   type PurchaseOrderDetail,
 } from '@/schemas/purchase-orders';
-import { SupplierSelector } from '@/selectors/supplier';
+import { SiteSupplierSelector } from '@/selectors/site-supplier';
 
 interface ChangePurchaseOrderSupplierDialogProps {
   purchaseOrder: PurchaseOrderDetail;
@@ -26,7 +25,6 @@ export const ChangePurchaseOrderSupplierDialog: React.FC<ChangePurchaseOrderSupp
   onSuccess,
   onCancel,
 }) => {
-  const siteId = useSiteId();
   const form = useForm<ChangePurchaseOrderSupplierFormData>({
     resolver: zodResolver(changePurchaseOrderSupplierSchema),
     defaultValues: {
@@ -60,11 +58,11 @@ export const ChangePurchaseOrderSupplierDialog: React.FC<ChangePurchaseOrderSupp
         supplierId: data.supplierId,
       })}
     >
-      <SupplierSelector
+      <SiteSupplierSelector
         name="supplierId"
         label="Supplier"
         placeholder="Select supplier"
-        params={{ siteId, enrollmentStatus: 'ENROLLED' }}
+        enrollmentStatus="ENROLLED"
       />
       <DialogActions>
         <Button type="button" variant="outline" onClick={onCancel}>

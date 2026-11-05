@@ -1,33 +1,22 @@
 import { AddSupplierItemPriceDto } from '@commerce/supplier-item-prices/dto/request/add-supplier-item-price.dto';
 import { SupplierItemPriceHistoryQueryDto } from '@commerce/supplier-item-prices/dto/request/supplier-item-price-history-query.dto';
+import { SupplierItemPricesTableQueryDto } from '@commerce/supplier-item-prices/dto/request/supplier-item-prices-table-query.dto';
 import { UpdateSupplierItemPriceDto } from '@commerce/supplier-item-prices/dto/request/update-supplier-item-price.dto';
 import type { SupplierItemPriceHistoryResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-history-response.dto';
 import type { SupplierItemPriceResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-response.dto';
 import type { SupplierItemPriceTableResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-table-response.dto';
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Logger,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-  Query,
-} from '@nestjs/common';
+import type { SupplierItemPricedSitesResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-priced-sites-response.dto';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthType, Require, UserId } from '@vritti/api-sdk/auth';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import { LE_SUPPLIERS } from '@vritti/commerce-permissions/suppliers';
 import { SessionTypeValues } from '@/db/schema';
 import { RequireFeature, RequirePermission } from '@/rbac/decorators';
-import { OrgId } from '@/security/decorators';
+import { LegalEntityId, OrgId } from '@/security/decorators';
 import { SupplierItemPricesGatewayService } from './services/supplier-item-prices-gateway.service';
 
-// A supplier item's validity-dated prices across the legal entity's sites: the table, the graph, and their records
+// A supplier item's validity-dated prices across the legal entity's sites: the table, the price history, and their records
 @ApiTags('Commerce - Supplier Item Prices')
 @ApiBearerAuth()
 @Require(AuthType.Session, SessionTypeValues.WEB)
@@ -38,44 +27,43 @@ export class SupplierItemPricesGatewayController {
 
   constructor(private readonly service: SupplierItemPricesGatewayService) {}
 
-  // Returns the price timeline of a supplier item for the table, across all sites
+  // Returns the price timeline of a supplier item at one site
   @Get(':id/items/:itemId/prices/table')
   @RequirePermission(LE_SUPPLIERS.items.prices.view)
   getItemPricesTable(
     @Param('id') supplierId: string,
     @Param('itemId') itemId: string,
+    @Query() query: SupplierItemPricesTableQueryDto,
     @UserId() userId: string,
-    @OrgId() orgId: string,
   ): Promise<SupplierItemPriceTableResponseDto> {
     this.logger.log(`GET /commerce-api/le/suppliers/${supplierId}/items/${itemId}/prices/table`);
-    return this.service.findItemPricesTable(itemId, undefined, userId, orgId);
+    return this.service.findItemPricesTable(itemId, userId, query);
   }
 
-  // Returns the price timeline of a supplier item at one of the LE's sites for the table
-  @Get(':id/sites/:siteId/items/:itemId/prices/table')
+  // Returns the sites a supplier item has prices at, in the site picker's order
+  @Get(':id/items/:itemId/prices/site-ids')
   @RequirePermission(LE_SUPPLIERS.items.prices.view)
-  getSiteItemPricesTable(
+  getItemPricedSiteIds(
     @Param('id') supplierId: string,
-    @Param('siteId', new ParseUUIDPipe()) siteId: string,
     @Param('itemId') itemId: string,
-    @UserId() userId: string,
-    @OrgId() orgId: string,
-  ): Promise<SupplierItemPriceTableResponseDto> {
-    this.logger.log(`GET /commerce-api/le/suppliers/${supplierId}/sites/${siteId}/items/${itemId}/prices/table`);
-    return this.service.findItemPricesTable(itemId, siteId, userId, orgId);
+    @LegalEntityId() legalEntityId: string | undefined,
+  ): Promise<SupplierItemPricedSitesResponseDto> {
+    this.logger.log(`GET /commerce-api/le/suppliers/${supplierId}/items/${itemId}/prices/site-ids`);
+    return this.service.findItemPricedSiteIds(itemId, legalEntityId);
   }
 
-  // Returns every price window of a supplier item grouped by site — unpaged, for charts
-  @Get(':id/items/:itemId/prices/history')
+  // Returns a supplier item's price windows in a date range at the asked sites, or at every priced site
+  @Get(':id/items/:itemId/price-history')
   @RequirePermission(LE_SUPPLIERS.items.prices.view)
   getItemPriceHistory(
     @Param('id') supplierId: string,
     @Param('itemId') itemId: string,
     @Query() query: SupplierItemPriceHistoryQueryDto,
+    @LegalEntityId() legalEntityId: string | undefined,
     @OrgId() orgId: string,
   ): Promise<SupplierItemPriceHistoryResponseDto> {
-    this.logger.log(`GET /commerce-api/le/suppliers/${supplierId}/items/${itemId}/prices/history`);
-    return this.service.findItemPriceHistory(itemId, query, orgId);
+    this.logger.log(`GET /commerce-api/le/suppliers/${supplierId}/items/${itemId}/price-history`);
+    return this.service.findItemPriceHistory(itemId, query, legalEntityId, orgId);
   }
 
   // Adds a price record to a supplier item's timeline

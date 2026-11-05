@@ -2,16 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import { and, eq, or, type SQL } from '@vritti/api-sdk/drizzle-orm';
 import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
-import { type NewPaymentTermLine, type PaymentTermLine, paymentTermLines } from '@/db/schema';
+import { type NewPaymentTermRule, type PaymentTermRule, paymentTermRules } from '@/db/schema';
 import type { PaymentTermRuleFieldsDto } from '../dto/request/payment-term-rule-fields.dto';
 
 @Injectable()
-export class PaymentTermRulesDomainRepository extends PrimaryBaseRepository<typeof paymentTermLines> {
+export class PaymentTermRulesDomainRepository extends PrimaryBaseRepository<typeof paymentTermRules> {
   constructor(database: PrimaryDatabaseService) {
-    super(database, paymentTermLines);
+    super(database, paymentTermRules);
   }
 
-  findByTerm(paymentTermId: string): Promise<PaymentTermLine[]> {
+  findByTerm(paymentTermId: string): Promise<PaymentTermRule[]> {
     return this.findMany({ where: { paymentTermId }, orderBy: { dueDays: 'asc' } });
   }
 
@@ -23,12 +23,12 @@ export class PaymentTermRulesDomainRepository extends PrimaryBaseRepository<type
   // One read for an edit: the rule itself and any other rule already on the due day it moves to
   async assertEditable(paymentTermId: string, id: string, dueDays: number): Promise<void> {
     const rows = await this.db
-      .select({ id: paymentTermLines.id, dueDays: paymentTermLines.dueDays })
-      .from(paymentTermLines)
+      .select({ id: paymentTermRules.id, dueDays: paymentTermRules.dueDays })
+      .from(paymentTermRules)
       .where(
         and(
-          eq(paymentTermLines.paymentTermId, paymentTermId),
-          or(eq(paymentTermLines.id, id), eq(paymentTermLines.dueDays, dueDays)),
+          eq(paymentTermRules.paymentTermId, paymentTermId),
+          or(eq(paymentTermRules.id, id), eq(paymentTermRules.dueDays, dueDays)),
         ),
       );
     if (!rows.some((row) => row.id === id)) throw new NotFoundException('Rule not found.');
@@ -38,7 +38,7 @@ export class PaymentTermRulesDomainRepository extends PrimaryBaseRepository<type
   // Deletes in one statement; nothing deleted means the rule is not on this term
   async deleteOrThrow(paymentTermId: string, id: string): Promise<void> {
     const { count } = await this.deleteMany(
-      and(eq(paymentTermLines.id, id), eq(paymentTermLines.paymentTermId, paymentTermId)) as SQL,
+      and(eq(paymentTermRules.id, id), eq(paymentTermRules.paymentTermId, paymentTermId)) as SQL,
     );
     if (count === 0) throw new NotFoundException('Rule not found.');
   }
@@ -64,7 +64,7 @@ export class PaymentTermRulesDomainRepository extends PrimaryBaseRepository<type
   }
 
   async addRule(paymentTermId: string, rule: PaymentTermRuleFieldsDto): Promise<void> {
-    await this.create({ ...this.toValues(rule), paymentTermId } as NewPaymentTermLine);
+    await this.create({ ...this.toValues(rule), paymentTermId } as NewPaymentTermRule);
   }
 
   async updateRule(id: string, rule: PaymentTermRuleFieldsDto): Promise<void> {
@@ -81,7 +81,7 @@ export class PaymentTermRulesDomainRepository extends PrimaryBaseRepository<type
 
   private toValues(
     rule: PaymentTermRuleFieldsDto,
-  ): Pick<NewPaymentTermLine, 'percent' | 'dueDays' | 'discountPercent' | 'discountDays'> {
+  ): Pick<NewPaymentTermRule, 'percent' | 'dueDays' | 'discountPercent' | 'discountDays'> {
     return {
       percent: rule.percent,
       dueDays: rule.dueDays,

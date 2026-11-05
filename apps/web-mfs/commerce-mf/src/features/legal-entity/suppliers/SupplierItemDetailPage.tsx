@@ -9,13 +9,14 @@ import { Tabs } from '@vritti/quantum-ui/Tabs';
 import { Package, Pencil } from 'lucide-react';
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PriceHistory } from '@/components/suppliers/prices/PriceHistory';
+import { PricesTable } from '@/components/suppliers/prices/PricesTable';
 import { useSupplierItem, useUnlinkSupplierItem } from '@/hooks/legal-entity/suppliers';
 import { UpdateSupplierItemDialog } from './forms/UpdateSupplierItemDialog';
 import { AddItemPriceAction } from './item-tabs/AddItemPriceAction';
-import { ItemSitesTab } from './item-tabs/ItemSitesTab';
 import { OverviewTab } from './item-tabs/OverviewTab';
-import { PricesGraphTab } from './item-tabs/PricesGraphTab';
-import { PricesTableTab } from './item-tabs/PricesTableTab';
+import { SiteItemsTab } from './item-tabs/SiteItemsTab';
+import { pricesBinding } from './pricesBinding';
 
 export const SupplierItemDetailPage = () => {
   const { id: supplierId } = useSlugParams('supplierSlug');
@@ -77,36 +78,37 @@ export const SupplierItemDetailPage = () => {
             content: <OverviewTab item={item} />,
           },
           {
-            value: 'sites',
+            value: 'site-items',
             label: 'Sites',
-            permission: LE_SUPPLIERS.sites.items.view,
-            content: <ItemSitesTab supplierId={supplierId} itemId={itemId} />,
+            permission: LE_SUPPLIERS.siteItems.view,
+            content: <SiteItemsTab supplierId={supplierId} itemId={itemId} />,
           },
           {
             value: 'prices',
             label: 'Prices',
             permission: LE_SUPPLIERS.items.prices.view,
             content: (
-              <PricesTableTab
+              <PricesTable
+                prices={pricesBinding}
                 supplierId={supplierId}
                 itemId={itemId}
                 inventoryItemId={item.inventoryItemId}
                 uomId={item.uomId}
                 currencyCodes={item.supplierCurrencyCodes}
-                addButton={addPrice}
+                addAction={addPrice}
               />
             ),
           },
           {
-            value: 'price-graph',
-            label: 'Price Graph',
+            value: 'price-history',
+            label: 'Price History',
             permission: LE_SUPPLIERS.items.prices.view,
             content: (
-              <PricesGraphTab
+              <PriceHistory
+                prices={pricesBinding}
                 supplierId={supplierId}
                 itemId={itemId}
                 currencyCode={item.supplierCurrencyCode}
-                addButton={addPrice}
               />
             ),
           },

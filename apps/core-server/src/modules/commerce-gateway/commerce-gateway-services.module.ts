@@ -51,8 +51,9 @@ import { PosTerminalsGatewayService } from './site-api/pos-terminals/services/po
 import { PurchaseOrdersGatewayService } from './site-api/purchase-orders/services/purchase-orders-gateway.service';
 import { StockAdjustmentsGatewayService } from './site-api/stock-adjustments/services/stock-adjustments-gateway.service';
 import { StockTransfersGatewayService } from './site-api/stock-transfers/services/stock-transfers-gateway.service';
-import { SiteSupplierItemPricesGatewayService } from './site-api/suppliers/item-prices/services/site-supplier-item-prices-gateway.service';
+import { SiteSupplierQuotationsGatewayService } from './site-api/suppliers/services/site-supplier-quotations-gateway.service';
 import { SiteSuppliersGatewayService } from './site-api/suppliers/services/site-suppliers-gateway.service';
+import { SiteSupplierSiteItemPricesGatewayService } from './site-api/suppliers/site-item-prices/services/site-supplier-site-item-prices-gateway.service';
 import { SiteGroupInventoryItemsGatewayService } from './site-group-api/inventory-items/services/site-group-inventory-items-gateway.service';
 
 const services = [
@@ -86,9 +87,10 @@ const services = [
   StockAdjustmentsGatewayService,
   StockTransfersGatewayService,
   SiteSuppliersGatewayService,
+  SiteSupplierQuotationsGatewayService,
   SupplierQuotationsGatewayService,
   SupplierItemPricesGatewayService,
-  SiteSupplierItemPricesGatewayService,
+  SiteSupplierSiteItemPricesGatewayService,
   SuppliersGatewayService,
   OrgInventoryItemsGatewayService,
   SiteGroupInventoryItemsGatewayService,

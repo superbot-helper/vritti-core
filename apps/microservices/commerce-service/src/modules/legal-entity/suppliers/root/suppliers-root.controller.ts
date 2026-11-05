@@ -1,8 +1,12 @@
 import type { SupplierDetailDto, SupplierDto } from '@domain/suppliers/dto/entity/supplier.dto';
 import { BulkSetSupplierActiveDto } from '@domain/suppliers/dto/request/bulk-set-supplier-active.dto';
+import { BulkSetSupplierDefaultPaymentTermDto } from '@domain/suppliers/dto/request/bulk-set-supplier-default-payment-term.dto';
 import { ChangeSupplierCurrencyDto } from '@domain/suppliers/dto/request/change-supplier-currency.dto';
 import { CreateSupplierDto } from '@domain/suppliers/dto/request/create-supplier.dto';
 import { SetSupplierActiveDto } from '@domain/suppliers/dto/request/set-supplier-active.dto';
+import { SetSupplierDefaultPaymentTermDto } from '@domain/suppliers/dto/request/set-supplier-default-payment-term.dto';
+import { SetSupplierPaymentBlockedDto } from '@domain/suppliers/dto/request/set-supplier-payment-blocked.dto';
+import { SetSupplierPurchasingBlockedDto } from '@domain/suppliers/dto/request/set-supplier-purchasing-blocked.dto';
 import { UpdateSupplierDto } from '@domain/suppliers/dto/request/update-supplier.dto';
 import { SuppliersDomainService } from '@domain/suppliers/services/suppliers.service';
 import { Controller, Logger } from '@nestjs/common';
@@ -55,6 +59,32 @@ export class SuppliersRootController {
   async bulkSetActive(@Payload() dto: BulkSetSupplierActiveDto): Promise<SuccessResponseDto> {
     this.logger.log(`suppliers.bulkSetActive — ${dto.ids.length} selected, isActive: ${dto.isActive}`);
     return this.service.bulkSetActive(dto.ids, dto.isActive);
+  }
+
+  @MessagePattern({ cmd: 'le.suppliers.setDefaultPaymentTerm' })
+  async setDefaultPaymentTerm(@Payload() dto: SetSupplierDefaultPaymentTermDto): Promise<SuccessResponseDto> {
+    this.logger.log(`suppliers.setDefaultPaymentTerm — id: ${dto.id}, paymentTermId: ${dto.defaultPaymentTermId}`);
+    return this.service.setDefaultPaymentTerm(dto.id, dto.defaultPaymentTermId);
+  }
+
+  @MessagePattern({ cmd: 'le.suppliers.bulkSetDefaultPaymentTerm' })
+  async bulkSetDefaultPaymentTerm(@Payload() dto: BulkSetSupplierDefaultPaymentTermDto): Promise<SuccessResponseDto> {
+    this.logger.log(
+      `suppliers.bulkSetDefaultPaymentTerm — ${dto.ids.length} selected, paymentTermId: ${dto.defaultPaymentTermId}`,
+    );
+    return this.service.bulkSetDefaultPaymentTerm(dto.ids, dto.defaultPaymentTermId);
+  }
+
+  @MessagePattern({ cmd: 'le.suppliers.setPurchasingBlocked' })
+  async setPurchasingBlocked(@Payload() dto: SetSupplierPurchasingBlockedDto): Promise<SuccessResponseDto> {
+    this.logger.log(`suppliers.setPurchasingBlocked — id: ${dto.id}, purchasingBlocked: ${dto.purchasingBlocked}`);
+    return this.service.setPurchasingBlocked(dto.id, dto.purchasingBlocked);
+  }
+
+  @MessagePattern({ cmd: 'le.suppliers.setPaymentBlocked' })
+  async setPaymentBlocked(@Payload() dto: SetSupplierPaymentBlockedDto): Promise<SuccessResponseDto> {
+    this.logger.log(`suppliers.setPaymentBlocked — id: ${dto.id}, paymentBlocked: ${dto.paymentBlocked}`);
+    return this.service.setPaymentBlocked(dto.id, dto.paymentBlocked);
   }
 
   @MessagePattern({ cmd: 'le.suppliers.delete' })

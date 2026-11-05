@@ -76,8 +76,8 @@ export class PurchaseOrdersItemsService {
       });
     }
 
-    const itemSite = await this.supplierItemsRepository.findItemSite(supplierItem.id, po.siteId);
-    if (!itemSite) {
+    const supplierSiteItem = await this.supplierItemsRepository.findSiteItem(supplierItem.id, po.siteId);
+    if (!supplierSiteItem) {
       throw new BadRequestException({
         label: 'Item Not At Site',
         detail: 'This supplier item is not set up at this site.',

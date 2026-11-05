@@ -16,7 +16,7 @@ import {
   PartyFunctionTypeValues,
   partyCommunications,
 } from '@/db/schema';
-import { type PartyCommunicationFunction, PartyCommunicationDto } from '../dto/entity/party-communication.dto';
+import { PartyCommunicationDto, type PartyCommunicationFunction } from '../dto/entity/party-communication.dto';
 import type { PartyCommunicationInputDto } from '../dto/request/party-communication-input.dto';
 import type { UpdateCommunicationDto } from '../dto/request/update-communication.dto';
 import { PartyCommunicationsDomainRepository } from '../repositories/party-communications.repository';
@@ -246,7 +246,7 @@ export class PartyCommunicationsDomainService {
     const dropsOrdering =
       functions !== undefined && !functions.some((a) => a.function === PartyFunctionTypeValues.ORDERING);
     const deactivates = rest.isActive === false && existing.isActive;
-    if ((dropsOrdering || deactivates) && (await this.repository.isUsedBySupplierSite(id))) {
+    if ((dropsOrdering || deactivates) && (await this.repository.isUsedBySupplierEnrollment(id))) {
       throw new ConflictException({
         label: 'Communication In Use',
         detail: 'A supplier site orders through this value. Pick another order email or phone on that site first.',
@@ -279,7 +279,7 @@ export class PartyCommunicationsDomainService {
   async delete(id: string): Promise<SuccessResponseDto> {
     const existing = await this.repository.findById(id);
     if (!existing) throw new NotFoundException('Communication not found.');
-    if (await this.repository.isUsedBySupplierSite(id)) {
+    if (await this.repository.isUsedBySupplierEnrollment(id)) {
       throw new ConflictException({
         label: 'Communication In Use',
         detail: `"${existing.value}" is a supplier site's order contact. Pick another order email or phone on that site first.`,

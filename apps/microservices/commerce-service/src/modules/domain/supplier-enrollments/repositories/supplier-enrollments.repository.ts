@@ -1,0 +1,661 @@
+import { Injectable } from '@nestjs/common';
+import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getColumns,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  notInArray,
+  or,
+  type SQL,
+  sql,
+} from '@vritti/api-sdk/drizzle-orm';
+import { type AnyPgColumn, alias } from '@vritti/api-sdk/drizzle-pg-core';
+import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import type { SelectQueryResult } from '@vritti/api-sdk/select';
+import {
+  type PartyCommunicationChannel,
+  PartyCommunicationChannelValues,
+  PartyFunctionTypeValues,
+  type PartyIdentifierType,
+  type PartyType,
+  parties,
+  partyBankAccounts,
+  partyCommunications,
+  partyFunctions,
+  partyIdentifiers,
+  partyRelationships,
+  partyTaxRegistrations,
+  paymentTerms,
+  type Supplier,
+  type SupplierEnrollment,
+  supplierEnrollments,
+  suppliers,
+  TaxIdIdentifierTypes,
+  type TaxRegistrationType,
+  TaxRegistrationTypeValues,
+} from '@/db/schema';
+import { SupplierEnrollmentStatusValues } from '../dto/entity/supplier-enrollment-row.dto';
+import type { SupplierEnrollmentSelectQueryDto } from '../dto/request/supplier-enrollment-select-query.dto';
+
+const orderRel = alias(partyRelationships, 'order_rel');
+const orderParty = alias(parties, 'order_party');
+const orderContactEmail = alias(partyCommunications, 'order_contact_email');
+const orderContactPhone = alias(partyCommunications, 'order_contact_phone');
+const orderEmail = alias(partyCommunications, 'order_email');
+const orderPhone = alias(partyCommunications, 'order_phone');
+
+const orderContactJoins = [
+  { table: orderRel, on: eq(orderRel.id, supplierEnrollments.orderRelationshipId) },
+  { table: orderParty, on: eq(orderParty.id, orderRel.childPartyId) },
+  {
+    table: orderContactEmail,
+    on: and(
+      eq(orderContactEmail.partyId, orderRel.childPartyId),
+      eq(orderContactEmail.channel, PartyCommunicationChannelValues.EMAIL),
+      eq(orderContactEmail.isPrimary, true),
+    ),
+  },
+  {
+    table: orderContactPhone,
+    on: and(
+      eq(orderContactPhone.partyId, orderRel.childPartyId),
+      eq(orderContactPhone.channel, PartyCommunicationChannelValues.PHONE),
+      eq(orderContactPhone.isPrimary, true),
+    ),
+  },
+];
+
+// The ordering email and phone every enrollment requires
+const orderCommunicationJoins = [
+  { table: orderEmail, on: eq(orderEmail.id, supplierEnrollments.orderEmailCommunicationId) },
+  { table: orderPhone, on: eq(orderPhone.id, supplierEnrollments.orderPhoneCommunicationId) },
+];
+
+const orderContactSelect = {
+  orderContactLabel: orderRel.jobTitle,
+  orderContactName: orderParty.displayName,
+  orderContactEmail: orderContactEmail.value,
+  orderContactPhone: orderContactPhone.value,
+  orderEmail: orderEmail.value,
+  orderPhone: orderPhone.value,
+};
+
+const ORDER_COMMUNICATION_FIELDS = {
+  [PartyCommunicationChannelValues.EMAIL]: {
+    field: 'orderEmailCommunicationId',
+    label: 'Invalid Order Email',
+    noun: 'email address',
+  },
+  [PartyCommunicationChannelValues.PHONE]: {
+    field: 'orderPhoneCommunicationId',
+    label: 'Invalid Order Phone',
+    noun: 'phone number',
+  },
+} as const;
+
+const ENROLLMENT_REGISTRATION_TYPES: TaxRegistrationType[] = [
+  TaxRegistrationTypeValues.GSTIN,
+  TaxRegistrationTypeValues.VAT,
+];
+
+// One field of the party's tax ID — the primary active identifier of a tax-ID type — or null when it has none on record
+const partyTaxIdField = <T>(column: AnyPgColumn) =>
+  sql<T | null>`(
+    SELECT ${column} FROM ${partyIdentifiers}
+    WHERE ${partyIdentifiers.partyId} = ${suppliers.partyId}
+      AND ${inArray(partyIdentifiers.idType, TaxIdIdentifierTypes)}
+      AND ${partyIdentifiers.isActive} = true
+    ORDER BY ${partyIdentifiers.isPrimary} DESC, ${partyIdentifiers.createdAt} ASC
+    LIMIT 1
+  )`;
+
+// Matches the site's enrollment row of the supplier in the current select
+const enrollmentAtSite = (siteId: string) =>
+  and(eq(supplierEnrollments.supplierId, suppliers.id), eq(supplierEnrollments.siteId, siteId));
+
+// Splits a comma-separated id list from a select query
+const parseIds = (input?: string): string[] =>
+  (input ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+export type SupplierEnrollmentRowRecord = {
+  id: string | null;
+  supplierId: string;
+  supplierCode: string;
+  partyId: string;
+  partyName: string;
+  partyType: PartyType;
+  currencyCode: string;
+  defaultPaymentTermId: string;
+  isActive: boolean | null;
+  isSupplierActive: boolean;
+  purchasingBlocked: boolean;
+  paymentBlocked: boolean;
+  paymentTermId: string | null;
+  paymentTermName: string | null;
+  partyTaxRegistrationId: string | null;
+  registrationNumber: string | null;
+  partyBankAccountId: string | null;
+  bankAccountName: string | null;
+  orderRelationshipId: string | null;
+  orderContactLabel: string | null;
+  orderContactName: string | null;
+  orderEmailCommunicationId: string | null;
+  orderEmail: string | null;
+  orderPhoneCommunicationId: string | null;
+  orderPhone: string | null;
+  enrolledAt: Date | null;
+};
+
+export type SupplierEnrollmentDetailRecord = SupplierEnrollmentRowRecord & {
+  partyTaxId: string | null;
+  partyTaxIdType: PartyIdentifierType | null;
+};
+
+export type SupplierEnrollmentWithPicks = SupplierEnrollment & {
+  paymentTermName: string;
+  registrationNumber: string | null;
+  registrationType: TaxRegistrationType | null;
+  bankAccountName: string | null;
+  bankName: string | null;
+  orderContactLabel: string | null;
+  orderContactName: string | null;
+  orderContactEmail: string | null;
+  orderContactPhone: string | null;
+  orderEmail: string;
+  orderPhone: string;
+};
+
+export interface SupplierEnrollmentPicks {
+  paymentTermId?: string;
+  partyTaxRegistrationId?: string | null;
+  partyBankAccountId?: string | null;
+  orderRelationshipId?: string | null;
+  orderEmailCommunicationId?: string;
+  orderPhoneCommunicationId?: string;
+}
+
+export interface EnrolledSite {
+  siteId: string;
+  isActive: boolean;
+}
+
+@Injectable()
+export class SupplierEnrollmentsDomainRepository extends PrimaryBaseRepository<typeof supplierEnrollments> {
+  constructor(database: PrimaryDatabaseService) {
+    super(database, supplierEnrollments);
+  }
+
+  // Returns enrollments joined with their payment term, registration, bank account, order contact and order email/phone
+  private findWithPicks(where: SQL, limit?: number): Promise<{ result: SupplierEnrollmentWithPicks[]; count: number }> {
+    return this.findAllAndCount<SupplierEnrollmentWithPicks>({
+      select: {
+        ...getColumns(supplierEnrollments),
+        paymentTermName: paymentTerms.name,
+        registrationNumber: partyTaxRegistrations.registrationNumber,
+        registrationType: partyTaxRegistrations.registrationType,
+        bankAccountName: partyBankAccounts.accountName,
+        bankName: partyBankAccounts.bankName,
+        ...orderContactSelect,
+      },
+      innerJoins: [
+        { table: paymentTerms, on: eq(paymentTerms.id, supplierEnrollments.paymentTermId) },
+        ...orderCommunicationJoins,
+      ],
+      leftJoins: [
+        {
+          table: partyTaxRegistrations,
+          on: eq(partyTaxRegistrations.id, supplierEnrollments.partyTaxRegistrationId),
+        },
+        { table: partyBankAccounts, on: eq(partyBankAccounts.id, supplierEnrollments.partyBankAccountId) },
+        ...orderContactJoins,
+      ],
+      where,
+      orderBy: [desc(supplierEnrollments.createdAt)],
+      limit,
+    });
+  }
+
+  // Selects the shared enrollment row columns of a supplier at a site, enrolled or not
+  private rowSelection() {
+    return {
+      id: supplierEnrollments.id,
+      supplierId: suppliers.id,
+      supplierCode: suppliers.code,
+      partyId: suppliers.partyId,
+      partyName: parties.displayName,
+      partyType: parties.partyType,
+      currencyCode: suppliers.currencyCode,
+      defaultPaymentTermId: suppliers.defaultPaymentTermId,
+      isActive: supplierEnrollments.isActive,
+      isSupplierActive: suppliers.isActive,
+      purchasingBlocked: suppliers.purchasingBlocked,
+      paymentBlocked: suppliers.paymentBlocked,
+      paymentTermId: supplierEnrollments.paymentTermId,
+      paymentTermName: paymentTerms.name,
+      partyTaxRegistrationId: supplierEnrollments.partyTaxRegistrationId,
+      registrationNumber: partyTaxRegistrations.registrationNumber,
+      partyBankAccountId: supplierEnrollments.partyBankAccountId,
+      bankAccountName: partyBankAccounts.accountName,
+      orderRelationshipId: supplierEnrollments.orderRelationshipId,
+      orderContactLabel: orderRel.jobTitle,
+      orderContactName: orderParty.displayName,
+      orderEmailCommunicationId: supplierEnrollments.orderEmailCommunicationId,
+      orderEmail: orderEmail.value,
+      orderPhoneCommunicationId: supplierEnrollments.orderPhoneCommunicationId,
+      orderPhone: orderPhone.value,
+      enrolledAt: supplierEnrollments.createdAt,
+    };
+  }
+
+  // Returns every enrollment of a supplier joined with its picks
+  async findAllForSupplier(supplierId: string): Promise<SupplierEnrollmentWithPicks[]> {
+    const { result } = await this.findWithPicks(eq(supplierEnrollments.supplierId, supplierId));
+    return result;
+  }
+
+  // Loads one enrollment joined with its picks
+  async findByIdWithPicksOrThrow(id: string): Promise<SupplierEnrollmentWithPicks> {
+    const { result } = await this.findWithPicks(eq(supplierEnrollments.id, id), 1);
+    if (!result[0]) throw new NotFoundException('Enrollment not found.');
+    return result[0];
+  }
+
+  // Loads a supplier row for enrollment validation, throwing when it does not exist
+  async findSupplierOrThrow(supplierId: string): Promise<Supplier> {
+    const [row] = await this.db.select().from(suppliers).where(eq(suppliers.id, supplierId)).limit(1);
+    if (!row) throw new NotFoundException('Supplier not found.');
+    return row as Supplier;
+  }
+
+  // Loads the supplier's enrollment at a site
+  async findBySupplierAndSite(supplierId: string, siteId: string): Promise<SupplierEnrollment | undefined> {
+    return this.model.findFirst({ where: { supplierId, siteId } }) as Promise<SupplierEnrollment | undefined>;
+  }
+
+  // Loads the supplier's enrollment at a site, throwing when the supplier is not enrolled there
+  async findBySupplierAndSiteOrThrow(supplierId: string, siteId: string): Promise<SupplierEnrollment> {
+    const enrollment = await this.findBySupplierAndSite(supplierId, siteId);
+    if (!enrollment) throw new NotFoundException('Supplier is not enrolled for this site.');
+    return enrollment;
+  }
+
+  // Rejects buying from a supplier that is not enrolled, not active or purchasing-blocked at the site
+  async assertPurchasable(supplierId: string, siteId: string): Promise<void> {
+    const enrollment = await this.findBySupplierAndSite(supplierId, siteId);
+    if (!enrollment) {
+      throw new BadRequestException({
+        label: 'Not Enrolled',
+        detail: 'This supplier is not enrolled for this site. Enroll it here before creating this document.',
+      });
+    }
+    if (!enrollment.isSupplierActive || !enrollment.isActive) {
+      throw new BadRequestException({
+        label: 'Supplier Inactive',
+        detail: enrollment.isSupplierActive
+          ? "This supplier's enrollment at this site is inactive. Activate it at this site before purchasing."
+          : 'This supplier is inactive. Activate the supplier before purchasing from it.',
+      });
+    }
+    if ((await this.findSupplierOrThrow(supplierId)).purchasingBlocked) {
+      throw new BadRequestException({
+        label: 'Supplier Blocked',
+        detail: 'Purchasing is blocked for this supplier. Lift the block on the supplier before purchasing from it.',
+      });
+    }
+  }
+
+  // Rejects any of the given picks that does not belong to the supplier's party or is unusable
+  async assertPicksUsable(partyId: string, picks: SupplierEnrollmentPicks): Promise<void> {
+    if (picks.paymentTermId) await this.assertPaymentTermUsable(picks.paymentTermId);
+    if (picks.partyTaxRegistrationId) await this.assertRegistrationUsable(picks.partyTaxRegistrationId, partyId);
+    if (picks.partyBankAccountId) await this.assertBankAccountBelongsToParty(picks.partyBankAccountId, partyId);
+    if (picks.orderRelationshipId) {
+      await this.assertOrderRelationshipBelongsToParty(picks.orderRelationshipId, partyId);
+    }
+    if (picks.orderEmailCommunicationId) {
+      await this.assertOrderCommunicationUsable(
+        picks.orderEmailCommunicationId,
+        partyId,
+        PartyCommunicationChannelValues.EMAIL,
+      );
+    }
+    if (picks.orderPhoneCommunicationId) {
+      await this.assertOrderCommunicationUsable(
+        picks.orderPhoneCommunicationId,
+        partyId,
+        PartyCommunicationChannelValues.PHONE,
+      );
+    }
+  }
+
+  // Rejects an order email or phone that is not an active ORDERING communication of the supplier's party on that channel
+  async assertOrderCommunicationUsable(
+    communicationId: string,
+    partyId: string,
+    channel: PartyCommunicationChannel,
+  ): Promise<void> {
+    const target = ORDER_COMMUNICATION_FIELDS[channel as keyof typeof ORDER_COMMUNICATION_FIELDS];
+    const [row] = await this.db
+      .select({
+        partyId: partyCommunications.partyId,
+        channel: partyCommunications.channel,
+        isActive: partyCommunications.isActive,
+        isOrdering: sql<boolean>`EXISTS (
+          SELECT 1 FROM ${partyFunctions}
+          WHERE ${partyFunctions.partyCommunicationId} = ${partyCommunications.id}
+            AND ${partyFunctions.function} = ${PartyFunctionTypeValues.ORDERING}
+        )`,
+      })
+      .from(partyCommunications)
+      .where(eq(partyCommunications.id, communicationId))
+      .limit(1);
+
+    const failure =
+      !row || row.partyId !== partyId
+        ? {
+            detail: `The selected ${target.noun} does not belong to this supplier.`,
+            message: 'Not a contact of this supplier',
+          }
+        : row.channel !== channel
+          ? { detail: `The selected value is not an ${target.noun}.`, message: `Not an ${target.noun}` }
+          : !row.isActive
+            ? {
+                detail: `The selected ${target.noun} is inactive. Pick an active one.`,
+                message: `Inactive ${target.noun}`,
+              }
+            : !row.isOrdering
+              ? {
+                  detail: `The selected ${target.noun} is not marked for ordering on the supplier.`,
+                  message: 'Not marked for ordering',
+                }
+              : undefined;
+    if (!failure) return;
+    throw new BadRequestException({
+      label: target.label,
+      detail: failure.detail,
+      errors: [{ field: target.field, message: failure.message }],
+    });
+  }
+
+  // Rejects payment-term picks that do not exist or are still drafts
+  async assertPaymentTermUsable(paymentTermId: string): Promise<void> {
+    const [term] = await this.db
+      .select({ isPublished: paymentTerms.isPublished })
+      .from(paymentTerms)
+      .where(eq(paymentTerms.id, paymentTermId))
+      .limit(1);
+    if (term?.isPublished) return;
+    throw new BadRequestException({
+      label: 'Invalid Payment Term',
+      detail: term
+        ? 'The selected payment term is a draft. Pick a published payment term.'
+        : 'The selected payment term does not exist.',
+      errors: [{ field: 'paymentTermId', message: term ? 'Payment term is not published' : 'Payment term not found' }],
+    });
+  }
+
+  // Rejects a registration pick that is not an active GSTIN or VAT registration of the supplier's party
+  async assertRegistrationUsable(registrationId: string, partyId: string): Promise<void> {
+    const [registration] = await this.db
+      .select({
+        partyId: partyTaxRegistrations.partyId,
+        isActive: partyTaxRegistrations.isActive,
+        registrationType: partyTaxRegistrations.registrationType,
+      })
+      .from(partyTaxRegistrations)
+      .where(eq(partyTaxRegistrations.id, registrationId))
+      .limit(1);
+    const failure =
+      !registration || registration.partyId !== partyId
+        ? {
+            label: 'Invalid Registration',
+            detail: 'The selected tax registration does not belong to this supplier.',
+            message: 'Not a registration of this supplier',
+          }
+        : !ENROLLMENT_REGISTRATION_TYPES.includes(registration.registrationType)
+          ? {
+              label: 'Invalid Registration',
+              detail: 'Only a GSTIN or VAT registration can be picked for a site enrollment.',
+              message: 'Not a GSTIN or VAT registration',
+            }
+          : !registration.isActive
+            ? {
+                label: 'Inactive Registration',
+                detail: 'The selected tax registration is inactive. Pick an active registration of this supplier.',
+                message: 'Registration is inactive',
+              }
+            : undefined;
+    if (!failure) return;
+    throw new BadRequestException({
+      label: failure.label,
+      detail: failure.detail,
+      errors: [{ field: 'partyTaxRegistrationId', message: failure.message }],
+    });
+  }
+
+  // Rejects bank account picks that belong to a different party than the supplier's
+  async assertBankAccountBelongsToParty(bankAccountId: string, partyId: string): Promise<void> {
+    const owned = await this.db
+      .select({ one: sql<number>`1` })
+      .from(partyBankAccounts)
+      .where(and(eq(partyBankAccounts.id, bankAccountId), eq(partyBankAccounts.partyId, partyId)))
+      .limit(1);
+    if (owned.length > 0) return;
+    throw new BadRequestException({
+      label: 'Invalid Bank Account',
+      detail: 'The selected bank account does not belong to this supplier.',
+      errors: [{ field: 'partyBankAccountId', message: 'Not an account of this supplier' }],
+    });
+  }
+
+  // Rejects order-contact picks that are not a relationship of this party or do not hold the ORDER function
+  async assertOrderRelationshipBelongsToParty(relationshipId: string, partyId: string): Promise<void> {
+    const [relationship] = await this.db
+      .select({
+        parentPartyId: partyRelationships.parentPartyId,
+        hasOrderFunction: sql<boolean>`EXISTS (
+          SELECT 1 FROM ${partyFunctions}
+          WHERE ${partyFunctions.partyRelationshipId} = ${partyRelationships.id}
+            AND ${partyFunctions.function} = ${PartyFunctionTypeValues.ORDER}
+        )`,
+      })
+      .from(partyRelationships)
+      .where(eq(partyRelationships.id, relationshipId))
+      .limit(1);
+    if (!relationship || relationship.parentPartyId !== partyId) {
+      throw new BadRequestException({
+        label: 'Invalid Order Contact',
+        detail: 'The selected order contact does not belong to this supplier.',
+        errors: [{ field: 'orderRelationshipId', message: 'Not a contact of this supplier' }],
+      });
+    }
+    if (!relationship.hasOrderFunction) {
+      throw new BadRequestException({
+        label: 'Invalid Order Contact',
+        detail: 'The selected contact is not marked as an order contact.',
+        errors: [{ field: 'orderRelationshipId', message: 'Not an order contact' }],
+      });
+    }
+  }
+
+  // Throws when the supplier is already enrolled for the site
+  async assertNotEnrolled(supplierId: string, siteId: string): Promise<void> {
+    if (await this.isEnrolled(supplierId, siteId)) {
+      throw new ConflictException('Supplier is already enrolled for this site.');
+    }
+  }
+
+  // Returns true when the supplier is enrolled for the site
+  async isEnrolled(supplierId: string, siteId: string): Promise<boolean> {
+    return this.exists(
+      and(eq(supplierEnrollments.supplierId, supplierId), eq(supplierEnrollments.siteId, siteId)) as SQL,
+    );
+  }
+
+  // Every supplier of the legal entity with the site's enrollment when there is one — the site's suppliers list
+  async findForSiteList(
+    legalEntityId: string,
+    siteId: string,
+    options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
+  ): Promise<{ result: SupplierEnrollmentRowRecord[]; count: number }> {
+    const where = and(eq(suppliers.legalEntityId, legalEntityId), options.where);
+    const [rows, [total]] = await Promise.all([
+      this.db
+        .select(this.rowSelection())
+        .from(suppliers)
+        .innerJoin(parties, eq(parties.id, suppliers.partyId))
+        .leftJoin(supplierEnrollments, enrollmentAtSite(siteId))
+        .leftJoin(paymentTerms, eq(paymentTerms.id, supplierEnrollments.paymentTermId))
+        .leftJoin(partyTaxRegistrations, eq(partyTaxRegistrations.id, supplierEnrollments.partyTaxRegistrationId))
+        .leftJoin(partyBankAccounts, eq(partyBankAccounts.id, supplierEnrollments.partyBankAccountId))
+        .leftJoin(orderRel, eq(orderRel.id, supplierEnrollments.orderRelationshipId))
+        .leftJoin(orderParty, eq(orderParty.id, orderRel.childPartyId))
+        .leftJoin(orderEmail, eq(orderEmail.id, supplierEnrollments.orderEmailCommunicationId))
+        .leftJoin(orderPhone, eq(orderPhone.id, supplierEnrollments.orderPhoneCommunicationId))
+        .where(where)
+        .orderBy(
+          ...(options.orderBy?.length
+            ? options.orderBy
+            : [sql`${supplierEnrollments.id} IS NULL`, asc(parties.displayName)]),
+        )
+        .limit(options.limit)
+        .offset(options.offset),
+      this.db
+        .select({ count: sql<number>`count(*)::int`.mapWith(Number) })
+        .from(suppliers)
+        .innerJoin(parties, eq(parties.id, suppliers.partyId))
+        .leftJoin(supplierEnrollments, enrollmentAtSite(siteId))
+        .leftJoin(paymentTerms, eq(paymentTerms.id, supplierEnrollments.paymentTermId))
+        .where(where),
+    ]);
+    return { result: rows as SupplierEnrollmentRowRecord[], count: total?.count ?? 0 };
+  }
+
+  // Loads a supplier of the legal entity as one site sees it, enrolled or not, throwing when it does not exist
+  async findDetailOrThrow(
+    legalEntityId: string,
+    siteId: string,
+    supplierId: string,
+  ): Promise<SupplierEnrollmentDetailRecord> {
+    const [row] = await this.db
+      .select({
+        ...this.rowSelection(),
+        partyTaxId: partyTaxIdField<string>(partyIdentifiers.idValue),
+        partyTaxIdType: partyTaxIdField<PartyIdentifierType>(partyIdentifiers.idType),
+      })
+      .from(suppliers)
+      .innerJoin(parties, eq(parties.id, suppliers.partyId))
+      .leftJoin(supplierEnrollments, enrollmentAtSite(siteId))
+      .leftJoin(paymentTerms, eq(paymentTerms.id, supplierEnrollments.paymentTermId))
+      .leftJoin(partyTaxRegistrations, eq(partyTaxRegistrations.id, supplierEnrollments.partyTaxRegistrationId))
+      .leftJoin(partyBankAccounts, eq(partyBankAccounts.id, supplierEnrollments.partyBankAccountId))
+      .leftJoin(orderRel, eq(orderRel.id, supplierEnrollments.orderRelationshipId))
+      .leftJoin(orderParty, eq(orderParty.id, orderRel.childPartyId))
+      .leftJoin(orderEmail, eq(orderEmail.id, supplierEnrollments.orderEmailCommunicationId))
+      .leftJoin(orderPhone, eq(orderPhone.id, supplierEnrollments.orderPhoneCommunicationId))
+      .where(and(eq(suppliers.legalEntityId, legalEntityId), eq(suppliers.id, supplierId)))
+      .limit(1);
+    if (!row) throw new NotFoundException('Supplier not found.');
+    return row as SupplierEnrollmentDetailRecord;
+  }
+
+  // Paginated supplier options of the legal entity with each one's enrollment at the site; requested values bypass filters
+  async findSuppliersForSiteSelect(
+    legalEntityId: string,
+    siteId: string,
+    query: SupplierEnrollmentSelectQueryDto,
+  ): Promise<SelectQueryResult> {
+    const limit = Number(query.limit) || 20;
+    const offset = Number(query.offset) || 0;
+    const values = parseIds(query.values);
+    const excludeIds = parseIds(query.excludeIds);
+    const search = query.search?.trim();
+
+    const conditions: (SQL | undefined)[] = [eq(suppliers.legalEntityId, legalEntityId)];
+    if (values.length > 0) {
+      conditions.push(inArray(suppliers.id, values));
+    } else {
+      if (query.enrollmentStatus) {
+        conditions.push(
+          query.enrollmentStatus === SupplierEnrollmentStatusValues.ENROLLED
+            ? isNotNull(supplierEnrollments.id)
+            : isNull(supplierEnrollments.id),
+        );
+      }
+      if (query.activeOnly) {
+        conditions.push(
+          eq(suppliers.isActive, true),
+          or(isNull(supplierEnrollments.id), eq(supplierEnrollments.isActive, true)),
+        );
+      }
+      if (search) {
+        conditions.push(or(ilike(parties.displayName, `%${search}%`), ilike(suppliers.code, `%${search}%`)));
+      }
+      if (excludeIds.length > 0) conditions.push(notInArray(suppliers.id, excludeIds));
+    }
+
+    const rows = await this.db
+      .select({
+        value: suppliers.id,
+        label: parties.displayName,
+        code: suppliers.code,
+        currencyCode: suppliers.currencyCode,
+        currencyCodes: suppliers.currencyCodes,
+        defaultPaymentTermId: suppliers.defaultPaymentTermId,
+        enrollmentId: supplierEnrollments.id,
+        paymentTermId: supplierEnrollments.paymentTermId,
+        isActive: sql<boolean>`${suppliers.isActive} AND coalesce(${supplierEnrollments.isActive}, true)`,
+        purchasingBlocked: suppliers.purchasingBlocked,
+        totalCount: sql<number>`count(*) over()`.mapWith(Number),
+      })
+      .from(suppliers)
+      .innerJoin(parties, eq(parties.id, suppliers.partyId))
+      .leftJoin(supplierEnrollments, enrollmentAtSite(siteId))
+      .where(and(...conditions))
+      .orderBy(asc(parties.displayName))
+      .limit(values.length > 0 ? values.length : limit)
+      .offset(values.length > 0 ? 0 : offset);
+
+    const totalCount = rows[0]?.totalCount ?? 0;
+    return {
+      options: rows.map((row) => ({
+        value: row.value,
+        label: row.label,
+        description: row.code,
+        additionals: {
+          code: row.code,
+          currencyCode: row.currencyCode,
+          currencyCodes: row.currencyCodes,
+          defaultPaymentTermId: row.defaultPaymentTermId,
+          paymentTermId: row.paymentTermId,
+          enrollmentStatus: row.enrollmentId
+            ? SupplierEnrollmentStatusValues.ENROLLED
+            : SupplierEnrollmentStatusValues.NOT_ENROLLED,
+          isActive: row.isActive,
+          purchasingBlocked: row.purchasingBlocked,
+        },
+      })),
+      hasMore: values.length === 0 && offset + limit < totalCount,
+      totalCount,
+    };
+  }
+
+  // Returns every site a supplier is enrolled at with whether it is effectively active there
+  async findEnrolledSites(supplierId: string, activeOnly?: boolean): Promise<EnrolledSite[]> {
+    const isActive = and(eq(supplierEnrollments.isActive, true), eq(supplierEnrollments.isSupplierActive, true));
+    return this.db
+      .select({ siteId: supplierEnrollments.siteId, isActive: sql<boolean>`${isActive}` })
+      .from(supplierEnrollments)
+      .where(and(eq(supplierEnrollments.supplierId, supplierId), activeOnly ? isActive : undefined))
+      .orderBy(asc(supplierEnrollments.createdAt));
+  }
+}

@@ -31,7 +31,7 @@ export const AddMrpForm: React.FC<AddMrpFormProps> = ({ inventoryItemId, onSucce
   return (
     <Form form={form} mutation={addMutation} onCancel={onCancel}>
       <UomSelector name="uomId" label="Unit" placeholder="Select unit" params={{ inventoryItemId }} />
-      <CurrencyField name="amount" label="MRP Amount" defaultCurrencyCode={workspaceCurrency ?? undefined} />
+      <CurrencyField name="amount" label="MRP Amount" defaultCurrencyCode={workspaceCurrency} />
       <DialogActions>
         <Button type="button" variant="outline" data-cancel>
           Cancel

@@ -1,26 +1,27 @@
-import type { SiteTermsRow } from '@domain/suppliers/dto/entity/supplier.dto';
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import { and, desc, eq, getColumns, inArray, ne, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { BadRequestException } from '@vritti/api-sdk/exceptions';
 import { type FindForSelectConfig, type SelectQueryResult } from '@vritti/api-sdk/select';
 import {
   categories,
   goodsReceiptItems,
   inventoryItems,
   type NewSupplierItem,
-  type NewSupplierItemSite,
+  type NewSupplierSiteItem,
   parties,
   purchaseOrderItems,
   type Supplier,
   type SupplierItem,
-  type SupplierItemSite,
+  type SupplierSiteItem,
+  supplierEnrollments,
   supplierItemPrices,
-  supplierItemSites,
   supplierItems,
-  supplierSites,
+  supplierSiteItems,
   suppliers,
   uom,
 } from '@/db/schema';
+import type { SupplierSiteItemTermsRow } from '../dto/entity/supplier-site-item-terms.dto';
 
 // A site id as a typed SQL parameter; null yields no site terms (ORG views)
 function siteParam(siteId: string | null): SQL {
@@ -45,13 +46,13 @@ function currentPriceSql(siteId: string | null): SQL<bigint | null> {
   return currentPriceColumnSql('unit_price', siteId, (value) => BigInt(value as string));
 }
 
-// A site's operational settings (joined supplier_item_sites row) and the price row in force there today
-function siteTermsSelect(siteId: string | null) {
+// A site's operational settings (joined supplier_site_items row) and the price row in force there today
+function siteItemTermsSelect(siteId: string | null) {
   return {
-    itemSiteId: supplierItemSites.id,
-    siteIsPreferred: supplierItemSites.isPreferred,
-    siteLeadTimeDays: supplierItemSites.leadTimeDays,
-    siteIsLeadTimeOverridden: supplierItemSites.isLeadTimeOverridden,
+    supplierSiteItemId: supplierSiteItems.id,
+    siteIsPreferred: supplierSiteItems.isPreferred,
+    siteLeadTimeDays: supplierSiteItems.leadTimeDays,
+    siteIsLeadTimeOverridden: supplierSiteItems.isLeadTimeOverridden,
     currentUnitPrice: currentPriceSql(siteId),
     currentCurrencyCode: currentPriceColumnSql<string>('currency_code', siteId),
     currentSchemeBuyQty: currentPriceColumnSql('scheme_buy_qty', siteId, (value) => Number(value)),
@@ -60,10 +61,11 @@ function siteTermsSelect(siteId: string | null) {
   };
 }
 
-function siteJoin(siteId: string | null): SQL {
+// Joins the supplier item's supplier_site_items row at one site
+function siteItemJoin(siteId: string | null): SQL {
   return and(
-    eq(supplierItemSites.supplierItemId, supplierItems.id),
-    sql`${supplierItemSites.siteId} = ${siteParam(siteId)}`,
+    eq(supplierSiteItems.supplierItemId, supplierItems.id),
+    sql`${supplierSiteItems.siteId} = ${siteParam(siteId)}`,
   ) as SQL;
 }
 
@@ -74,7 +76,8 @@ export type SupplierItemTableRow = SupplierItem & {
   preferredSiteCount: number;
 };
 
-export type SiteSupplierItemTableRow = SupplierItem & SiteTermsRow & { inventoryItemName: string; uomSymbol: string };
+export type SupplierSiteItemTableRow = SupplierItem &
+  SupplierSiteItemTermsRow & { inventoryItemName: string; uomSymbol: string };
 
 // The supplier's default and accepted currencies come along: an item's prices may be in any of them
 type SupplierCurrencies = { supplierCurrencyCode: string; supplierCurrencyCodes: string[] };
@@ -85,13 +88,13 @@ type PriceUsage = { priceCount: number; pricedSiteCount: number };
 export type SupplierItemDetailRow = SupplierItemTableRow & { supplierCode: string | null } & SupplierCurrencies &
   PriceUsage;
 
-export type SiteSupplierItemDetailRow = SiteSupplierItemTableRow & {
+export type SupplierSiteItemDetailRow = SupplierSiteItemTableRow & {
   supplierCode: string | null;
 } & SupplierCurrencies &
   PriceUsage;
 
 export type InventoryItemSupplierRow = SupplierItem &
-  SiteTermsRow & { supplierName: string; supplierCode: string; uomSymbol: string; siteCount: number };
+  SupplierSiteItemTermsRow & { supplierName: string; supplierCode: string; uomSymbol: string; siteCount: number };
 
 // How many price rows a supplier item has, and at how many sites
 function priceUsageSql() {
@@ -106,16 +109,16 @@ function priceUsageSql() {
 }
 
 // Number of sites a supplier item is set up at
-function itemSiteCountSql(): SQL<number> {
+function siteItemCountSql(): SQL<number> {
   return sql<number>`(
-    SELECT count(*)::int FROM ${supplierItemSites} sis WHERE sis.supplier_item_id = ${supplierItems.id}
+    SELECT count(*)::int FROM ${supplierSiteItems} ssi WHERE ssi.supplier_item_id = ${supplierItems.id}
   )`.mapWith(Number);
 }
 
 function preferredSiteCountSql(): SQL<number> {
   return sql<number>`(
-    SELECT count(*)::int FROM ${supplierItemSites} sis
-    WHERE sis.supplier_item_id = ${supplierItems.id} AND sis.is_preferred
+    SELECT count(*)::int FROM ${supplierSiteItems} ssi
+    WHERE ssi.supplier_item_id = ${supplierItems.id} AND ssi.is_preferred
   )`.mapWith(Number);
 }
 
@@ -141,9 +144,9 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
     // At a site only the items set up and active there; from a legal entity every item of its suppliers
     if (siteId) {
       conditions.push(sql`EXISTS (
-        SELECT 1 FROM ${supplierItemSites} sis
-        WHERE sis.supplier_item_id = ${supplierItems.id}
-          AND sis.site_id = ${siteParam(siteId)}
+        SELECT 1 FROM ${supplierSiteItems} ssi
+        WHERE ssi.supplier_item_id = ${supplierItems.id}
+          AND ssi.site_id = ${siteParam(siteId)}
       )`);
     }
 
@@ -207,7 +210,7 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
         ...getColumns(supplierItems),
         inventoryItemName: inventoryItems.name,
         uomSymbol: uom.symbol,
-        siteCount: itemSiteCountSql(),
+        siteCount: siteItemCountSql(),
         preferredSiteCount: preferredSiteCountSql(),
       },
       leftJoins: [
@@ -222,24 +225,24 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
   }
 
   // Returns paginated supplier items carried by a site, with that site's terms and price in force
-  async findSiteItemsForTable(
+  async findSiteItemsAtSiteForTable(
     supplierId: string,
     siteId: string,
     options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
     { carriedOnly }: { carriedOnly: boolean },
-  ): Promise<{ result: SiteSupplierItemTableRow[]; count: number }> {
+  ): Promise<{ result: SupplierSiteItemTableRow[]; count: number }> {
     const baseWhere = eq(supplierItems.supplierId, supplierId);
-    const siteRow = { table: supplierItemSites, on: siteJoin(siteId) };
-    return this.findAllAndCount<SiteSupplierItemTableRow>({
+    const siteItemRow = { table: supplierSiteItems, on: siteItemJoin(siteId) };
+    return this.findAllAndCount<SupplierSiteItemTableRow>({
       select: {
         ...getColumns(supplierItems),
         inventoryItemName: inventoryItems.name,
         uomSymbol: uom.symbol,
-        ...siteTermsSelect(siteId),
+        ...siteItemTermsSelect(siteId),
       },
-      innerJoins: carriedOnly ? [siteRow] : [],
+      innerJoins: carriedOnly ? [siteItemRow] : [],
       leftJoins: [
-        ...(carriedOnly ? [] : [siteRow]),
+        ...(carriedOnly ? [] : [siteItemRow]),
         { table: inventoryItems, on: eq(supplierItems.inventoryItemId, inventoryItems.id) },
         { table: uom, on: eq(supplierItems.uomId, uom.id) },
       ],
@@ -261,21 +264,21 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
       select: {
         ...getColumns(supplierItems),
         supplierName: parties.displayName,
-        siteCount: itemSiteCountSql(),
+        siteCount: siteItemCountSql(),
         supplierCode: suppliers.code,
         uomSymbol: uom.symbol,
-        ...siteTermsSelect(siteId),
+        ...siteItemTermsSelect(siteId),
       },
       leftJoins: [
         { table: suppliers, on: eq(supplierItems.supplierId, suppliers.id) },
         { table: parties, on: eq(suppliers.partyId, parties.id) },
         { table: uom, on: eq(supplierItems.uomId, uom.id) },
-        { table: supplierItemSites, on: siteJoin(siteId) },
+        { table: supplierSiteItems, on: siteItemJoin(siteId) },
       ],
       where: options.where ? and(baseWhere, options.where) : baseWhere,
       orderBy: options.orderBy?.length
         ? options.orderBy
-        : [sql`${supplierItemSites.isPreferred} DESC NULLS LAST`, desc(supplierItems.createdAt)],
+        : [sql`${supplierSiteItems.isPreferred} DESC NULLS LAST`, desc(supplierItems.createdAt)],
       limit: options.limit,
       offset: options.offset,
     });
@@ -291,16 +294,16 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
       select: {
         ...getColumns(supplierItems),
         supplierName: parties.displayName,
-        siteCount: itemSiteCountSql(),
+        siteCount: siteItemCountSql(),
         supplierCode: suppliers.code,
         uomSymbol: uom.symbol,
-        ...siteTermsSelect(siteId),
+        ...siteItemTermsSelect(siteId),
       },
       leftJoins: [
         { table: suppliers, on: eq(supplierItems.supplierId, suppliers.id) },
         { table: parties, on: eq(suppliers.partyId, parties.id) },
         { table: uom, on: eq(supplierItems.uomId, uom.id) },
-        { table: supplierItemSites, on: siteJoin(siteId) },
+        { table: supplierSiteItems, on: siteItemJoin(siteId) },
       ],
       where: options.where,
       orderBy: options.orderBy,
@@ -355,7 +358,7 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
         supplierCurrencyCode: suppliers.currencyCode,
         supplierCurrencyCodes: suppliers.currencyCodes,
         ...priceUsageSql(),
-        siteCount: itemSiteCountSql(),
+        siteCount: siteItemCountSql(),
         preferredSiteCount: preferredSiteCountSql(),
       })
       .from(supplierItems)
@@ -369,7 +372,7 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
 
   // Finds a supplier item as one site sees it — its terms and price in force there, both empty when the site does not
   // carry it
-  async findSiteItemDetailById(id: string, siteId: string): Promise<SiteSupplierItemDetailRow | undefined> {
+  async findSiteItemDetailById(id: string, siteId: string): Promise<SupplierSiteItemDetailRow | undefined> {
     const [row] = await this.db
       .select({
         ...getColumns(supplierItems),
@@ -379,16 +382,16 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
         supplierCurrencyCode: suppliers.currencyCode,
         supplierCurrencyCodes: suppliers.currencyCodes,
         ...priceUsageSql(),
-        ...siteTermsSelect(siteId),
+        ...siteItemTermsSelect(siteId),
       })
       .from(supplierItems)
-      .leftJoin(supplierItemSites, siteJoin(siteId))
+      .leftJoin(supplierSiteItems, siteItemJoin(siteId))
       .leftJoin(inventoryItems, eq(supplierItems.inventoryItemId, inventoryItems.id))
       .leftJoin(uom, eq(supplierItems.uomId, uom.id))
       .leftJoin(suppliers, eq(supplierItems.supplierId, suppliers.id))
       .where(eq(supplierItems.id, id))
       .limit(1);
-    return row as SiteSupplierItemDetailRow | undefined;
+    return row as SupplierSiteItemDetailRow | undefined;
   }
 
   async findItemBySupplierInventoryItemAndUom(
@@ -410,6 +413,39 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
     return row as SupplierItem | undefined;
   }
 
+  // Rejects a fractional minimum order for a unit that is only sold whole
+  async assertMinOrderFitsUnit(uomId: string, minOrderQuantity: number | null | undefined): Promise<void> {
+    if (minOrderQuantity == null || Number.isInteger(minOrderQuantity)) return;
+    const [unit] = await this.db
+      .select({ symbol: uom.symbol, allowDecimal: uom.allowDecimal })
+      .from(uom)
+      .where(eq(uom.id, uomId))
+      .limit(1);
+    if (!unit || unit.allowDecimal) return;
+    throw new BadRequestException({
+      label: 'Whole Units Only',
+      detail: `${unit.symbol} is sold in whole units, so the minimum order must be a whole number.`,
+      errors: [{ field: 'minOrderQuantity', message: `Whole ${unit.symbol} only` }],
+    });
+  }
+
+  // Rejects a fractional minimum order when any of the supplier items is sold in a whole-only unit
+  async assertMinOrderFitsUnits(supplierItemIds: string[], minOrderQuantity: number | null | undefined): Promise<void> {
+    if (minOrderQuantity == null || Number.isInteger(minOrderQuantity)) return;
+    const rows = await this.db
+      .selectDistinct({ symbol: uom.symbol })
+      .from(supplierItems)
+      .innerJoin(uom, eq(supplierItems.uomId, uom.id))
+      .where(and(inArray(supplierItems.id, supplierItemIds), eq(uom.allowDecimal, false)));
+    if (rows.length === 0) return;
+    const symbols = rows.map((row) => row.symbol).join(', ');
+    throw new BadRequestException({
+      label: 'Whole Units Only',
+      detail: `Some selected items are sold in whole units (${symbols}), so the minimum order must be a whole number.`,
+      errors: [{ field: 'minOrderQuantity', message: `Whole ${symbols} only` }],
+    });
+  }
+
   async findUomSymbol(uomId: string): Promise<string | null> {
     const [row] = await this.db.select({ symbol: uom.symbol }).from(uom).where(eq(uom.id, uomId)).limit(1);
     return row?.symbol ?? null;
@@ -417,59 +453,63 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
 
   async findEnrolledSiteIds(supplierId: string): Promise<string[]> {
     const rows = await this.db
-      .select({ siteId: supplierSites.siteId })
-      .from(supplierSites)
-      .where(eq(supplierSites.supplierId, supplierId));
+      .select({ siteId: supplierEnrollments.siteId })
+      .from(supplierEnrollments)
+      .where(eq(supplierEnrollments.supplierId, supplierId));
     return rows.map((row) => row.siteId);
   }
 
-  // Returns paginated site rows of a supplier item
-  findItemSitesForTable(
+  // Returns the paginated site items of a supplier item
+  findSiteItemsForTable(
     supplierItemId: string,
     options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
-  ): Promise<{ result: SupplierItemSite[]; count: number }> {
+  ): Promise<{ result: SupplierSiteItem[]; count: number }> {
     const scope = eq(supplierItems.id, supplierItemId);
-    return this.findAllAndCount<SupplierItemSite>({
-      select: getColumns(supplierItemSites),
-      innerJoin: { table: supplierItemSites, on: eq(supplierItemSites.supplierItemId, supplierItems.id) },
+    return this.findAllAndCount<SupplierSiteItem>({
+      select: getColumns(supplierSiteItems),
+      innerJoin: { table: supplierSiteItems, on: eq(supplierSiteItems.supplierItemId, supplierItems.id) },
       where: options.where ? and(scope, options.where) : scope,
-      orderBy: options.orderBy?.length ? options.orderBy : [desc(supplierItemSites.createdAt)],
+      orderBy: options.orderBy?.length ? options.orderBy : [desc(supplierSiteItems.createdAt)],
       limit: options.limit,
       offset: options.offset,
     });
   }
 
-  async findItemSite(supplierItemId: string, siteId: string): Promise<SupplierItemSite | undefined> {
+  // Finds a supplier item's site item at one site
+  async findSiteItem(supplierItemId: string, siteId: string): Promise<SupplierSiteItem | undefined> {
     const [row] = await this.db
       .select()
-      .from(supplierItemSites)
-      .where(and(eq(supplierItemSites.supplierItemId, supplierItemId), eq(supplierItemSites.siteId, siteId)))
+      .from(supplierSiteItems)
+      .where(and(eq(supplierSiteItems.supplierItemId, supplierItemId), eq(supplierSiteItems.siteId, siteId)))
       .limit(1);
-    return row as SupplierItemSite | undefined;
+    return row as SupplierSiteItem | undefined;
   }
 
-  async findItemSiteIds(supplierItemId: string): Promise<string[]> {
+  // Returns the sites a supplier item is set up at
+  async findSiteIdsOfItem(supplierItemId: string): Promise<string[]> {
     const rows = await this.db
-      .select({ siteId: supplierItemSites.siteId })
-      .from(supplierItemSites)
-      .where(eq(supplierItemSites.supplierItemId, supplierItemId));
+      .select({ siteId: supplierSiteItems.siteId })
+      .from(supplierSiteItems)
+      .where(eq(supplierSiteItems.supplierItemId, supplierItemId));
     return rows.map((row) => row.siteId);
   }
 
-  async findItemSitesFor(supplierItemIds: string[], siteIds: string[]): Promise<SupplierItemSite[]> {
+  // Finds the site items of the given supplier items at the given sites
+  async findSiteItemsFor(supplierItemIds: string[], siteIds: string[]): Promise<SupplierSiteItem[]> {
     if (supplierItemIds.length === 0 || siteIds.length === 0) return [];
     const rows = await this.db
       .select()
-      .from(supplierItemSites)
+      .from(supplierSiteItems)
       .where(
-        and(inArray(supplierItemSites.supplierItemId, supplierItemIds), inArray(supplierItemSites.siteId, siteIds)),
+        and(inArray(supplierSiteItems.supplierItemId, supplierItemIds), inArray(supplierSiteItems.siteId, siteIds)),
       );
-    return rows as SupplierItemSite[];
+    return rows as SupplierSiteItem[];
   }
 
-  async insertItemSites(rows: Omit<NewSupplierItemSite, 'organizationId'>[]): Promise<SupplierItemSite[]> {
+  // Inserts site items
+  async insertSiteItems(rows: Omit<NewSupplierSiteItem, 'organizationId'>[]): Promise<SupplierSiteItem[]> {
     if (rows.length === 0) return [];
-    return (await this.db.insert(supplierItemSites).values(rows).returning()) as SupplierItemSite[];
+    return (await this.db.insert(supplierSiteItems).values(rows).returning()) as SupplierSiteItem[];
   }
 
   // How many price rows the supplier items have, and at how many sites — any price history blocks deleting them
@@ -484,19 +524,22 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
     return { prices: row?.prices ?? 0, sites: row?.sites ?? 0 };
   }
 
-  // Sets a supplier item's lead time on every site still following it; returns how many took it
-  async applyLeadTimeToSites(supplierItemIds: string[], leadTimeDays: number | null): Promise<number> {
+  // Sets a supplier item's default lead time on every site item still following it; returns how many took it
+  async applyDefaultLeadTimeToSiteItems(
+    supplierItemIds: string[],
+    defaultLeadTimeDays: number | null,
+  ): Promise<number> {
     if (supplierItemIds.length === 0) return 0;
     const rows = await this.db
-      .update(supplierItemSites)
-      .set({ leadTimeDays })
+      .update(supplierSiteItems)
+      .set({ leadTimeDays: defaultLeadTimeDays })
       .where(
         and(
-          inArray(supplierItemSites.supplierItemId, supplierItemIds),
-          eq(supplierItemSites.isLeadTimeOverridden, false),
+          inArray(supplierSiteItems.supplierItemId, supplierItemIds),
+          eq(supplierSiteItems.isLeadTimeOverridden, false),
         ),
       )
-      .returning({ id: supplierItemSites.id });
+      .returning({ id: supplierSiteItems.id });
     return rows.length;
   }
 
@@ -504,7 +547,7 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
   async bulkUpdateSupplierItems(
     supplierId: string,
     ids: string[],
-    data: Pick<Partial<NewSupplierItem>, 'minOrderQuantity' | 'leadTimeDays'>,
+    data: Pick<Partial<NewSupplierItem>, 'minOrderQuantity' | 'defaultLeadTimeDays'>,
   ): Promise<string[]> {
     const rows = await this.db
       .update(supplierItems)
@@ -515,33 +558,33 @@ export class SupplierItemsDomainRepository extends PrimaryBaseRepository<typeof 
   }
 
   // Clears the preferred flag of every other supplier for an inventory item at a site
-  async clearPreferredAtSite(inventoryItemId: string, siteId: string, exceptItemSiteId: string): Promise<void> {
+  async clearPreferredAtSite(inventoryItemId: string, siteId: string, exceptSupplierSiteItemId: string): Promise<void> {
     await this.db
-      .update(supplierItemSites)
+      .update(supplierSiteItems)
       .set({ isPreferred: false })
       .where(
         and(
-          eq(supplierItemSites.inventoryItemId, inventoryItemId),
-          eq(supplierItemSites.siteId, siteId),
-          eq(supplierItemSites.isPreferred, true),
-          ne(supplierItemSites.id, exceptItemSiteId),
+          eq(supplierSiteItems.inventoryItemId, inventoryItemId),
+          eq(supplierSiteItems.siteId, siteId),
+          eq(supplierSiteItems.isPreferred, true),
+          ne(supplierSiteItems.id, exceptSupplierSiteItemId),
         ),
       );
   }
 
-  // Loads a site row by id
-  async findItemSiteById(id: string): Promise<SupplierItemSite | undefined> {
-    const [row] = await this.db.select().from(supplierItemSites).where(eq(supplierItemSites.id, id)).limit(1);
-    return row as SupplierItemSite | undefined;
+  // Finds a site item by id
+  async findSiteItemById(id: string): Promise<SupplierSiteItem | undefined> {
+    const [row] = await this.db.select().from(supplierSiteItems).where(eq(supplierSiteItems.id, id)).limit(1);
+    return row as SupplierSiteItem | undefined;
   }
 
-  // Updates a site row by id
-  async updateItemSite(id: string, data: Partial<NewSupplierItemSite>): Promise<void> {
-    await this.db.update(supplierItemSites).set(data).where(eq(supplierItemSites.id, id));
+  // Updates a site item by id
+  async updateSiteItem(id: string, data: Partial<NewSupplierSiteItem>): Promise<void> {
+    await this.db.update(supplierSiteItems).set(data).where(eq(supplierSiteItems.id, id));
   }
 
-  // Deletes a site row by id
-  async deleteItemSite(id: string): Promise<void> {
-    await this.db.delete(supplierItemSites).where(eq(supplierItemSites.id, id));
+  // Deletes a site item by id
+  async deleteSiteItem(id: string): Promise<void> {
+    await this.db.delete(supplierSiteItems).where(eq(supplierSiteItems.id, id));
   }
 }

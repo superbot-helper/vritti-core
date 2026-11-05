@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, desc, eq, ilike, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
 import { alias } from '@vritti/api-sdk/drizzle-pg-core';
 import { type FindForSelectConfig, type SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
 import {
@@ -19,6 +19,7 @@ import {
   partyTaxRegistrations,
   SocialPlatformValues,
   suppliers,
+  TaxRegistrationTypeValues,
   taxJurisdictions,
 } from '@/db/schema';
 
@@ -252,11 +253,23 @@ export class PartiesDomainRepository extends PrimaryBaseRepository<typeof partie
   }
 
   // Returns paginated active tax registration options of a party for the select component
-  async findRegistrationOptionsForSelect(partyId: string, query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+  async findRegistrationOptionsForSelect(
+    partyId: string,
+    query: SelectOptionsQueryDto,
+    options?: { salesTaxOnly?: boolean },
+  ): Promise<SelectQueryResult> {
     const limit = Number(query.limit) || 20;
     const offset = Number(query.offset) || 0;
 
     const conditions: SQL[] = [eq(partyTaxRegistrations.partyId, partyId), eq(partyTaxRegistrations.isActive, true)];
+    if (options?.salesTaxOnly) {
+      conditions.push(
+        inArray(partyTaxRegistrations.registrationType, [
+          TaxRegistrationTypeValues.GSTIN,
+          TaxRegistrationTypeValues.VAT,
+        ]),
+      );
+    }
     if (query.search) {
       conditions.push(ilike(partyTaxRegistrations.registrationNumber, `%${query.search}%`));
     }

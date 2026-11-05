@@ -22,11 +22,11 @@ export class SupplierQuotationsController {
 
   @MessagePattern({ cmd: 'le.suppliers.quotations.table' })
   table(
-    @Payload() data: { supplierId: string; siteId?: string } & TableViewState,
+    @Payload() data: { supplierId: string } & TableViewState,
   ): Promise<{ result: SupplierQuotationDto[]; count: number }> {
-    const { supplierId, siteId, ...state } = data;
-    this.logger.log(`suppliers.quotations.table — supplierId: ${supplierId}, siteId: ${siteId ?? 'all'}`);
-    return this.service.table(supplierId, state, siteId);
+    const { supplierId, ...state } = data;
+    this.logger.log(`suppliers.quotations.table — supplierId: ${supplierId}`);
+    return this.service.table(supplierId, state);
   }
 
   @MessagePattern({ cmd: 'le.suppliers.quotations.findById' })

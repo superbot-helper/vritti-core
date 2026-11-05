@@ -1,13 +1,17 @@
 import type { AddSupplierItemPriceDto } from '@commerce/supplier-item-prices/dto/request/add-supplier-item-price.dto';
 import type { SupplierItemPriceHistoryQueryDto } from '@commerce/supplier-item-prices/dto/request/supplier-item-price-history-query.dto';
+import type { SupplierItemPricesTableQueryDto } from '@commerce/supplier-item-prices/dto/request/supplier-item-prices-table-query.dto';
 import type { UpdateSupplierItemPriceDto } from '@commerce/supplier-item-prices/dto/request/update-supplier-item-price.dto';
 import type { SupplierItemPriceHistoryResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-history-response.dto';
 import type { SupplierItemPriceResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-response.dto';
 import type { SupplierItemPriceTableResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-table-response.dto';
+import type { SupplierItemPricedSitesResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-priced-sites-response.dto';
+import { SiteDomainRepository } from '@domain/site/repositories/site.repository';
 import { Injectable, Logger } from '@nestjs/common';
 import { DataTableStateService } from '@vritti/api-sdk/data-table';
 import { NatsClientService } from '@vritti/api-sdk/nats';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { SelectOptionsQueryDto } from '@vritti/api-sdk/select';
 import { OwnerNameService } from '@/owner-names/owner-name.service';
 
 @Injectable()
@@ -18,48 +22,66 @@ export class SupplierItemPricesGatewayService {
     private readonly nats: NatsClientService,
     private readonly dataTableStateService: DataTableStateService,
     private readonly ownerNames: OwnerNameService,
+    private readonly siteRepository: SiteDomainRepository,
   ) {}
 
-  // Returns the price timeline of a supplier item for the table — every site's rows, or one site's when given
+  // A supplier item's price timeline at the site picked in the table's context bar — not saved
   async findItemPricesTable(
     supplierItemId: string,
-    siteId: string | undefined,
     userId: string,
-    orgId: string,
+    query: SupplierItemPricesTableQueryDto,
   ): Promise<SupplierItemPriceTableResponseDto> {
-    this.logger.log(`le.suppliers.itemPricesTable — supplierItemId: ${supplierItemId}, siteId: ${siteId ?? 'all'}`);
-    const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
+    this.logger.log(`le.suppliers.siteItems.prices.table — supplierItemId: ${supplierItemId}, site: ${query.site}`);
+    const { state: savedState, activeViewId } = await this.dataTableStateService.getCurrentState(
       userId,
-      siteId
-        ? `commerce-le-supplier-item-${supplierItemId}-site-${siteId}-prices`
-        : `commerce-supplier-item-${supplierItemId}-prices`,
+      `commerce-le-supplier-item-${supplierItemId}-prices`,
     );
-
+    // The site is context, not a filter; drop any an older saved state still holds
+    const state = { ...savedState, filters: (savedState.filters ?? []).filter((filter) => filter.field !== 'siteId') };
     const { result, count } = await this.nats.send<{ result: SupplierItemPriceResponseDto[]; count: number }>(
       'commerce',
-      'le.suppliers.itemPricesTable',
-      { supplierItemId, siteId, ...state },
+      'le.suppliers.siteItems.prices.table',
+      { supplierItemId, siteId: query.site, ...state },
     );
-
-    return { result: await this.ownerNames.withSiteNames(orgId, result), count, state, activeViewId };
+    return { result, count, state, activeViewId };
   }
 
-  // Returns every price window of a supplier item grouped by site, with site names
+  // The sites a supplier item has prices at, in the site picker's order
+  async findItemPricedSiteIds(
+    supplierItemId: string,
+    legalEntityId: string | undefined,
+  ): Promise<SupplierItemPricedSitesResponseDto> {
+    this.logger.log(`le.suppliers.siteItems.prices.siteIds — supplierItemId: ${supplierItemId}`);
+    if (!legalEntityId) return { siteIds: [] };
+    const siteIds = await this.nats.send<string[]>('commerce', 'le.suppliers.siteItems.prices.siteIds', {
+      supplierItemId,
+    });
+    if (siteIds.length === 0) return { siteIds };
+    const query = Object.assign(new SelectOptionsQueryDto(), { limit: siteIds.length });
+    const { options } = await this.siteRepository.findForSelectOptions(legalEntityId, query, siteIds);
+    return { siteIds: options.map((option) => String(option.value)) };
+  }
+
+  // A supplier item's price windows in a date range, with site names, at the asked sites — or at every site it is
+  // priced at when none are asked for
   async findItemPriceHistory(
     supplierItemId: string,
     query: SupplierItemPriceHistoryQueryDto,
+    legalEntityId: string | undefined,
     orgId: string,
   ): Promise<SupplierItemPriceHistoryResponseDto> {
-    this.logger.log(`le.suppliers.itemPriceHistory — supplierItemId: ${supplierItemId}`);
-    const history = await this.nats.send<SupplierItemPriceHistoryResponseDto>(
+    this.logger.log(`le.suppliers.siteItems.prices.priceHistory — supplierItemId: ${supplierItemId}`);
+    const siteIds = query.sites?.length
+      ? query.sites
+      : (await this.findItemPricedSiteIds(supplierItemId, legalEntityId)).siteIds;
+    if (siteIds.length === 0) return { sites: [] };
+
+    const { sites } = await this.nats.send<SupplierItemPriceHistoryResponseDto>(
       'commerce',
-      'le.suppliers.itemPriceHistory',
-      {
-        supplierItemId,
-        ...query,
-      },
+      'le.suppliers.siteItems.prices.priceHistory',
+      { supplierItemId, siteIds, from: query.from, to: query.to },
     );
-    return { ...history, sites: await this.ownerNames.withSiteNames(orgId, history.sites) };
+    return { sites: await this.ownerNames.withSiteNames(orgId, sites) };
   }
 
   // Adds a price record to a supplier item's timeline
@@ -67,19 +89,21 @@ export class SupplierItemPricesGatewayService {
     supplierItemId: string,
     dto: AddSupplierItemPriceDto,
   ): Promise<CreateResponseDto<SupplierItemPriceResponseDto[]>> {
-    this.logger.log(`le.suppliers.addItemPrice — supplierItemId: ${supplierItemId}, validFrom: ${dto.validFrom}`);
-    return this.nats.send('commerce', 'le.suppliers.addItemPrice', { supplierItemId, ...dto });
+    this.logger.log(
+      `le.suppliers.siteItems.prices.create — supplierItemId: ${supplierItemId}, validFrom: ${dto.validFrom}`,
+    );
+    return this.nats.send('commerce', 'le.suppliers.siteItems.prices.create', { supplierItemId, ...dto });
   }
 
   // Updates a supplier item price record
   async updateItemPrice(priceId: string, dto: UpdateSupplierItemPriceDto): Promise<SuccessResponseDto> {
-    this.logger.log(`le.suppliers.updateItemPrice — id: ${priceId}`);
-    return this.nats.send('commerce', 'le.suppliers.updateItemPrice', { id: priceId, ...dto });
+    this.logger.log(`le.suppliers.siteItems.prices.update — id: ${priceId}`);
+    return this.nats.send('commerce', 'le.suppliers.siteItems.prices.update', { id: priceId, ...dto });
   }
 
   // Deletes a supplier item price record
   async deleteItemPrice(priceId: string): Promise<SuccessResponseDto> {
-    this.logger.log(`le.suppliers.deleteItemPrice — id: ${priceId}`);
-    return this.nats.send('commerce', 'le.suppliers.deleteItemPrice', { id: priceId });
+    this.logger.log(`le.suppliers.siteItems.prices.delete — id: ${priceId}`);
+    return this.nats.send('commerce', 'le.suppliers.siteItems.prices.delete', { id: priceId });
   }
 }

@@ -1,7 +1,7 @@
 import { Select, type SelectOption, type SelectProps } from '@vritti/quantum-ui/Select';
 import { forwardRef } from 'react';
 
-export type SupplierSelectorProps = Omit<SelectProps, 'optionsEndpoint'>;
+export type SupplierSelectorProps = Omit<SelectProps, 'optionsEndpoint'> & { activeOnly?: boolean };
 
 const DEFAULT_FIELD_KEYS = {
   valueKey: 'id',
@@ -10,9 +10,7 @@ const DEFAULT_FIELD_KEYS = {
   additionalKeys: 'currencyCode,currencyCodes,purchasingBlocked',
 } as const;
 
-const ENROLLMENT_LABELS: Record<string, string> = { ENROLLED: 'Enrolled', NOT_ENROLLED: 'Not Enrolled' };
-
-// Currencies, then — when a `siteId` param asked for it — the enrollment status there, then a purchasing block
+// Currencies, then a purchasing block
 function defaultTransformDescription(value: string, option: SelectOption): string {
   const additionals = option.additionals ?? {};
   const currencyCode = Array.isArray(additionals.currencyCodes)
@@ -20,24 +18,25 @@ function defaultTransformDescription(value: string, option: SelectOption): strin
     : typeof additionals.currencyCode === 'string'
       ? additionals.currencyCode.trim()
       : '';
-  const enrollment =
-    typeof additionals.enrollmentStatus === 'string' ? ENROLLMENT_LABELS[additionals.enrollmentStatus] : '';
   const blocked = additionals.purchasingBlocked === true ? 'Purchasing blocked' : '';
-  const parts = [currencyCode || value, enrollment, blocked].filter(Boolean);
+  const parts = [currencyCode || value, blocked].filter(Boolean);
   return parts.join(' · ');
 }
 
-// Pre-configured Select for supplier selection with async search.
-export const SupplierSelector = forwardRef<HTMLButtonElement, SupplierSelectorProps>(({ fieldKeys, ...props }, ref) => (
-  <Select
-    ref={ref}
-    label="Supplier"
-    placeholder="Select supplier"
-    searchable
-    optionsEndpoint="commerce-api/select-api/suppliers"
-    transformDescription={defaultTransformDescription}
-    {...props}
-    fieldKeys={{ ...DEFAULT_FIELD_KEYS, ...fieldKeys }}
-  />
-));
+// Pre-configured Select for supplier selection with async search; form pickers offer only active suppliers
+export const SupplierSelector = forwardRef<HTMLButtonElement, SupplierSelectorProps>(
+  ({ fieldKeys, activeOnly = true, params, ...props }, ref) => (
+    <Select
+      ref={ref}
+      label="Supplier"
+      placeholder="Select supplier"
+      searchable
+      optionsEndpoint="commerce-api/select-api/suppliers"
+      transformDescription={defaultTransformDescription}
+      {...props}
+      params={activeOnly ? { ...params, activeOnly: true } : params}
+      fieldKeys={{ ...DEFAULT_FIELD_KEYS, ...fieldKeys }}
+    />
+  ),
+);
 SupplierSelector.displayName = 'SupplierSelector';

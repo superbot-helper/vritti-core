@@ -21,12 +21,13 @@ import {
 import { CurrencySelector } from '@/selectors/currency';
 import { InventoryItemMrpSelector } from '@/selectors/inventory-item-mrp';
 import { isPriceInForce } from '@/utils/supplierPrice';
-import type { SupplierSiteBinding } from '../bindings';
-import type { SupplierSiteRef } from '../types';
+import type { UseUpdatePrice } from '../types';
 
 interface EditSitePriceDialogProps {
-  binding: SupplierSiteBinding;
-  supplierRef: SupplierSiteRef;
+  // The workspace's price update, and the permission that lets an MRP be set
+  useUpdatePrice: UseUpdatePrice;
+  mrpPermission: string;
+  supplierId: string;
   itemId: string;
   inventoryItemId: string;
   uomId: string;
@@ -38,8 +39,9 @@ interface EditSitePriceDialogProps {
 }
 
 export const EditSitePriceDialog: React.FC<EditSitePriceDialogProps> = ({
-  binding,
-  supplierRef,
+  useUpdatePrice,
+  mrpPermission,
+  supplierId,
   itemId,
   inventoryItemId,
   uomId,
@@ -48,7 +50,7 @@ export const EditSitePriceDialog: React.FC<EditSitePriceDialogProps> = ({
   onSuccess,
   onCancel,
 }) => {
-  const inForce = isPriceInForce(price, isoTodayDate(useWorkspaceTimeZone(supplierRef.siteId)));
+  const inForce = isPriceInForce(price, isoTodayDate(useWorkspaceTimeZone(price.siteId)));
   const form = useForm<UpdateSupplierItemPriceFormData>({
     resolver: zodResolver(updateSupplierItemPriceSchema),
     defaultValues: {
@@ -70,8 +72,8 @@ export const EditSitePriceDialog: React.FC<EditSitePriceDialogProps> = ({
     form.setValue('mrpId', undefined);
   };
 
-  const updateMutation = binding.useUpdateSitePrice(supplierRef, itemId, { onSuccess });
-  const canSetMrp = usePermission(binding.permissions.mrp.edit).available;
+  const updateMutation = useUpdatePrice(supplierId, itemId, { onSuccess });
+  const canSetMrp = usePermission(mrpPermission).available;
 
   return (
     <Form
@@ -114,7 +116,7 @@ export const EditSitePriceDialog: React.FC<EditSitePriceDialogProps> = ({
             <CurrencyField name="unitPrice" label="Unit Price" currencyCode={currency} disabled={inForce} />
             <InventoryItemMrpSelector
               name="mrpId"
-              permission={binding.permissions.mrp.edit}
+              permission={mrpPermission}
               label="MRP (optional)"
               placeholder="Select MRP"
               inventoryItemId={inventoryItemId}

@@ -62,7 +62,8 @@ import { PosTerminalsGatewayController } from './site-api/pos-terminals/pos-term
 import { PurchaseOrdersGatewayController } from './site-api/purchase-orders/purchase-orders-gateway.controller';
 import { StockAdjustmentsGatewayController } from './site-api/stock-adjustments/stock-adjustments-gateway.controller';
 import { StockTransfersGatewayController } from './site-api/stock-transfers/stock-transfers-gateway.controller';
-import { SiteSupplierItemPricesGatewayController } from './site-api/suppliers/item-prices/site-supplier-item-prices-gateway.controller';
+import { SiteSupplierSiteItemPricesGatewayController } from './site-api/suppliers/site-item-prices/site-supplier-site-item-prices-gateway.controller';
+import { SiteSupplierQuotationsGatewayController } from './site-api/suppliers/site-supplier-quotations-gateway.controller';
 import { SiteSuppliersGatewayController } from './site-api/suppliers/site-suppliers-gateway.controller';
 import { SiteGroupInventoryItemsGatewayController } from './site-group-api/inventory-items/site-group-inventory-items-gateway.controller';
 
@@ -99,9 +100,10 @@ import { SiteGroupInventoryItemsGatewayController } from './site-group-api/inven
     StockAdjustmentsGatewayController,
     StockTransfersGatewayController,
     SiteSuppliersGatewayController,
+    SiteSupplierQuotationsGatewayController,
     SupplierQuotationsGatewayController,
     SupplierItemPricesGatewayController,
-    SiteSupplierItemPricesGatewayController,
+    SiteSupplierSiteItemPricesGatewayController,
     SuppliersGatewayController,
     OrgInventoryItemsGatewayController,
     SiteGroupInventoryItemsGatewayController,

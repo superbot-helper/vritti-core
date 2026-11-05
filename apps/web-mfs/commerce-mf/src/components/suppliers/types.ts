@@ -1,112 +1,144 @@
 import type { UseMutationOptions, UseMutationResult } from '@tanstack/react-query';
-import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
+import type { SuccessResponse, TableResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import type { SupplierAtSiteData } from '@/schemas/site-suppliers';
 import type {
-  SiteSupplierItemDetail,
-  SiteSupplierItemsTableResponse,
+  CreateSupplierEnrollmentPayload,
+  SetSupplierEnrollmentActiveVars,
+  SupplierEnrollment,
+  SupplierEnrollmentDetail,
+  SupplierEnrollmentKey,
+  SupplierEnrollmentsTableResponse,
+  SupplierParty,
+  UpdateSupplierEnrollmentVars,
+} from '@/schemas/supplier-enrollments';
+import type {
+  SupplierQuotationData,
+  SupplierQuotationDetail,
+  SupplierQuotationsTableResponse,
+} from '@/schemas/supplier-quotations';
+import type {
+  AddSupplierSiteItemPricePayload,
   SupplierItemPriceHistory,
   SupplierItemPriceRow,
-  SupplierItemPricesTableResponse,
+  SupplierSiteItemDataTableResponse,
+  SupplierSiteItemDetail,
+  UpdateSupplierSiteItemPricePayload,
+  UpdateSupplierSiteItemVars,
 } from '@/schemas/suppliers';
-import type {
-  AddSiteSupplierItemPricePayload,
-  UpdateSiteSupplierItemPricePayload,
-  UpdateSiteSupplierItemTermsPayload,
-} from '@/services/site/suppliers.service';
 import type { PriceRange } from '@/utils/supplierPrice';
 
-// A supplier as one site sees it; LE pages carry the site in the URL, site pages use the session site
-export interface SupplierSiteRef {
+// A supplier, and the site when one is in view; LE pages carry the site in the URL, site pages use the session site
+export interface SupplierEnrollmentRef {
   supplierId: string;
   siteId?: string;
 }
 
-export interface SupplierSitePermissions {
+export interface SupplierEnrollmentPermissions {
   view: string;
   enroll: string;
   editEnroll: string;
   unenroll: string;
-  // MRP on the site's prices: view shows it, edit lets it be entered
+  siteItems: { view: string };
+}
+
+export interface SupplierSiteItemPagePermissions {
+  editTerms: string;
+}
+
+export interface SupplierItemPricesPermissions {
+  view: string;
+  add: string;
+  edit: string;
+  delete: string;
+  // MRP on a price: view shows it, edit lets it be entered
   mrp: { view: string; edit: string };
-  items: { view: string; edit: string };
-  prices: { view: string; add: string; edit: string; delete: string };
-}
-
-export interface EnrollmentPayload {
-  paymentTermId: string;
-  partyTaxRegistrationId: string;
-  partyBankAccountId: string | null;
-  orderRelationshipId: string | null;
-  orderEmailCommunicationId: string;
-  orderPhoneCommunicationId: string;
-}
-
-export interface UpdateEnrollmentVars {
-  enrollmentId: string;
-  data: EnrollmentPayload;
-}
-
-export interface UpdateItemTermsVars {
-  rowId: string;
-  data: UpdateSiteSupplierItemTermsPayload;
 }
 
 export interface UpdateSitePriceVars {
   priceId: string;
-  data: UpdateSiteSupplierItemPricePayload;
+  data: UpdateSupplierSiteItemPricePayload;
 }
 
 type MutationOptions<TData, TVars> = Omit<UseMutationOptions<TData, AxiosError, TVars>, 'mutationFn'>;
 type MutationResult<TData, TVars> = UseMutationResult<TData, AxiosError, TVars>;
 
-export type UseSupplierRef = () => SupplierSiteRef;
-export type UseSupplierAtSite = (ref: SupplierSiteRef) => { data: SupplierAtSiteData };
-export type UseUpdateEnrollment = (
-  ref: SupplierSiteRef,
-  options?: MutationOptions<SuccessResponse, UpdateEnrollmentVars>,
-) => MutationResult<SuccessResponse, UpdateEnrollmentVars>;
-export type UseEnroll = (
-  ref: SupplierSiteRef,
-  options?: MutationOptions<unknown, EnrollmentPayload>,
-) => MutationResult<unknown, EnrollmentPayload>;
-export type UseRemoveEnrollment = (
-  ref: SupplierSiteRef,
-  options?: MutationOptions<SuccessResponse, string>,
-) => MutationResult<SuccessResponse, string>;
-
-export type UseSiteItemsTable = (ref: SupplierSiteRef) => {
-  data: SiteSupplierItemsTableResponse | undefined;
+export type UseEnrollmentRef = () => SupplierEnrollmentKey;
+export type UseEnrollmentScope = () => Partial<SupplierEnrollmentKey>;
+export type UseEnrollmentsTable = (scope: Partial<SupplierEnrollmentKey>) => {
+  data: SupplierEnrollmentsTableResponse | undefined;
   isLoading: boolean;
 };
-export type UseSiteItem = (ref: SupplierSiteRef, itemId: string) => { data: SiteSupplierItemDetail };
-export type UseUpdateItemTerms = (
-  ref: SupplierSiteRef,
-  itemId: string,
-  options?: MutationOptions<SuccessResponse, UpdateItemTermsVars>,
-) => MutationResult<SuccessResponse, UpdateItemTermsVars>;
+export type UseEnrollment = (key: SupplierEnrollmentKey) => { data: SupplierEnrollmentDetail };
+export type UseSupplierParty = (supplierId: string | undefined) => SupplierParty | undefined;
+export type UseCreateEnrollment = (
+  options?: MutationOptions<SupplierEnrollment, CreateSupplierEnrollmentPayload>,
+) => MutationResult<SupplierEnrollment, CreateSupplierEnrollmentPayload>;
+export type UseUpdateEnrollment = (
+  options?: MutationOptions<SuccessResponse, UpdateSupplierEnrollmentVars>,
+) => MutationResult<SuccessResponse, UpdateSupplierEnrollmentVars>;
+export type UseSetEnrollmentActive = (
+  options?: MutationOptions<SuccessResponse, SetSupplierEnrollmentActiveVars>,
+) => MutationResult<SuccessResponse, SetSupplierEnrollmentActiveVars>;
+export type UseDeleteEnrollment = (
+  options?: MutationOptions<SuccessResponse, SupplierEnrollmentKey>,
+) => MutationResult<SuccessResponse, SupplierEnrollmentKey>;
 
-export type UseSitePricesTable = (
-  ref: SupplierSiteRef,
+export type UseSiteItemsTable = (ref: SupplierEnrollmentRef) => {
+  data: SupplierSiteItemDataTableResponse | undefined;
+  isLoading: boolean;
+};
+export type UseSiteItem = (supplierId: string, itemId: string) => { data: SupplierSiteItemDetail };
+export type UseUpdateSiteItem = (
+  supplierId: string,
+  options?: MutationOptions<SuccessResponse, UpdateSupplierSiteItemVars>,
+) => MutationResult<SuccessResponse, UpdateSupplierSiteItemVars>;
+
+export type UsePricesTable = (
+  supplierId: string,
   itemId: string,
-) => { data: SupplierItemPricesTableResponse | undefined; isLoading: boolean };
-export type UseSitePriceHistory = (
-  ref: SupplierSiteRef,
+  site: string | undefined,
+) => { data: TableResponse<SupplierItemPriceRow> | undefined; isLoading: boolean };
+export type UsePricedSiteIds = (
+  supplierId: string,
   itemId: string,
+) => { data: string[] | undefined; isLoading: boolean };
+export type UsePriceHistory = (
+  supplierId: string,
+  itemId: string,
+  siteIds: string[],
   range: PriceRange,
 ) => { data: SupplierItemPriceHistory | undefined; isLoading: boolean };
 export type UseAddSitePrice = (
-  ref: SupplierSiteRef,
+  supplierId: string,
   itemId: string,
-  options?: MutationOptions<SupplierItemPriceRow[], AddSiteSupplierItemPricePayload>,
-) => MutationResult<SupplierItemPriceRow[], AddSiteSupplierItemPricePayload>;
-export type UseUpdateSitePrice = (
-  ref: SupplierSiteRef,
+  options?: MutationOptions<SupplierItemPriceRow[], AddSupplierSiteItemPricePayload>,
+) => MutationResult<SupplierItemPriceRow[], AddSupplierSiteItemPricePayload>;
+export type UseUpdatePrice = (
+  supplierId: string,
   itemId: string,
   options?: MutationOptions<SuccessResponse, UpdateSitePriceVars>,
 ) => MutationResult<SuccessResponse, UpdateSitePriceVars>;
-export type UseDeleteSitePrice = (
-  ref: SupplierSiteRef,
+export type UseDeletePrice = (
+  supplierId: string,
   itemId: string,
   options?: MutationOptions<SuccessResponse, string>,
 ) => MutationResult<SuccessResponse, string>;
+
+export type UseQuotationsTable = (
+  supplierId: string,
+  siteId: string | undefined,
+) => { data: SupplierQuotationsTableResponse | undefined; isLoading: boolean };
+export type UseQuotation = (supplierId: string, quotationId: string) => { data: SupplierQuotationDetail };
+export type QuotationPath = (quotation: Pick<SupplierQuotationData, 'id' | 'quotationNumber'>) => string;
+
+// The quotation a page is about
+export interface QuotationRef {
+  supplierId: string;
+  quotationId: string;
+}
+
+// What an authoring slot on a quotation's page works on
+export interface QuotationSlotProps {
+  supplierId: string;
+  quotation: SupplierQuotationDetail;
+}

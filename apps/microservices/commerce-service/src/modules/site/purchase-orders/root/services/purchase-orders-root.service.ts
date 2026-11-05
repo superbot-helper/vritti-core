@@ -8,7 +8,7 @@ import type { CreatePurchaseOrderDto } from '@domain/purchase-orders/dto/request
 import type { SetPurchaseOrderConversionRateDto } from '@domain/purchase-orders/dto/request/set-purchase-order-conversion-rate.dto';
 import { PurchaseOrdersDomainRepository } from '@domain/purchase-orders/repositories/purchase-orders.repository';
 import { PurchaseOrdersDomainService } from '@domain/purchase-orders/services/purchase-orders.service';
-import { SupplierSitesDomainService } from '@domain/supplier-sites/services/supplier-sites.service';
+import { SupplierEnrollmentsDomainRepository } from '@domain/supplier-enrollments/repositories/supplier-enrollments.repository';
 import { SuppliersDomainRepository } from '@domain/suppliers/repositories/suppliers.repository';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrimaryDatabaseService } from '@vritti/api-sdk/database';
@@ -27,7 +27,7 @@ export class PurchaseOrdersService {
     private readonly itemsService: PurchaseOrderItemsDomainService,
     private readonly database: PrimaryDatabaseService,
     private readonly suppliersRepository: SuppliersDomainRepository,
-    private readonly supplierSitesService: SupplierSitesDomainService,
+    private readonly supplierEnrollmentsRepository: SupplierEnrollmentsDomainRepository,
     private readonly goodsReceiptsService: GoodsReceiptsDomainService,
   ) {}
 
@@ -38,7 +38,7 @@ export class PurchaseOrdersService {
   ): Promise<CreateResponseDto<PurchaseOrderDto>> {
     const supplier = await this.suppliersRepository.findById(dto.supplierId);
     if (!supplier) throw new NotFoundException('Supplier not found.');
-    await this.assertSupplierPurchasable(supplier, siteId);
+    await this.supplierEnrollmentsRepository.assertPurchasable(supplier.id, siteId);
     const currencyCode = dto.currencyCode ?? supplier.currencyCode;
     if (!supplier.currencyCodes.includes(currencyCode)) {
       throw new BadRequestException({
@@ -65,7 +65,7 @@ export class PurchaseOrdersService {
   ): Promise<SuccessResponseDto> {
     const supplier = await this.suppliersRepository.findByIdWithParty(dto.supplierId);
     if (!supplier) throw new NotFoundException('Supplier not found.');
-    await this.assertSupplierPurchasable(supplier, siteId);
+    await this.supplierEnrollmentsRepository.assertPurchasable(supplier.id, siteId);
 
     await this.assertNoGoodsReceipt(id, 'Cannot Change Supplier');
 
@@ -132,26 +132,6 @@ export class PurchaseOrdersService {
       success: true,
       message: `1 ${dto.currencyCode} = ${dto.rate} ${po.currencyCode}; ${pluralize('line', repriced, true)} re-converted.`,
     };
-  }
-
-  // Rejects a supplier that is purchasing-blocked or not enrolled for the ordering site
-  private async assertSupplierPurchasable(
-    supplier: { id: string; purchasingBlocked: boolean },
-    siteId: string,
-  ): Promise<void> {
-    if (supplier.purchasingBlocked) {
-      throw new BadRequestException({
-        label: 'Supplier Blocked',
-        detail: 'Purchasing is blocked for this supplier.',
-      });
-    }
-    const enrolled = await this.supplierSitesService.isEnrolled(supplier.id, siteId);
-    if (!enrolled) {
-      throw new BadRequestException({
-        label: 'Supplier Not Enrolled',
-        detail: 'Supplier is not enrolled for this site. Enroll the supplier before creating this document.',
-      });
-    }
   }
 
   private async assertNoGoodsReceipt(poId: string, label: string): Promise<void> {

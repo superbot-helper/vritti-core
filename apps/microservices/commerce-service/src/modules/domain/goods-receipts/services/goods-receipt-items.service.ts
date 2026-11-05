@@ -136,8 +136,8 @@ export class GoodsReceiptItemsDomainService {
       });
     }
 
-    const itemSite = await this.supplierItemsRepository.findItemSite(supplierItem.id, receipt.siteId);
-    if (!itemSite) {
+    const supplierSiteItem = await this.supplierItemsRepository.findSiteItem(supplierItem.id, receipt.siteId);
+    if (!supplierSiteItem) {
       throw new BadRequestException({
         label: 'Item Not At Site',
         detail: 'This supplier item is not set up at this site.',

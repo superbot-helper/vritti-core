@@ -12,12 +12,13 @@ import {
 import { Dialog } from '@vritti/quantum-ui/Dialog';
 import { useDialog } from '@vritti/quantum-ui/hooks';
 import { PageHeader } from '@vritti/quantum-ui/PageHeader';
+import { pluralize } from '@vritti/quantum-ui/pluralize';
 import { SelectFilter } from '@vritti/quantum-ui/Select';
 import { StatusSwitch } from '@vritti/quantum-ui/StatusSwitch';
 import { buildSlug } from '@vritti/quantum-ui/slug';
 import { ValueFilter } from '@vritti/quantum-ui/ValueFilter';
-import { CircleCheck, CircleSlash, Eye, Plus, Truck } from 'lucide-react';
-import { useMemo } from 'react';
+import { CalendarClock, CircleCheck, CircleSlash, Eye, Plus, Truck } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   SUPPLIERS_TABLE_KEY,
@@ -30,12 +31,15 @@ import { CurrencyFilter } from '@/selectors/currency';
 import { InventoryItemFilter } from '@/selectors/inventory-item';
 import { PaymentTermFilter } from '@/selectors/payment-term';
 import { AddSupplierDialog } from './forms/AddSupplierDialog';
+import { BulkChangeDefaultPaymentTermDialog } from './forms/BulkChangeDefaultPaymentTermDialog';
 
 export const SuppliersPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: response, isLoading } = useSuppliersTable();
   const addDialog = useDialog();
+  const defaultPaymentTermDialog = useDialog();
+  const [targetIds, setTargetIds] = useState<string[]>([]);
   const setActiveMutation = useSetSupplierActive();
   const bulkSetActiveMutation = useBulkSetSupplierActive();
 
@@ -49,7 +53,7 @@ export const SuppliersPage = () => {
       },
       {
         accessorKey: 'partyName',
-        header: 'Company',
+        header: 'Supplier',
         enableSorting: true,
       },
       {
@@ -159,19 +163,31 @@ export const SuppliersPage = () => {
               >
                 Mark Inactive
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                permission={LE_SUPPLIERS.defaultPaymentTerm}
+                startAdornment={<CalendarClock className="size-4" />}
+                onClick={() => {
+                  setTargetIds(ids);
+                  defaultPaymentTermDialog.open();
+                }}
+              >
+                Change Default Payment Term
+              </Button>
             </>
           );
         }}
         searchConfig={{
           columns: [
-            { id: 'partyName', label: 'Company' },
+            { id: 'partyName', label: 'Supplier' },
             { id: 'code', label: 'Code' },
           ],
           searchAll: true,
         }}
         filters={[
           <ValueFilter key="code" name="code" label="Code" fieldType="string" />,
-          <ValueFilter key="partyName" name="partyName" label="Company" fieldType="string" />,
+          <ValueFilter key="partyName" name="partyName" label="Supplier" fieldType="string" />,
           <SelectFilter
             key="isActive"
             name="isActive"
@@ -182,7 +198,12 @@ export const SuppliersPage = () => {
             ]}
           />,
           <CurrencyFilter key="currency" multiple />,
-          <PaymentTermFilter key="paymentTermId" label="Default Payment Term" multiple />,
+          <PaymentTermFilter
+            key="defaultPaymentTermId"
+            name="defaultPaymentTermId"
+            label="Default Payment Term"
+            multiple
+          />,
           <InventoryItemFilter key="inventoryItemId" />,
         ]}
         toolbarActions={{
@@ -213,6 +234,23 @@ export const SuppliersPage = () => {
         description="Create a new supplier in your directory."
         className="max-w-3xl"
         content={(close) => <AddSupplierDialog onSuccess={close} onCancel={close} />}
+      />
+
+      <Dialog
+        handle={defaultPaymentTermDialog}
+        icon={CalendarClock}
+        title="Change Default Payment Term"
+        description={`Set the default payment term for ${pluralize('selected supplier', targetIds.length, true)}.`}
+        content={(close) => (
+          <BulkChangeDefaultPaymentTermDialog
+            supplierIds={targetIds}
+            onSuccess={() => {
+              close();
+              table.resetRowSelection();
+            }}
+            onCancel={close}
+          />
+        )}
       />
     </div>
   );

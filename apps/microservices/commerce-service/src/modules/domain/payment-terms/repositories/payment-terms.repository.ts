@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import { and, eq, getColumns, ne, type SQL, sql, sum } from '@vritti/api-sdk/drizzle-orm';
 import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
-import { type PaymentTerm, paymentTermLines, paymentTerms, supplierSites, suppliers } from '@/db/schema';
+import { type PaymentTerm, paymentTermRules, paymentTerms, supplierEnrollments, suppliers } from '@/db/schema';
 
 export type PaymentTermDetail = PaymentTerm & {
   ruleCount: number;
@@ -67,16 +67,16 @@ export class PaymentTermsDomainRepository extends PrimaryBaseRepository<typeof p
   }
 
   private selection() {
-    const ownRules = eq(paymentTermLines.paymentTermId, paymentTerms.id);
+    const ownRules = eq(paymentTermRules.paymentTermId, paymentTerms.id);
     return {
       ...getColumns(paymentTerms),
-      ruleCount: this.db.$count(paymentTermLines, ownRules),
+      ruleCount: this.db.$count(paymentTermRules, ownRules),
       totalPercent: sql<string>`(${this.db
-        .select({ total: sql`coalesce(${sum(paymentTermLines.percent)}, 0)` })
-        .from(paymentTermLines)
+        .select({ total: sql`coalesce(${sum(paymentTermRules.percent)}, 0)` })
+        .from(paymentTermRules)
         .where(ownRules)})`,
       supplierCount: this.db.$count(suppliers, eq(suppliers.defaultPaymentTermId, paymentTerms.id)),
-      enrollmentCount: this.db.$count(supplierSites, eq(supplierSites.paymentTermId, paymentTerms.id)),
+      enrollmentCount: this.db.$count(supplierEnrollments, eq(supplierEnrollments.paymentTermId, paymentTerms.id)),
     };
   }
 }

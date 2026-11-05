@@ -1,5 +1,6 @@
 import { sql } from '@vritti/api-sdk/drizzle-orm';
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -17,8 +18,10 @@ import { inventoryItems } from './inventory-items';
 import { suppliers } from './suppliers';
 import { uom } from './uom';
 import {
+  LE_GUC,
   organizationIdColumn,
   scopeFromOwnerPolicies,
+  siteDocumentPolicies,
   workspaceHierarchyPolicies,
   workspaceScopeColumns,
 } from './workspace-scope';
@@ -51,7 +54,10 @@ export const supplierQuotations = commerceSchema.table(
     uniqueIndex('uq_supplier_quotations_supplier_number').on(table.supplierId, table.quotationNumber),
     index('idx_supplier_quotations_supplier').on(table.supplierId, table.validFrom),
     check('supplier_quotations_validity_chk', sql`${table.validTo} IS NULL OR ${table.validTo} >= ${table.validFrom}`),
-    ...workspaceHierarchyPolicies(),
+    // A site sees only the quotations posted to it
+    ...workspaceHierarchyPolicies({
+      sharedThrough: { table: supplierQuotationSites, fk: (sites) => sites.quotationId, id: table.id },
+    }),
   ],
 );
 
@@ -100,15 +106,16 @@ export const supplierQuotationItems = commerceSchema.table(
 export type SupplierQuotationItem = typeof supplierQuotationItems.$inferSelect;
 export type NewSupplierQuotationItem = typeof supplierQuotationItems.$inferInsert;
 
-// A site the quotation is posted to; its price rows point back here and leave with it
+// A site the quotation is posted to; its price rows point back here and leave with it — a site reads only its own
 export const supplierQuotationSites = commerceSchema.table(
   'supplier_quotation_sites',
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     organizationId: organizationIdColumn,
+    legalEntityId: uuid('legal_entity_id').notNull().default(sql.raw(LE_GUC)),
     quotationId: uuid('quotation_id')
       .notNull()
-      .references(() => supplierQuotations.id, { onDelete: 'cascade' }),
+      .references((): AnyPgColumn => supplierQuotations.id, { onDelete: 'cascade' }),
     siteId: uuid('site_id').notNull(),
     postedBy: uuid('posted_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -116,7 +123,7 @@ export const supplierQuotationSites = commerceSchema.table(
   (table) => [
     uniqueIndex('uq_supplier_quotation_sites_site').on(table.quotationId, table.siteId),
     index('idx_supplier_quotation_sites_site').on(table.siteId),
-    ...scopeFromOwnerPolicies({ owner: supplierQuotations, fk: table.quotationId }),
+    ...siteDocumentPolicies(),
   ],
 );
 

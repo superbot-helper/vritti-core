@@ -1,5 +1,5 @@
 import { useFormatters } from '@vritti/quantum-ui/hooks';
-import { LineChart } from '@vritti/quantum-ui/LineChart';
+import { LineChart, type LineChartEmptyState } from '@vritti/quantum-ui/LineChart';
 import { pluralize } from '@vritti/quantum-ui/pluralize';
 import { CalendarClock } from 'lucide-react';
 import type React from 'react';
@@ -9,6 +9,7 @@ import {
   buildPriceSeries,
   dayEpoch,
   mergePriceSeries,
+  NO_PRICES_IN_RANGE,
   type PriceRange,
   priceDomain,
   priceTrend,
@@ -33,6 +34,9 @@ interface PriceSeriesChartProps {
   // The window the chart shows; each line is cut to it
   range: PriceRange;
   today: string;
+  isLoading?: boolean;
+  // What the chart says inside its frame when there is no line to draw
+  emptyState?: LineChartEmptyState;
 }
 
 // The validated categorical series palette (quantum-ui --chart-series-1…8), in its fixed order
@@ -40,7 +44,15 @@ const SERIES = Array.from({ length: 8 }, (_, index) => `var(--chart-series-${ind
 
 // Several price timelines on one chart — a coloured step line each — with a key beneath that doubles as each line's
 // ticker: the price in force, its last move and the next scheduled change
-export const PriceSeriesChart: React.FC<PriceSeriesChartProps> = ({ series, currencyCode, noun, range, today }) => {
+export const PriceSeriesChart: React.FC<PriceSeriesChartProps> = ({
+  series,
+  currencyCode,
+  noun,
+  range,
+  today,
+  isLoading = false,
+  emptyState = NO_PRICES_IN_RANGE,
+}) => {
   const fmt = useFormatters();
 
   // A line keeps its colour while it stays on the chart — filtering others in or out never repaints it. Colours go to
@@ -100,6 +112,9 @@ export const PriceSeriesChart: React.FC<PriceSeriesChartProps> = ({ series, curr
         showLegend={false}
         yDomain={yDomain}
         markers={todayInRange ? [{ x: dayEpoch(today), label: 'Today' }] : []}
+        xDomain={[dayEpoch(range.from), dayEpoch(range.to)]}
+        isLoading={isLoading}
+        emptyState={emptyState}
         className="min-h-80 w-full"
         valueFormatter={(value) => String(fmt.currency({ currency: currencyCode, value: String(value) }).primary)}
         xAxisFormatter={(value) => String(fmt.date(new Date(Number(value)).toISOString().slice(0, 10)).primary)}
@@ -111,38 +126,40 @@ export const PriceSeriesChart: React.FC<PriceSeriesChartProps> = ({ series, curr
         </p>
       )}
 
-      <ul className="grid grid-cols-1 gap-x-8 gap-y-3 border-t border-border pt-4 sm:grid-cols-2 xl:grid-cols-3">
-        {shown.map((line) => {
-          const trend = priceTrend(line.current ?? undefined, line.previous ?? undefined);
-          return (
-            <li key={line.id} className="flex items-start gap-3">
-              <span
-                className="mt-1.5 size-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: SERIES[line.slot] }}
-                aria-hidden
-              />
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="truncate text-sm font-medium text-foreground">{line.label}</span>
-                  <span className="text-sm font-semibold tabular-nums text-foreground">
-                    {line.current ? fmt.currency(line.current.unitPrice).primary : '—'}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  {trend && <PriceTrendChip trend={trend} />}
-                  {!line.current && <span>No price in force</span>}
-                  {line.next && (
-                    <span className="flex items-center gap-1">
-                      <CalendarClock className="size-3" aria-hidden />
-                      Next {fmt.currency(line.next.unitPrice).primary} from {fmt.date(line.next.validFrom).primary}
+      {!isLoading && shown.length > 0 && (
+        <ul className="grid grid-cols-1 gap-x-8 gap-y-3 border-t border-border pt-4 sm:grid-cols-2 xl:grid-cols-3">
+          {shown.map((line) => {
+            const trend = priceTrend(line.current ?? undefined, line.previous ?? undefined);
+            return (
+              <li key={line.id} className="flex items-start gap-3">
+                <span
+                  className="mt-1.5 size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: SERIES[line.slot] }}
+                  aria-hidden
+                />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="truncate text-sm font-medium text-foreground">{line.label}</span>
+                    <span className="text-sm font-semibold tabular-nums text-foreground">
+                      {line.current ? fmt.currency(line.current.unitPrice).primary : '—'}
                     </span>
-                  )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    {trend && <PriceTrendChip trend={trend} />}
+                    {!line.current && <span>No price in force</span>}
+                    {line.next && (
+                      <span className="flex items-center gap-1">
+                        <CalendarClock className="size-3" aria-hidden />
+                        Next {fmt.currency(line.next.unitPrice).primary} from {fmt.date(line.next.validFrom).primary}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 };

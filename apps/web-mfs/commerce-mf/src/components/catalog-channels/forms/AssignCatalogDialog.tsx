@@ -9,21 +9,21 @@ import { useForm } from 'react-hook-form';
 import { type AssignCatalogFormData, assignCatalogSchema } from '@/schemas/catalog-channels';
 import { CatalogSelector } from '@/selectors/catalog';
 
-interface AssignCatalogDialogProps {
+interface AssignCatalogDialogProps<TData, TVariables> {
   excludeCatalogIds?: (string | null | undefined)[];
-  mutation: UseMutationResult<any, AxiosError, any>;
-  transformSubmit: (data: AssignCatalogFormData) => unknown;
+  mutation: UseMutationResult<TData, AxiosError, TVariables>;
+  transformSubmit: (data: AssignCatalogFormData) => TVariables;
   submitLabel: string;
   onCancel: () => void;
 }
 
-export const AssignCatalogDialog: React.FC<AssignCatalogDialogProps> = ({
+export const AssignCatalogDialog = <TData, TVariables>({
   excludeCatalogIds,
   mutation,
   transformSubmit,
   submitLabel,
   onCancel,
-}) => {
+}: AssignCatalogDialogProps<TData, TVariables>): React.ReactElement => {
   const form = useForm<AssignCatalogFormData>({
     resolver: zodResolver(assignCatalogSchema),
   });

@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@vritti/quantum-ui/Card';
 import { useFormatters } from '@vritti/quantum-ui/hooks';
 import { pluralize } from '@vritti/quantum-ui/pluralize';
+import { Skeleton } from '@vritti/quantum-ui/Skeleton';
 import { CalendarClock } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
@@ -11,19 +12,33 @@ import { PriceTrendChip } from './PriceTrendChip';
 
 interface PriceTimelineCardProps {
   title: string;
-  site: SitePriceHistory;
+  // The site's prices in the window; absent when it has none there
+  site: SitePriceHistory | undefined;
   currencyCode: string;
   // Controls beside the title, e.g. the currency filter
   action?: React.ReactNode;
   // The window the chart shows; the line is cut to it
   range: PriceRange;
+  today: string;
+  isLoading?: boolean;
 }
 
 // One site's price history: the price in force leads, its last move and next scheduled change follow, the chart below
-export const PriceTimelineCard: React.FC<PriceTimelineCardProps> = ({ title, site, currencyCode, action, range }) => {
+export const PriceTimelineCard: React.FC<PriceTimelineCardProps> = ({
+  title,
+  site,
+  currencyCode,
+  action,
+  range,
+  today,
+  isLoading = false,
+}) => {
   const fmt = useFormatters();
-  const points = useMemo(() => buildPriceSeries(site.windows, range), [site.windows, range]);
-  const { current, previous, next } = site;
+  const windows = site?.windows;
+  const points = useMemo(() => buildPriceSeries(windows ?? [], range), [windows, range]);
+  const current = site?.current ?? null;
+  const previous = site?.previous ?? null;
+  const next = site?.next ?? null;
   const trend = priceTrend(current ?? undefined, previous ?? undefined);
 
   return (
@@ -34,7 +49,9 @@ export const PriceTimelineCard: React.FC<PriceTimelineCardProps> = ({ title, sit
           {action}
         </div>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          {current ? (
+          {isLoading ? (
+            <Skeleton className="h-8 w-32" />
+          ) : current ? (
             <span className="text-2xl font-semibold tabular-nums text-foreground">
               {fmt.currency(current.unitPrice).primary}
             </span>
@@ -50,11 +67,22 @@ export const PriceTimelineCard: React.FC<PriceTimelineCardProps> = ({ title, sit
               Next {fmt.currency(next.unitPrice).primary} from {fmt.date(next.validFrom).primary}
             </span>
           )}
-          <span>{pluralize('price', site.windows.length, true)} in this period</span>
+          {isLoading ? (
+            <Skeleton className="h-4 w-24" />
+          ) : (
+            <span>{pluralize('price', windows?.length ?? 0, true)} in this period</span>
+          )}
         </div>
       </CardHeader>
       <CardContent>
-        <PriceStepChart points={points} currencyCode={currencyCode} className="min-h-72 w-full" />
+        <PriceStepChart
+          points={points}
+          currencyCode={currencyCode}
+          range={range}
+          today={today}
+          isLoading={isLoading}
+          className="min-h-72 w-full"
+        />
       </CardContent>
     </Card>
   );

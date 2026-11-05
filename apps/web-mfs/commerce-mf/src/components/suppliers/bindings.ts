@@ -1,51 +1,127 @@
 import type { ComponentType } from 'react';
+import type { SupplierEnrollmentKey, SupplierEnrollmentRow } from '@/schemas/supplier-enrollments';
 import type {
-  SupplierSitePermissions,
-  SupplierSiteRef,
+  QuotationPath,
+  QuotationRef,
+  QuotationSlotProps,
+  SupplierEnrollmentPermissions,
+  SupplierEnrollmentRef,
+  SupplierItemPricesPermissions,
+  SupplierSiteItemPagePermissions,
   UseAddSitePrice,
-  UseDeleteSitePrice,
-  UseEnroll,
-  UseRemoveEnrollment,
+  UseCreateEnrollment,
+  UseDeleteEnrollment,
+  UseDeletePrice,
+  UseEnrollment,
+  UseEnrollmentRef,
+  UseEnrollmentScope,
+  UseEnrollmentsTable,
+  UsePricedSiteIds,
+  UsePriceHistory,
+  UsePricesTable,
+  UseQuotation,
+  UseQuotationsTable,
+  UseSetEnrollmentActive,
   UseSiteItem,
   UseSiteItemsTable,
-  UseSitePriceHistory,
-  UseSitePricesTable,
-  UseSupplierAtSite,
-  UseSupplierRef,
+  UseSupplierParty,
   UseUpdateEnrollment,
-  UseUpdateItemTerms,
-  UseUpdateSitePrice,
+  UseUpdatePrice,
+  UseUpdateSiteItem,
 } from './types';
 
-// Everything that differs between the LE and site views of a supplier at one site
-export interface SupplierSiteBinding {
-  permissions: SupplierSitePermissions;
-  // The supplier's quotations posted to the site — a legal-entity tab, absent in a site workspace
-  quotations?: { permission: string; Tab: ComponentType<{ supplierId: string; siteId?: string }> };
-  // Where the page goes after the supplier is removed from the site (route-relative)
-  useExitPath: () => string;
-  itemsTableKey: (ref: SupplierSiteRef) => readonly unknown[];
-  itemsTableSlug: (ref: SupplierSiteRef) => string;
-  pricesTableKey: (ref: SupplierSiteRef, itemId: string) => readonly unknown[];
-  pricesTableSlug: (ref: SupplierSiteRef, itemId: string) => string;
+// The enrollments table: one supplier across the legal entity's sites, or one site across its suppliers
+export interface EnrollmentsTableBinding {
+  // The side of the (supplier, site) pair the rows vary over
+  rows: 'sites' | 'suppliers';
+  // The fixed side of every row: the supplier of an LE supplier page, the session site in a site workspace
+  useScope: UseEnrollmentScope;
+  useTable: UseEnrollmentsTable;
+  queryKey: (scope: Partial<SupplierEnrollmentKey>) => readonly unknown[];
+  slug: (scope: Partial<SupplierEnrollmentKey>) => string;
+  // A row's enrollment page, relative to the table's URL path
+  rowPath: (row: SupplierEnrollmentRow) => string;
+}
 
-  useSupplierRef: UseSupplierRef;
-  // The item of a site-item page — its route names the segment differently per workspace
+// A supplier item's prices table and price history: at LE across the sites it is priced at, in a site workspace at
+// the session site
+export interface SupplierItemPricesBinding {
+  permissions: SupplierItemPricesPermissions;
+  tableKey: (supplierId: string, itemId: string) => readonly unknown[];
+  tableSlug: (supplierId: string, itemId: string) => string;
+  usePricesTable: UsePricesTable;
+  usePriceHistory: UsePriceHistory;
+  useUpdatePrice: UseUpdatePrice;
+  useDeletePrice: UseDeletePrice;
+  // Present where prices span several sites (LE): the table shows one of them and the price history charts any
+  sites?: {
+    // The sites the item has prices at — what the table's site picker and the history's Sites filter offer
+    usePricedSiteIds: UsePricedSiteIds;
+  };
+}
+
+// A site workspace's own supplier site item page, where the site's terms and prices for the item live. At LE the
+// supplier item page owns every site's data, so an enrollment's site items only link there.
+export interface SupplierSiteItemPageBinding {
+  permissions: SupplierSiteItemPagePermissions;
   useItemId: () => string;
-  // A site item's path from the site view (route-relative)
-  siteItemPath: (itemSlug: string) => string;
-  useSupplierAtSite: UseSupplierAtSite;
-  useEnroll: UseEnroll;
+  useSiteItem: UseSiteItem;
+  useUpdateSiteItem: UseUpdateSiteItem;
+  prices: SupplierItemPricesBinding;
+  useAddSitePrice: UseAddSitePrice;
+}
+
+// Everything that differs between the LE and site views of supplier enrollments
+export interface SupplierEnrollmentBinding {
+  permissions: SupplierEnrollmentPermissions;
+  table: EnrollmentsTableBinding;
+  // The supplier's quotations posted to the enrollment's site
+  quotations: SupplierQuotationsBinding;
+  // Where the enrollment page goes after the enrollment is removed (route-relative)
+  useExitPath: () => string;
+  siteItemsTableKey: (ref: SupplierEnrollmentRef) => readonly unknown[];
+  siteItemsTableSlug: (ref: SupplierEnrollmentRef) => string;
+
+  useEnrollmentRef: UseEnrollmentRef;
+  useEnrollment: UseEnrollment;
+  // The supplier's party facts for the enrollment forms; idle until the supplier is known
+  useSupplierParty: UseSupplierParty;
+  useCreateEnrollment: UseCreateEnrollment;
   useUpdateEnrollment: UseUpdateEnrollment;
-  useRemoveEnrollment: UseRemoveEnrollment;
+  useSetEnrollmentActive: UseSetEnrollmentActive;
+  useDeleteEnrollment: UseDeleteEnrollment;
 
   useSiteItemsTable: UseSiteItemsTable;
-  useSiteItem: UseSiteItem;
-  useUpdateItemTerms: UseUpdateItemTerms;
+  // Where an enrollment's site item opens, relative to the enrollment page's URL path
+  siteItemPath: (itemSlug: string, ref: SupplierEnrollmentRef) => string;
+  // Present only where the workspace has its own supplier site item page
+  siteItemPage?: SupplierSiteItemPageBinding;
+}
 
-  useSitePricesTable: UseSitePricesTable;
-  useSitePriceHistory: UseSitePriceHistory;
-  useAddSitePrice: UseAddSitePrice;
-  useUpdateSitePrice: UseUpdateSitePrice;
-  useDeleteSitePrice: UseDeleteSitePrice;
+// A supplier's quotations — the list, a supplier's or those posted to one site, and a quotation's page. A site workspace
+// only reads them; the legal entity also records, edits and posts them through `authoring`.
+export interface SupplierQuotationsBinding {
+  // view: a supplier's quotations; siteView: those posted to a site; mrpView: the MRP column on a quotation's lines
+  permissions: { view: string; siteView: string; mrpView: string };
+  useTable: UseQuotationsTable;
+  tableKey: (supplierId: string, siteId: string | undefined) => readonly unknown[];
+  tableSlug: (supplierId: string, siteId: string | undefined) => string;
+  // A quotation's page, relative to the list's URL path
+  useQuotationPath: (siteId: string | undefined) => QuotationPath;
+  emptyState: (siteId: string | undefined) => { title: string; description: string };
+  useQuotationRef: () => QuotationRef;
+  useQuotation: UseQuotation;
+  quotationKey: (supplierId: string, quotationId: string) => readonly unknown[];
+  useSupplierName: (supplierId: string) => string;
+  authoring?: SupplierQuotationAuthoring;
+}
+
+// Recording a supplier's quotations, editing their lines and posting them to sites — the legal entity's alone
+export interface SupplierQuotationAuthoring {
+  // The list's toolbar action: a new quotation on a supplier's list, the way to it from a site's list
+  ListAction: ComponentType<{ supplierId: string; siteId?: string; quotationPath: QuotationPath }>;
+  HeaderActions: ComponentType<QuotationSlotProps>;
+  LinesTab: ComponentType<QuotationSlotProps>;
+  SitesTab: ComponentType<QuotationSlotProps>;
+  DeleteZone: ComponentType<QuotationSlotProps>;
 }

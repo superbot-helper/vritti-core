@@ -467,6 +467,10 @@ export const partyIdentifierTypeEnum = commerceSchema.enum('party_identifier_typ
   'DUNS',
   'LEI',
   'CIN',
+  'TIN',
+  'EIN',
+  'UTR',
+  'ABN',
 ]);
 export const PartyIdentifierTypeValues = {
   PAN: 'PAN' as const,
@@ -479,6 +483,10 @@ export const PartyIdentifierTypeValues = {
   DUNS: 'DUNS' as const,
   LEI: 'LEI' as const,
   CIN: 'CIN' as const,
+  TIN: 'TIN' as const,
+  EIN: 'EIN' as const,
+  UTR: 'UTR' as const,
+  ABN: 'ABN' as const,
 };
 export type PartyIdentifierType = (typeof partyIdentifierTypeEnum.enumValues)[number];
 
@@ -490,20 +498,28 @@ export const PersonIdentifierTypes: PartyIdentifierType[] = [
   'VOTER_ID',
   'CIVIL_ID',
   'NATIONAL_ID',
+  'TIN',
+  'UTR',
 ];
-export const OrganizationIdentifierTypes: PartyIdentifierType[] = ['PAN', 'CIN', 'LEI', 'DUNS'];
+export const OrganizationIdentifierTypes: PartyIdentifierType[] = [
+  'PAN',
+  'CIN',
+  'LEI',
+  'DUNS',
+  'TIN',
+  'EIN',
+  'UTR',
+  'ABN',
+];
+// Identifier types that are a party's tax identification number in some country
+export const TaxIdIdentifierTypes: PartyIdentifierType[] = ['PAN', 'TIN', 'EIN', 'UTR', 'ABN'];
 
 export function isIdentifierTypeApplicable(partyType: PartyType, idType: PartyIdentifierType): boolean {
   const applicable = partyType === 'PERSON' ? PersonIdentifierTypes : OrganizationIdentifierTypes;
   return applicable.includes(idType);
 }
 
-export const taxRegistrationTypeEnum = commerceSchema.enum('tax_registration_type', [
-  'GSTIN',
-  'VAT',
-  'TIN',
-  'OTHER',
-]);
+export const taxRegistrationTypeEnum = commerceSchema.enum('tax_registration_type', ['GSTIN', 'VAT', 'TIN', 'OTHER']);
 export const TaxRegistrationTypeValues = {
   GSTIN: 'GSTIN' as const,
   VAT: 'VAT' as const,

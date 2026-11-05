@@ -119,7 +119,8 @@ export default defineConfig({
         './Selectors/PaymentTerm': './src/selectors/payment-term/index.ts',
         './Selectors/Supplier': './src/selectors/supplier/index.ts',
         './Selectors/SupplierItem': './src/selectors/supplier-item/index.ts',
-        './Selectors/SupplierSite': './src/selectors/supplier-site/index.ts',
+        './Selectors/EnrolledSite': './src/selectors/enrolled-site/index.ts',
+        './Selectors/SiteSupplier': './src/selectors/site-supplier/index.ts',
       },
       shared: {
         react: { singleton: true, requiredVersion: '^19.2.0' },

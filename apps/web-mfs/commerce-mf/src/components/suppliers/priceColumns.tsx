@@ -1,28 +1,14 @@
 import { Badge } from '@vritti/quantum-ui/Badge';
-import { type ColumnDef, CurrencyCell, DateCell, DateTimeCell, StringCell } from '@vritti/quantum-ui/DataTable';
+import { type ColumnDef, CurrencyCell, DateCell, DateTimeCell } from '@vritti/quantum-ui/DataTable';
 import { PRICE_SOURCE_LABELS, type SupplierItemPriceRow } from '@/schemas/suppliers';
 
-// The data columns of a supplier item's price table; `showSite` adds the site for a table spanning every site
+// The data columns of a supplier item's price table at one site
 export function supplierPriceColumns<T extends SupplierItemPriceRow = SupplierItemPriceRow>({
   showMrp,
-  showSite,
 }: {
   showMrp: boolean;
-  showSite: boolean;
 }): ColumnDef<T>[] {
   return [
-    ...(showSite
-      ? [
-          {
-            accessorKey: 'siteName',
-            header: 'Site',
-            enableSorting: false,
-            cell: ({ row }: { row: { original: T } }) => (
-              <StringCell value={row.original.siteName ?? row.original.siteCode ?? row.original.siteId} />
-            ),
-          } satisfies ColumnDef<T>,
-        ]
-      : []),
     {
       accessorKey: 'unitPrice',
       header: 'Unit Price',

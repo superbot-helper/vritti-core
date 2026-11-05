@@ -40,7 +40,7 @@ export const SetSupplierItemMinOrderDialog: React.FC<SetSupplierItemMinOrderDial
         type="number"
         positive
         placeholder="e.g. 10"
-        description="The least the supplier sells per order, in each item's own unit. Leave blank to clear it."
+        description="The least the supplier sells per order, in each item's own unit; items sold in whole units need a whole number. Leave blank to clear it."
       />
       <DialogActions>
         <Button type="button" variant="outline" data-cancel>

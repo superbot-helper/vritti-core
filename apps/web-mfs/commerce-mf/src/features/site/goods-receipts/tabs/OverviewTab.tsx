@@ -38,7 +38,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ receipt }) => {
                 value={
                   <span>
                     {receipt.exchangeRate}
-                    {supplierCurrencyCode && workspaceCurrency && (
+                    {supplierCurrencyCode && (
                       <span className="ml-2 text-xs text-muted-foreground">
                         {supplierCurrencyCode} → {workspaceCurrency}
                       </span>

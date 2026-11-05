@@ -310,9 +310,10 @@ export function ApiSuppliersSelect() {
   return applyDecorators(
     ApiOperation({
       summary: 'Get supplier select options',
-      description: 'Returns paginated supplier options for select dropdowns.',
+      description: "Returns paginated options of the legal entity's suppliers for select dropdowns.",
     }),
     ...BASE_SELECT_QUERIES,
+    ApiQuery({ name: 'activeOnly', description: 'Only active suppliers', required: false }),
     ApiResponse({ status: 200, description: 'Supplier select options retrieved successfully.' }),
     ApiResponse({ status: 401, description: 'Unauthorized.' }),
   );
@@ -408,6 +409,53 @@ export function ApiUomDimensionsSelect() {
     }),
     ...BASE_SELECT_QUERIES,
     ApiResponse({ status: 200, description: 'UOM dimension select options retrieved successfully.' }),
+    ApiResponse({ status: 401, description: 'Unauthorized.' }),
+  );
+}
+
+export function ApiSiteSuppliersSelect() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get site supplier select options',
+      description:
+        "Returns paginated options of the legal entity's suppliers for a picker at the session site, each carrying its enrollment there.",
+    }),
+    ...BASE_SELECT_QUERIES,
+    ApiQuery({
+      name: 'enrollmentStatus',
+      description: 'Only suppliers ENROLLED or NOT_ENROLLED at the session site',
+      required: false,
+    }),
+    ApiQuery({
+      name: 'activeOnly',
+      description: 'Only suppliers active supplier-wide whose enrollment at the session site, if any, is active',
+      required: false,
+    }),
+    ApiResponse({ status: 200, description: 'Site supplier select options retrieved successfully.' }),
+    ApiResponse({ status: 401, description: 'Unauthorized.' }),
+  );
+}
+
+export function ApiSupplierEnrollmentsSelect() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get supplier enrollment site select options',
+      description: "Returns the legal entity's sites for a supplier's enrollment picker, labelled with the site name.",
+    }),
+    ...BASE_SELECT_QUERIES,
+    ApiQuery({ name: 'supplierId', description: 'Supplier whose enrollments list the sites', required: true }),
+    ApiQuery({
+      name: 'enrollmentStatus',
+      description: 'ENROLLED (default) lists enrolled sites, NOT_ENROLLED the rest, ALL every site of the legal entity',
+      required: false,
+    }),
+    ApiQuery({
+      name: 'activeOnly',
+      description: 'Only sites where the enrollment and the supplier are both active',
+      required: false,
+    }),
+    ApiResponse({ status: 200, description: 'Supplier enrollment site select options retrieved successfully.' }),
+    ApiResponse({ status: 400, description: 'Missing legal entity context.' }),
     ApiResponse({ status: 401, description: 'Unauthorized.' }),
   );
 }
