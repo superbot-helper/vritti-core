@@ -1,42 +1,46 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CurrencyAmountDto } from '@vritti/api-sdk/money';
 
-export class GoodsReceiptItemsCostRowResponseDto {
-  @ApiProperty()
+export class GoodsReceiptItemCostResponseDto {
+  @ApiProperty({ description: 'Goods receipt item ID' })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Inventory item ID' })
   inventoryItemId: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Inventory item name' })
   inventoryItemName: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Symbol of the unit the goods are counted in' })
   uomSymbol: string;
 
-  @ApiProperty({ description: 'Ordered (paid) quantity.' })
-  orderedQty: number;
+  @ApiPropertyOptional({ description: "Symbol of the item's primary unit", nullable: true })
+  primaryUomSymbol: string | null;
 
-  @ApiProperty({ description: 'Derived free (bonus) quantity.' })
-  freeQty: number;
+  @ApiProperty({ description: 'Received less rejected, in the counted unit' })
+  acceptedQty: number;
 
-  @ApiProperty({ description: 'Total received quantity (ordered + free).' })
-  totalQty: number;
+  @ApiProperty({ description: "Received less rejected, in the item's primary unit" })
+  acceptedPrimaryQty: number;
 
-  @ApiPropertyOptional({ type: () => CurrencyAmountDto, nullable: true })
-  unitPrice: CurrencyAmountDto | null;
+  @ApiProperty({
+    type: CurrencyAmountDto,
+    description:
+      "Provisional cost per primary unit in the legal entity's currency: the PO line total over its ordered and expected free quantity",
+  })
+  unitCost: CurrencyAmountDto;
 
-  @ApiPropertyOptional({ type: () => CurrencyAmountDto, nullable: true })
-  lineTotal: CurrencyAmountDto | null;
+  @ApiProperty({ type: CurrencyAmountDto, description: 'Provisional value of the accepted quantity' })
+  value: CurrencyAmountDto;
 }
 
 export class GoodsReceiptItemsCostResponseDto {
-  @ApiProperty({ type: [GoodsReceiptItemsCostRowResponseDto] })
-  rows: GoodsReceiptItemsCostRowResponseDto[];
+  @ApiProperty({ type: [GoodsReceiptItemCostResponseDto] })
+  rows: GoodsReceiptItemCostResponseDto[];
 
-  @ApiPropertyOptional({ nullable: true })
-  currencyCode: string | null;
+  @ApiProperty({ description: "The legal entity's currency the costs are in" })
+  currencyCode: string;
 
-  @ApiPropertyOptional({ type: () => CurrencyAmountDto, nullable: true })
-  grandTotal: CurrencyAmountDto | null;
+  @ApiProperty({ type: CurrencyAmountDto, description: 'Provisional value of the whole receipt' })
+  grandTotal: CurrencyAmountDto;
 }

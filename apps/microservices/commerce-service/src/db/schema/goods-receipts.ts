@@ -1,34 +1,26 @@
 import { sql } from '@vritti/api-sdk/drizzle-orm';
-import {
-  decimal,
-  index,
-  jsonb,
-  pgPolicy,
-  text,
-  timestamp,
-  unique,
-  uuid,
-  varchar,
-} from '@vritti/api-sdk/drizzle-pg-core';
+import { index, jsonb, text, timestamp, unique, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
 import { commerceSchema } from './commerce-schema';
 import { goodsReceiptStatusEnum } from './enums';
 import { purchaseOrders } from './purchase-orders';
 import { suppliers } from './suppliers';
-import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
+import { LE_GUC, organizationIdColumn, siteDocumentPolicies } from './workspace-scope';
 
 export const goodsReceipts = commerceSchema.table(
   'goods_receipts',
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     organizationId: organizationIdColumn,
+    legalEntityId: uuid('legal_entity_id').notNull().default(sql.raw(LE_GUC)),
     siteId: uuid('site_id').notNull().default(sql.raw("cast(current_setting('app.site_id') as uuid)")),
     supplierId: uuid('supplier_id')
       .notNull()
       .references(() => suppliers.id),
     grNumber: varchar('gr_number', { length: 50 }).notNull(),
     status: goodsReceiptStatusEnum('status').notNull().default('DRAFT'),
-    purchaseOrderId: uuid('purchase_order_id').references(() => purchaseOrders.id),
-    exchangeRate: decimal('exchange_rate', { precision: 18, scale: 6, mode: 'number' }).notNull().default(1),
+    purchaseOrderId: uuid('purchase_order_id')
+      .notNull()
+      .references(() => purchaseOrders.id),
     receivedDate: timestamp('received_date', { withTimezone: true, mode: 'string' }).notNull(),
     notes: text('notes'),
     metadata: jsonb('metadata').notNull().default({}),
@@ -40,23 +32,7 @@ export const goodsReceipts = commerceSchema.table(
     index('idx_goods_receipts_supplier').on(table.supplierId),
     index('idx_goods_receipts_po').on(table.purchaseOrderId),
     index('idx_goods_receipts_site').on(table.organizationId, table.siteId),
-    orgIsolationPolicy(),
-    pgPolicy('site_read', {
-      for: 'select',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_write', {
-      for: 'insert',
-      withCheck: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_update', {
-      for: 'update',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_delete', {
-      for: 'delete',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
+    ...siteDocumentPolicies(),
   ],
 );
 

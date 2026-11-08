@@ -1,21 +1,15 @@
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type UseMutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
+import type { UpdatePurchaseOrderStatusPayload } from '@/schemas/purchase-orders';
 import { updatePurchaseOrderStatus } from '@/services/site/purchase-orders.service';
 import { PURCHASE_ORDER_KEY, PURCHASE_ORDERS_TABLE_KEY } from './keys';
 
-export interface UpdatePurchaseOrderStatusPayload {
-  id: string;
-  status: string;
-}
-
-// Updates a purchase order status and invalidates table + detail
+// Moves a purchase order along its manual workflow
 export function useUpdatePurchaseOrderStatus(
   options?: Omit<UseMutationOptions<SuccessResponse, AxiosError, UpdatePurchaseOrderStatusPayload>, 'mutationFn'>,
 ) {
   const queryClient = useQueryClient();
-
   return useMutation<SuccessResponse, AxiosError, UpdatePurchaseOrderStatusPayload>({
     ...options,
     mutationFn: updatePurchaseOrderStatus,

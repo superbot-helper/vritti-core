@@ -206,6 +206,7 @@ export const scopeFromOwnerPolicies = <const TTables extends readonly PgTable[]>
   owner: PgTable;
   fk: AnyPgColumn;
   through?: ScopeHops<TTables>;
+  ownerIs?: 'siteDocument';
 }) => {
   const fk = options.fk.name;
   const owner = qualifiedName(options.owner);
@@ -224,7 +225,11 @@ export const scopeFromOwnerPolicies = <const TTables extends readonly PgTable[]>
     .join('');
 
   const reachable = sql.raw(`exists (select 1 from ${from} where ${match})`);
-  const owned = sql.raw(`exists (select 1 from ${from}${joins} where ${match} and ${ownedSqlFor(options.owner, 'o')})`);
+  const ownership =
+    options.ownerIs === 'siteDocument'
+      ? `coalesce(${siteDocumentWriteSql('o')}, false)`
+      : ownedSqlFor(options.owner, 'o');
+  const owned = sql.raw(`exists (select 1 from ${from}${joins} where ${match} and ${ownership})`);
 
   return [
     orgIsolationPolicy(),

@@ -78,4 +78,10 @@ export const SITE_SUPPLIERS = {
   quotations: {
     view: 'site.suppliers.quotations.view',
   },
+  // The supplier's invoices for this site, entered and edited from the supplier
+  invoices: {
+    view: 'site.suppliers.invoices.view',
+    add: 'site.suppliers.invoices.add',
+    edit: 'site.suppliers.invoices.edit',
+  },
 } as const;

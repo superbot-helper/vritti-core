@@ -1,84 +1,81 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, eq, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, eq, type SQL } from '@vritti/api-sdk/drizzle-orm';
+import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import {
   type GoodsReceiptLineItem,
-  goodsReceiptItems,
   goodsReceiptLineItems,
-  goodsReceiptLines,
+  type InventoryTracking,
+  InventoryTrackingValues,
   inventoryItemSerials,
 } from '@/db/schema';
 
 @Injectable()
 export class GoodsReceiptLineItemsDomainRepository extends PrimaryBaseRepository<typeof goodsReceiptLineItems> {
+  private static readonly SERIAL_TRACKINGS: InventoryTracking[] = [
+    InventoryTrackingValues.SERIAL,
+    InventoryTrackingValues.LOT_SERIAL,
+  ];
+
   constructor(database: PrimaryDatabaseService) {
     super(database, goodsReceiptLineItems);
   }
 
+  // Returns the serials registered on a line, oldest first
   async findByLineId(lineId: string): Promise<GoodsReceiptLineItem[]> {
-    const rows = await this.db
-      .select()
-      .from(goodsReceiptLineItems)
-      .where(eq(goodsReceiptLineItems.goodsReceiptLineId, lineId))
-      .orderBy(asc(goodsReceiptLineItems.createdAt));
-    return rows as GoodsReceiptLineItem[];
-  }
-
-  async findByReceiptId(goodsReceiptId: string): Promise<GoodsReceiptLineItem[]> {
-    const rows = await this.db
-      .select({
-        id: goodsReceiptLineItems.id,
-        organizationId: goodsReceiptLineItems.organizationId,
-        siteId: goodsReceiptLineItems.siteId,
-        goodsReceiptLineId: goodsReceiptLineItems.goodsReceiptLineId,
-        serialNumber: goodsReceiptLineItems.serialNumber,
-        metadata: goodsReceiptLineItems.metadata,
-        createdAt: goodsReceiptLineItems.createdAt,
-        updatedAt: goodsReceiptLineItems.updatedAt,
-      })
-      .from(goodsReceiptLineItems)
-      .innerJoin(goodsReceiptLines, eq(goodsReceiptLineItems.goodsReceiptLineId, goodsReceiptLines.id))
-      .innerJoin(goodsReceiptItems, eq(goodsReceiptLines.goodsReceiptItemId, goodsReceiptItems.id))
-      .where(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId));
-    return rows as GoodsReceiptLineItem[];
-  }
-
-  async findForTable(
-    lineId: string,
-    options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
-  ): Promise<{ result: GoodsReceiptLineItem[]; count: number }> {
-    const baseWhere = eq(goodsReceiptLineItems.goodsReceiptLineId, lineId);
-    const combinedWhere = options.where ? and(baseWhere, options.where) : baseWhere;
-    return this.findAllAndCount<GoodsReceiptLineItem>({
-      where: combinedWhere,
-      orderBy: options.orderBy?.length ? options.orderBy : [asc(goodsReceiptLineItems.createdAt)],
-      limit: options.limit,
-      offset: options.offset,
+    return this.findAllWithSelect({
+      where: eq(goodsReceiptLineItems.goodsReceiptLineId, lineId),
+      orderBy: [asc(goodsReceiptLineItems.createdAt)],
     });
   }
 
-  async countByLineId(lineId: string): Promise<number> {
-    const [row] = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(goodsReceiptLineItems)
-      .where(eq(goodsReceiptLineItems.goodsReceiptLineId, lineId));
-    return Number(row?.count ?? 0);
+  // Returns one page of the serials registered on a line
+  async findForTable(
+    lineId: string,
+    options: { where?: SQL; orderBy: SQL[]; limit: number; offset: number },
+  ): Promise<{ result: GoodsReceiptLineItem[]; count: number }> {
+    return this.findAllAndCount({
+      ...options,
+      where: and(eq(goodsReceiptLineItems.goodsReceiptLineId, lineId), options.where),
+    });
   }
 
-  async findBySerialOnLine(lineId: string, serialNumber: string): Promise<GoodsReceiptLineItem | undefined> {
-    const rows = await this.db
-      .select()
-      .from(goodsReceiptLineItems)
-      .where(
-        and(eq(goodsReceiptLineItems.goodsReceiptLineId, lineId), eq(goodsReceiptLineItems.serialNumber, serialNumber)),
-      )
-      .limit(1);
-    return rows[0] as GoodsReceiptLineItem | undefined;
+  // Loads a serial of the given line, throwing when it is not on it
+  async findOnLineOrThrow(lineId: string, lineItemId: string): Promise<GoodsReceiptLineItem> {
+    const lineItem = await this.findOne({ id: lineItemId, goodsReceiptLineId: lineId });
+    if (!lineItem) throw new NotFoundException('Serial not found on this line.');
+    return lineItem;
   }
 
-  // True if the serial is already registered in inventory for the given item.
-  async existsSerialInInventory(inventoryItemId: string, serialNumber: string): Promise<boolean> {
-    const rows = await this.db
+  // Rejects serials on an item that is not tracked by serial
+  assertSerialTracked(item: { tracking: InventoryTracking }): void {
+    if (GoodsReceiptLineItemsDomainRepository.SERIAL_TRACKINGS.includes(item.tracking)) return;
+    throw new BadRequestException({
+      label: 'Serials Not Tracked',
+      detail: `This item is tracked by ${item.tracking.toLowerCase()}, so it has no serials.`,
+    });
+  }
+
+  // Rejects a serial beyond the line's quantity
+  async assertLineHasRoom(line: { id: string; quantity: number }): Promise<void> {
+    const serialCount = await this.count(eq(goodsReceiptLineItems.goodsReceiptLineId, line.id));
+    if (serialCount < line.quantity) return;
+    throw new ConflictException({
+      label: 'Line Full',
+      detail: `This line already has its ${line.quantity} serials. Increase the line quantity to add more.`,
+      errors: [{ field: 'serialNumber', message: 'Line is full' }],
+    });
+  }
+
+  // Rejects a serial already on the line or already registered in inventory — a receipt only registers new serials
+  async assertSerialFree(line: { id: string }, inventoryItemId: string, serialNumber: string): Promise<void> {
+    const isOnLine = await this.exists(
+      and(
+        eq(goodsReceiptLineItems.goodsReceiptLineId, line.id),
+        eq(goodsReceiptLineItems.serialNumber, serialNumber),
+      ) as SQL,
+    );
+    const [inInventory] = await this.db
       .select({ id: inventoryItemSerials.id })
       .from(inventoryItemSerials)
       .where(
@@ -88,6 +85,13 @@ export class GoodsReceiptLineItemsDomainRepository extends PrimaryBaseRepository
         ),
       )
       .limit(1);
-    return rows.length > 0;
+    if (!isOnLine && !inInventory) return;
+    throw new ConflictException({
+      label: 'Duplicate Serial',
+      detail: isOnLine
+        ? `Serial "${serialNumber}" is already on this line.`
+        : `Serial "${serialNumber}" already exists in inventory.`,
+      errors: [{ field: 'serialNumber', message: isOnLine ? 'Already on this line' : 'Already in inventory' }],
+    });
   }
 }

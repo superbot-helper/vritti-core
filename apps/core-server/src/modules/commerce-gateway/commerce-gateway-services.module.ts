@@ -3,19 +3,22 @@ import { LegalEntityDomainModule } from '@domain/legal-entity/legal-entity.modul
 import { PayoutChannelDomainModule } from '@domain/payout-channel/payout-channel.module';
 import { SiteDomainModule } from '@domain/site/site.module';
 import { Module } from '@nestjs/common';
+import { PurchaseOrderDocumentsService } from './domain/purchase-orders/services/purchase-order-documents.service';
 import { LeAttributeTemplatesGatewayService } from './le-api/attribute-templates/services/attribute-templates-gateway.service';
 import { LeCartsGatewayService } from './le-api/carts/services/carts-gateway.service';
 import { LeCatalogChannelsGatewayService } from './le-api/catalog-channels/services/catalog-channels-gateway.service';
 import { LeCatalogsGatewayService } from './le-api/catalogs/services/catalogs-gateway.service';
 import { CostCategoriesGatewayService } from './le-api/cost-categories/services/cost-categories-gateway.service';
 import { LeDimensionTemplatesGatewayService } from './le-api/dimension-templates/services/dimension-templates-gateway.service';
+import { LeGoodsReceiptsGatewayService } from './le-api/goods-receipts/services/goods-receipts-gateway.service';
 import { LeInventoryItemPricesGatewayService } from './le-api/inventory-items/services/inventory-item-prices-gateway.service';
 import { LeInventoryItemsGatewayService } from './le-api/inventory-items/services/inventory-items-gateway.service';
 import { LeOfferingsGatewayService } from './le-api/offerings/services/offerings-gateway.service';
+import { LePurchaseOrdersGatewayService } from './le-api/purchase-orders/services/purchase-orders-gateway.service';
+import { SupplierInvoicesGatewayService } from './le-api/supplier-invoices/services/supplier-invoices-gateway.service';
 import { SupplierItemPricesGatewayService } from './le-api/suppliers/item-prices/services/supplier-item-prices-gateway.service';
 import { SupplierQuotationsGatewayService } from './le-api/suppliers/services/supplier-quotations-gateway.service';
 import { SuppliersGatewayService } from './le-api/suppliers/services/suppliers-gateway.service';
-import { TaxGroupsGatewayService } from './le-api/tax-groups/services/tax-groups-gateway.service';
 import { TaxRegistrationsGatewayService } from './le-api/tax-registrations/services/tax-registrations-gateway.service';
 import { OrgAttributeTemplatesGatewayService } from './org-api/attribute-templates/services/attribute-templates-gateway.service';
 import { CatalogChannelsGatewayService } from './org-api/catalog-channels/services/catalog-channels-gateway.service';
@@ -29,24 +32,22 @@ import { PaymentTermsGatewayService } from './org-api/payment-terms/services/pay
 import { PeopleGatewayService } from './org-api/people/services/people-gateway.service';
 import { TaxClassesGatewayService } from './org-api/tax-classes/services/tax-classes-gateway.service';
 import { TaxComponentsGatewayService } from './org-api/tax-components/services/tax-components-gateway.service';
+import { TaxGroupsGatewayService } from './org-api/tax-groups/services/tax-groups-gateway.service';
 import { TaxJurisdictionsGatewayService } from './org-api/tax-jurisdictions/services/tax-jurisdictions-gateway.service';
 import { UomGatewayService } from './org-api/uom/services/uom-gateway.service';
 import { SiteAttributeTemplatesGatewayService } from './site-api/attribute-templates/services/attribute-templates-gateway.service';
 import { CartsGatewayService } from './site-api/carts/services/carts-gateway.service';
 import { SiteCatalogChannelsGatewayService } from './site-api/catalog-channels/services/catalog-channels-gateway.service';
 import { SiteCatalogsGatewayService } from './site-api/catalogs/services/catalogs-gateway.service';
-import { CreditNotesGatewayService } from './site-api/credit-notes/services/credit-notes-gateway.service';
 import { CustomersGatewayService } from './site-api/customers/services/customers-gateway.service';
 import { SiteDimensionTemplatesGatewayService } from './site-api/dimension-templates/services/dimension-templates-gateway.service';
 import { GoodsReceiptsGatewayService } from './site-api/goods-receipts/services/goods-receipts-gateway.service';
 import { InventoryItemQuantsGatewayService } from './site-api/inventory-item-quants/services/inventory-item-quants-gateway.service';
 import { SiteInventoryItemPricesGatewayService } from './site-api/inventory-items/services/inventory-item-prices-gateway.service';
 import { SiteInventoryItemsGatewayService } from './site-api/inventory-items/services/inventory-items-gateway.service';
-import { InvoicesGatewayService } from './site-api/invoices/services/invoices-gateway.service';
 import { LocationsGatewayService } from './site-api/locations/services/locations-gateway.service';
 import { SiteOfferingsGatewayService } from './site-api/offerings/services/offerings-gateway.service';
 import { OrdersGatewayService } from './site-api/orders/services/orders-gateway.service';
-import { PaymentsGatewayService } from './site-api/payments/services/payments-gateway.service';
 import { PosTerminalsGatewayService } from './site-api/pos-terminals/services/pos-terminals-gateway.service';
 import { PurchaseOrdersGatewayService } from './site-api/purchase-orders/services/purchase-orders-gateway.service';
 import { StockAdjustmentsGatewayService } from './site-api/stock-adjustments/services/stock-adjustments-gateway.service';
@@ -66,14 +67,13 @@ const services = [
   LeInventoryItemsGatewayService,
   LeInventoryItemPricesGatewayService,
   SiteInventoryItemPricesGatewayService,
-  CreditNotesGatewayService,
   CartsGatewayService,
   LeCartsGatewayService,
   CustomersGatewayService,
   GoodsReceiptsGatewayService,
+  LeGoodsReceiptsGatewayService,
   SiteInventoryItemsGatewayService,
   LocationsGatewayService,
-  InvoicesGatewayService,
   CatalogChannelsGatewayService,
   LeCatalogChannelsGatewayService,
   SiteCatalogChannelsGatewayService,
@@ -82,13 +82,15 @@ const services = [
   SiteCatalogsGatewayService,
   OrdersGatewayService,
   PosTerminalsGatewayService,
-  PaymentsGatewayService,
   PurchaseOrdersGatewayService,
+  LePurchaseOrdersGatewayService,
+  PurchaseOrderDocumentsService,
   StockAdjustmentsGatewayService,
   StockTransfersGatewayService,
   SiteSuppliersGatewayService,
   SiteSupplierQuotationsGatewayService,
   SupplierQuotationsGatewayService,
+  SupplierInvoicesGatewayService,
   SupplierItemPricesGatewayService,
   SiteSupplierSiteItemPricesGatewayService,
   SuppliersGatewayService,

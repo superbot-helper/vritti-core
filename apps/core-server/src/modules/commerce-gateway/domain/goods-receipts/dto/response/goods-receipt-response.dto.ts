@@ -1,68 +1,68 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CurrencyAmountDto } from '@vritti/api-sdk/money';
 
-export class GoodsReceiptPoDto {
-  @ApiProperty()
+export class GoodsReceiptPurchaseOrderResponseDto {
+  @ApiProperty({ description: 'Purchase order ID' })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'PO number' })
   poNumber: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Order date (YYYY-MM-DD)' })
   orderDate: string;
 
-  @ApiPropertyOptional({ nullable: true })
+  @ApiPropertyOptional({ description: 'Expected-by date/time', nullable: true })
   expectedBy: string | null;
 
-  @ApiProperty({ type: CurrencyAmountDto })
+  @ApiProperty({ type: CurrencyAmountDto, description: 'PO total in the PO currency' })
   totalAmount: CurrencyAmountDto;
 }
 
 export class GoodsReceiptResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Goods receipt ID' })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'GR number', example: 'GR-202611-0001' })
   grNumber: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Legal entity the receipt belongs to' })
+  legalEntityId: string;
+
+  @ApiProperty({ description: "Site the goods were received at — the purchase order's site" })
+  siteId: string;
+
+  @ApiProperty({ description: "Supplier ID — the purchase order's supplier" })
   supplierId: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Supplier name' })
   supplierName: string;
 
-  @ApiProperty({ description: 'Supplier transaction currency (ISO 4217) — the currency GR-item prices are entered in' })
-  supplierCurrencyCode: string;
-
-  @ApiProperty()
+  @ApiProperty({ description: 'Receipt status', enum: ['DRAFT', 'PUBLISHED'] })
   status: string;
 
-  @ApiPropertyOptional()
-  isPublishable?: boolean;
+  @ApiProperty({
+    description: 'True for a draft whose every item is fully distributed to balanced lines — the Publish gate',
+  })
+  isPublishable: boolean;
 
-  @ApiPropertyOptional({ description: 'True when the GR is DRAFT, has no PO yet, and has no items.' })
-  canLinkPurchaseOrder?: boolean;
+  @ApiProperty({ description: 'Number of items counted on the receipt' })
+  itemCount: number;
 
-  @ApiPropertyOptional({ description: 'True when the GR is DRAFT, has a PO linked, and has no items.' })
-  canUnlinkPurchaseOrder?: boolean;
+  @ApiProperty({ description: 'Purchase order the goods were received against' })
+  purchaseOrderId: string;
 
-  @ApiPropertyOptional({ type: GoodsReceiptPoDto, nullable: true })
-  po: GoodsReceiptPoDto | null;
+  @ApiProperty({ type: GoodsReceiptPurchaseOrderResponseDto })
+  po: GoodsReceiptPurchaseOrderResponseDto;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Date the goods were received' })
   receivedDate: string;
 
-  @ApiPropertyOptional({ nullable: true })
+  @ApiPropertyOptional({ description: 'Notes', nullable: true })
   notes: string | null;
 
-  @ApiProperty({
-    description: 'Supplier→site exchange rate locked at GR creation. 1 when currencies match.',
-  })
-  exchangeRate: number;
-
-  @ApiPropertyOptional({ nullable: true })
+  @ApiPropertyOptional({ description: 'ISO timestamp of publishing', nullable: true })
   publishedAt: string | null;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'ISO timestamp of creation' })
   createdAt: string;
 }

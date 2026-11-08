@@ -16,6 +16,7 @@ export {
   ORG_DIMENSION_TEMPLATES,
   SITE_DIMENSION_TEMPLATES,
 } from './dimension-templates';
+export { LE_GOODS_RECEIPTS, SITE_GOODS_RECEIPTS } from './goods-receipts';
 export {
   ORG_INVENTORY_ITEMS,
   SITE_GROUP_INVENTORY_ITEMS,
@@ -26,10 +27,12 @@ export { LE_OFFERINGS, ORG_OFFERINGS, SITE_OFFERINGS } from './offerings';
 export { ORG_PAYMENT_TERMS } from './payment-terms';
 export { SITE_PAYMENTS } from './payments';
 export { ORG_PEOPLE } from './people';
+export { LE_PURCHASE_ORDERS, SITE_PURCHASE_ORDERS } from './purchase-orders';
+export { LE_SUPPLIER_INVOICES } from './supplier-invoices';
 export { LE_SUPPLIERS, SITE_SUPPLIERS } from './suppliers';
 export { ORG_TAX_CLASSES } from './tax-classes';
 export { ORG_TAX_COMPONENTS } from './tax-components';
-export { LE_TAX_GROUPS } from './tax-groups';
+export { ORG_TAX_GROUPS } from './tax-groups';
 export { ORG_TAX_JURISDICTIONS } from './tax-jurisdictions';
 export { LE_TAX_REGISTRATIONS } from './tax-registrations';
 export { ORG_UOM } from './uom';

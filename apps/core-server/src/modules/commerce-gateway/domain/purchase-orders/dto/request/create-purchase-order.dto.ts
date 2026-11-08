@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsDateTime, Trim } from '@vritti/api-sdk/decorators';
 import { IsCurrencyCode } from '@vritti/api-sdk/money';
-import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsPositive, IsString, IsUUID } from 'class-validator';
 
 export class CreatePurchaseOrderDto {
   @ApiProperty({ description: 'Supplier ID' })
@@ -16,41 +16,29 @@ export class CreatePurchaseOrderDto {
   @IsCurrencyCode()
   currencyCode?: string;
 
-  @ApiProperty({ description: 'Order date (ISO string)', example: '2026-04-10' })
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Order date (YYYY-MM-DD)', example: '2026-04-10' })
+  @IsDateString()
   orderDate: string;
 
-  @ApiPropertyOptional({
-    description: 'Expected-by date/time (UTC ISO string)',
-    example: '2026-04-25T20:00:00.000Z',
-  })
+  @ApiPropertyOptional({ description: 'Expected-by date/time (UTC ISO string)', example: '2026-04-25T20:00:00.000Z' })
   @IsOptional()
   @IsString()
   @IsDateTime()
   expectedBy?: string;
 
   @Trim()
-  @ApiPropertyOptional({ description: 'Notes' })
+  @ApiPropertyOptional({ description: 'Notes', nullable: true })
   @IsOptional()
   @IsString()
   notes?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Exchange rate policy. FIXED locks the rate at PO time; VARIABLE defers to GR/invoice posting.',
-    enum: ['FIXED', 'VARIABLE'],
-    default: 'FIXED',
-  })
-  @IsOptional()
-  @IsIn(['FIXED', 'VARIABLE'])
-  exchangeRateType?: 'FIXED' | 'VARIABLE';
-
-  @ApiPropertyOptional({
-    description: 'FX exchange rate from the PO currency to site currency. Required when FIXED + cross-currency.',
+    description:
+      "1 unit of the PO currency in the legal entity's currency. Required when the two differ, ignored when they match.",
     example: 83.5,
   })
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  exchangeRate?: number | null;
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @IsPositive()
+  exchangeRate?: number;
 }

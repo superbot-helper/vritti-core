@@ -8,7 +8,6 @@ export const GoodsReceiptFieldsFragment = graphql(`
     grNumber
     supplierId
     supplierName
-    supplierCurrencyCode
     status
     po {
       id
@@ -22,7 +21,6 @@ export const GoodsReceiptFieldsFragment = graphql(`
     }
     receivedDate
     notes
-    exchangeRate
     publishedAt
     createdAt
   }

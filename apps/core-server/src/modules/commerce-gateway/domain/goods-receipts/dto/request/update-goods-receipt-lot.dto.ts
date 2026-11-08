@@ -6,12 +6,13 @@ import { IsDateString, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class
 import { FieldPermission } from '@/rbac/decorators';
 
 export class UpdateGoodsReceiptLotDto {
-  @Trim()
+  @Trim({ nullify: false })
   @ApiPropertyOptional({ description: 'Lot number' })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(100)
-  lotNumber?: string | null;
+  lotNumber?: string;
 
   @ApiPropertyOptional({ description: 'Manufacturing date', nullable: true })
   @IsOptional()

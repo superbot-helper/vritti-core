@@ -1,56 +1,51 @@
 import { CurrencyAmountDto } from '@vritti/api-sdk/money';
-import type { PurchaseOrderItem } from '@/db/schema';
+import type { PurchaseOrderItemRow } from '../../repositories/purchase-order-items.repository';
 
 export class PurchaseOrderItemDto {
   id: string;
+  purchaseOrderId: string;
   inventoryItemId: string;
   inventoryItemName: string;
   uomId: string;
+  orderUomSymbol: string | null;
   uomQty: number;
-  receivedQuantity: number;
+  expectedFreeQty: number;
+  receivedQty: number;
   primaryUomQty: number;
   primaryUomSymbol: string | null;
-  orderUomSymbol: string | null;
   currencyCode: string;
   unitPrice: CurrencyAmountDto;
   primaryUomUnitPrice: CurrencyAmountDto;
   totalPrice: CurrencyAmountDto;
-  // The supplier item's own price when it is in another currency than the PO; unitPrice is its conversion
   sourceUnitPrice: CurrencyAmountDto | null;
   schemeBuyQty: number | null;
   schemeFreeQty: number | null;
   hasScheme: boolean;
-  freeQty: number;
 
-  static from(
-    entity: PurchaseOrderItem & { orderUomSymbol?: string | null; primaryUomSymbol?: string | null },
-    itemName?: string | null,
-  ): PurchaseOrderItemDto {
+  static from(row: PurchaseOrderItemRow): PurchaseOrderItemDto {
     const dto = new PurchaseOrderItemDto();
-    dto.id = entity.id;
-    dto.inventoryItemId = entity.inventoryItemId;
-    dto.inventoryItemName = itemName ?? '';
-    dto.uomId = entity.uomId;
-    dto.uomQty = entity.uomQty;
-    dto.receivedQuantity = entity.receivedQuantity;
-    dto.primaryUomQty = entity.primaryUomQty;
-    dto.orderUomSymbol = entity.orderUomSymbol ?? null;
-    dto.primaryUomSymbol = entity.primaryUomSymbol ?? null;
-    dto.currencyCode = entity.currencyCode;
-
-    dto.unitPrice = CurrencyAmountDto.from(entity.unitPrice, entity.currencyCode);
-    dto.primaryUomUnitPrice = CurrencyAmountDto.from(entity.primaryUomUnitPrice, entity.currencyCode);
-    dto.totalPrice = CurrencyAmountDto.from(entity.totalPrice, entity.currencyCode);
+    dto.id = row.id;
+    dto.purchaseOrderId = row.purchaseOrderId;
+    dto.inventoryItemId = row.inventoryItemId;
+    dto.inventoryItemName = row.inventoryItemName ?? '';
+    dto.uomId = row.uomId;
+    dto.orderUomSymbol = row.orderUomSymbol;
+    dto.uomQty = row.uomQty;
+    dto.expectedFreeQty = row.freeQty;
+    dto.receivedQty = row.receivedQuantity;
+    dto.primaryUomQty = row.primaryUomQty;
+    dto.primaryUomSymbol = row.primaryUomSymbol;
+    dto.currencyCode = row.currencyCode;
+    dto.unitPrice = CurrencyAmountDto.from(row.unitPrice, row.currencyCode);
+    dto.primaryUomUnitPrice = CurrencyAmountDto.from(row.primaryUomUnitPrice, row.currencyCode);
+    dto.totalPrice = CurrencyAmountDto.from(row.totalPrice, row.currencyCode);
     dto.sourceUnitPrice =
-      entity.sourceCurrencyCode && entity.sourceUnitPrice != null
-        ? CurrencyAmountDto.from(entity.sourceUnitPrice, entity.sourceCurrencyCode)
+      row.sourceCurrencyCode && row.sourceUnitPrice !== null
+        ? CurrencyAmountDto.from(row.sourceUnitPrice, row.sourceCurrencyCode)
         : null;
-
-    dto.schemeBuyQty = entity.schemeBuyQty ?? null;
-    dto.schemeFreeQty = entity.schemeFreeQty ?? null;
-    dto.hasScheme = entity.hasScheme;
-    dto.freeQty = entity.freeQty ?? 0;
-
+    dto.schemeBuyQty = row.schemeBuyQty;
+    dto.schemeFreeQty = row.schemeFreeQty;
+    dto.hasScheme = row.hasScheme;
     return dto;
   }
 }

@@ -1,12 +1,11 @@
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type UseMutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CreateResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import type { PurchaseOrderData } from '@/schemas/purchase-orders';
-import { type CreatePurchaseOrderPayload, createPurchaseOrder } from '@/services/site/purchase-orders.service';
+import type { CreatePurchaseOrderPayload, PurchaseOrderData } from '@/schemas/purchase-orders';
+import { createPurchaseOrder } from '@/services/site/purchase-orders.service';
 import { PURCHASE_ORDERS_TABLE_KEY } from './keys';
 
-// Creates a new purchase order and invalidates the table
+// Creates a purchase order
 export function useCreatePurchaseOrder(
   options?: Omit<
     UseMutationOptions<CreateResponse<PurchaseOrderData>, AxiosError, CreatePurchaseOrderPayload>,
@@ -14,7 +13,6 @@ export function useCreatePurchaseOrder(
   >,
 ) {
   const queryClient = useQueryClient();
-
   return useMutation<CreateResponse<PurchaseOrderData>, AxiosError, CreatePurchaseOrderPayload>({
     ...options,
     mutationFn: createPurchaseOrder,

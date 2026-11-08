@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
 import type { GoodsReceiptLineData } from '@/schemas/goods-receipts';
-import { getGoodsReceiptLineById } from '@/services/site/goods-receipts.service';
+import { getGoodsReceiptLine } from '@/services/site/goods-receipts.service';
 import { GOODS_RECEIPT_LINE_KEY } from './keys';
 
-export function useGoodsReceiptLine(id: string, itemId: string | null, lineId: string | null) {
+// Fetches one line of a goods receipt item
+export function useGoodsReceiptLine(id: string, itemId: string, lineId: string) {
   return useQuery<GoodsReceiptLineData, AxiosError>({
-    queryKey: GOODS_RECEIPT_LINE_KEY(id, itemId ?? '', lineId ?? ''),
-    queryFn: () => getGoodsReceiptLineById(id, itemId as string, lineId as string),
-    enabled: !!itemId && !!lineId,
+    queryKey: GOODS_RECEIPT_LINE_KEY(id, itemId, lineId),
+    queryFn: () => getGoodsReceiptLine(id, itemId, lineId),
   });
 }

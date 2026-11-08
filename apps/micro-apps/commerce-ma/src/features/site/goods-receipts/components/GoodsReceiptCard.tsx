@@ -12,7 +12,7 @@ const PACKAGE_ICON = { sfSymbol: 'shippingbox.fill', materialSymbol: 'inventory_
 const CALENDAR_ICON = { sfSymbol: 'calendar', materialSymbol: 'event' } as const;
 
 // tsc resolves nativewind's web type for this hook (() => never); at RN runtime it's the native
-// (name) => string variant (mirrors TaxGroupCard) — the MF-shared, app-theme-accurate source.
+// (name) => string variant — the MF-shared, app-theme-accurate source.
 const useThemeVar = useUnstableNativeVariable as unknown as (name: string) => string | undefined;
 
 // Draft = muted (gray), Published = success (green). The Badge variants' faded fills don't render on these
@@ -93,7 +93,7 @@ export function GoodsReceiptCard({ gr, onPress }: GoodsReceiptCardProps) {
         </InfoRow>
         <InfoRow label="Purchase Order">
           <Text className="text-right font-mono text-sm text-foreground" numberOfLines={1}>
-            {gr.po?.poNumber ?? '—'}
+            {gr.po.poNumber}
           </Text>
         </InfoRow>
       </View>

@@ -1,62 +1,26 @@
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type UseMutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { CreateResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import type { GoodsReceiptItemData } from '@/schemas/goods-receipts';
-import {
-  type AddGoodsReceiptItemFromPurchaseOrderItemPayload,
-  type AddGoodsReceiptItemFromSupplierItemPayload,
-  addGoodsReceiptItemFromPurchaseOrderItem,
-  addGoodsReceiptItemFromSupplierItem,
-} from '@/services/site/goods-receipts.service';
-import {
-  GOODS_RECEIPT_INVENTORY_ITEM_IDS_KEY,
-  GOODS_RECEIPT_ITEMS_KEY,
-  GOODS_RECEIPT_KEY,
-  GOODS_RECEIPT_TREE_KEY,
-} from './keys';
+import { PURCHASE_ORDERS_KEY } from '@/hooks/site/purchase-orders/keys';
+import type { AddGoodsReceiptItemPayload, GoodsReceiptItemData } from '@/schemas/goods-receipts';
+import { addGoodsReceiptItem } from '@/services/site/goods-receipts.service';
+import { GOODS_RECEIPT_KEY } from './keys';
 
-function invalidate(queryClient: ReturnType<typeof useQueryClient>, goodsReceiptId: string) {
-  // GR record (isPublishable) — exact-only to skip Costs.
-  queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId), exact: true });
-  // Items subtree (table + per-item detail + lots/lines under each).
-  queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_ITEMS_KEY(goodsReceiptId) });
-  // Item-set changed — refetch the cached ID list used by add-item pickers / dedupe checks.
-  queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_INVENTORY_ITEM_IDS_KEY(goodsReceiptId) });
-  // Breakdown tree.
-  queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_TREE_KEY(goodsReceiptId) });
-}
-
-export function useAddGoodsReceiptItemFromSupplierItem(
+// Counts the goods received against one of the purchase order's lines; the receipt and the purchase orders refresh
+export function useAddGoodsReceiptItem(
   goodsReceiptId: string,
   options?: Omit<
-    UseMutationOptions<GoodsReceiptItemData, AxiosError, AddGoodsReceiptItemFromSupplierItemPayload>,
+    UseMutationOptions<CreateResponse<GoodsReceiptItemData>, AxiosError, AddGoodsReceiptItemPayload>,
     'mutationFn'
   >,
 ) {
   const queryClient = useQueryClient();
-  return useMutation<GoodsReceiptItemData, AxiosError, AddGoodsReceiptItemFromSupplierItemPayload>({
+  return useMutation<CreateResponse<GoodsReceiptItemData>, AxiosError, AddGoodsReceiptItemPayload>({
     ...options,
-    mutationFn: (data) => addGoodsReceiptItemFromSupplierItem(goodsReceiptId, data),
+    mutationFn: (data) => addGoodsReceiptItem(goodsReceiptId, data),
     onSuccess: (...args) => {
-      invalidate(queryClient, goodsReceiptId);
-      options?.onSuccess?.(...args);
-    },
-  });
-}
-
-export function useAddGoodsReceiptItemFromPurchaseOrderItem(
-  goodsReceiptId: string,
-  options?: Omit<
-    UseMutationOptions<GoodsReceiptItemData, AxiosError, AddGoodsReceiptItemFromPurchaseOrderItemPayload>,
-    'mutationFn'
-  >,
-) {
-  const queryClient = useQueryClient();
-  return useMutation<GoodsReceiptItemData, AxiosError, AddGoodsReceiptItemFromPurchaseOrderItemPayload>({
-    ...options,
-    mutationFn: (data) => addGoodsReceiptItemFromPurchaseOrderItem(goodsReceiptId, data),
-    onSuccess: (...args) => {
-      invalidate(queryClient, goodsReceiptId);
+      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId) });
+      queryClient.invalidateQueries({ queryKey: PURCHASE_ORDERS_KEY });
       options?.onSuccess?.(...args);
     },
   });

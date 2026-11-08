@@ -6,7 +6,6 @@ import {
   decimal,
   index,
   jsonb,
-  pgPolicy,
   text,
   timestamp,
   unique,
@@ -14,17 +13,18 @@ import {
   varchar,
 } from '@vritti/api-sdk/drizzle-pg-core';
 import { commerceSchema } from './commerce-schema';
-import { exchangeRateTypeEnum, purchaseOrderStatusEnum } from './enums';
+import { purchaseOrderStatusEnum } from './enums';
 import { inventoryItems } from './inventory-items';
 import { suppliers } from './suppliers';
 import { uom } from './uom';
-import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
+import { LE_GUC, organizationIdColumn, scopeFromOwnerPolicies, siteDocumentPolicies } from './workspace-scope';
 
 export const purchaseOrders = commerceSchema.table(
   'purchase_orders',
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     organizationId: organizationIdColumn,
+    legalEntityId: uuid('legal_entity_id').notNull().default(sql.raw(LE_GUC)),
     siteId: uuid('site_id').notNull().default(sql.raw("cast(current_setting('app.site_id') as uuid)")),
     supplierId: uuid('supplier_id')
       .notNull()
@@ -32,8 +32,7 @@ export const purchaseOrders = commerceSchema.table(
     poNumber: varchar('po_number', { length: 50 }).notNull(),
     status: purchaseOrderStatusEnum('status').notNull().default('DRAFT'),
     currencyCode: varchar('currency_code', { length: 3 }).notNull(),
-    exchangeRate: decimal('exchange_rate', { precision: 18, scale: 6, mode: 'number' }).default(1),
-    exchangeRateType: exchangeRateTypeEnum('exchange_rate_type').notNull().default('FIXED'),
+    exchangeRate: decimal('exchange_rate', { precision: 18, scale: 6, mode: 'number' }).notNull().default(1),
     // Rates from the currencies of lines priced in another of the supplier's currencies into the PO currency,
     // as decimal strings: { "USD": "83.250000" } reads 1 USD = 83.25 in the PO currency
     conversionRates: jsonb('conversion_rates').$type<Record<string, string>>().notNull().default({}),
@@ -54,23 +53,7 @@ export const purchaseOrders = commerceSchema.table(
     unique('uq_purchase_orders_org_po_number').on(table.organizationId, table.poNumber),
     index('idx_purchase_orders_site').on(table.organizationId, table.siteId),
     index('idx_purchase_orders_supplier').on(table.supplierId),
-    orgIsolationPolicy(),
-    pgPolicy('site_read', {
-      for: 'select',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_write', {
-      for: 'insert',
-      withCheck: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_update', {
-      for: 'update',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_delete', {
-      for: 'delete',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
+    ...siteDocumentPolicies(),
   ],
 );
 
@@ -109,6 +92,7 @@ export const purchaseOrderItems = commerceSchema.table(
   (table) => [
     unique('uq_purchase_order_items_po_item_uom').on(table.purchaseOrderId, table.inventoryItemId, table.uomId),
     index('idx_purchase_order_items_po').on(table.purchaseOrderId),
+    ...scopeFromOwnerPolicies({ owner: purchaseOrders, fk: table.purchaseOrderId, ownerIs: 'siteDocument' }),
   ],
 );
 

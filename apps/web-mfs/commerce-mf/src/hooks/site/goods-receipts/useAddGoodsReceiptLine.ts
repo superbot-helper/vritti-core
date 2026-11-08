@@ -1,26 +1,27 @@
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type UseMutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { CreateResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import type { GoodsReceiptLineData } from '@/schemas/goods-receipts';
-import { type AddGoodsReceiptLinePayload, addGoodsReceiptLine } from '@/services/site/goods-receipts.service';
-import { GOODS_RECEIPT_ITEMS_KEY, GOODS_RECEIPT_KEY, GOODS_RECEIPT_TREE_KEY } from './keys';
+import { PURCHASE_ORDERS_KEY } from '@/hooks/site/purchase-orders/keys';
+import type { AddGoodsReceiptLinePayload, GoodsReceiptLineData } from '@/schemas/goods-receipts';
+import { addGoodsReceiptLine } from '@/services/site/goods-receipts.service';
+import { GOODS_RECEIPT_KEY } from './keys';
 
+// Distributes part of an item's accepted quantity to a storage location; the receipt and the purchase orders refresh
 export function useAddGoodsReceiptLine(
   goodsReceiptId: string,
   itemId: string,
-  options?: Omit<UseMutationOptions<GoodsReceiptLineData, AxiosError, AddGoodsReceiptLinePayload>, 'mutationFn'>,
+  options?: Omit<
+    UseMutationOptions<CreateResponse<GoodsReceiptLineData>, AxiosError, AddGoodsReceiptLinePayload>,
+    'mutationFn'
+  >,
 ) {
   const queryClient = useQueryClient();
-  return useMutation<GoodsReceiptLineData, AxiosError, AddGoodsReceiptLinePayload>({
+  return useMutation<CreateResponse<GoodsReceiptLineData>, AxiosError, AddGoodsReceiptLinePayload>({
     ...options,
     mutationFn: (data) => addGoodsReceiptLine(goodsReceiptId, itemId, data),
     onSuccess: (...args) => {
-      // GR record (isPublishable flag, exact-only to skip costs / inventory-item-ids).
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId), exact: true });
-      // Items subtree (table + per-item detail + lots + lines tables + line detail).
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_ITEMS_KEY(goodsReceiptId) });
-      // Breakdown tree (item / lot / line badges + balance).
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_TREE_KEY(goodsReceiptId) });
+      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId) });
+      queryClient.invalidateQueries({ queryKey: PURCHASE_ORDERS_KEY });
       options?.onSuccess?.(...args);
     },
   });

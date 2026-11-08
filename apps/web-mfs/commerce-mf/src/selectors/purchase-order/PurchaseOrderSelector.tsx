@@ -6,7 +6,7 @@ export type PurchaseOrderSelectorProps = Omit<SelectProps, 'optionsEndpoint'>;
 const DEFAULT_FIELD_KEYS = {
   valueKey: 'id',
   labelKey: 'poNumber',
-  additionalKeys: 'currencyCode,exchangeRate,exchangeRateType',
+  additionalKeys: 'currencyCode,exchangeRate',
 } as const;
 
 export const PurchaseOrderSelector = forwardRef<HTMLButtonElement, PurchaseOrderSelectorProps>(

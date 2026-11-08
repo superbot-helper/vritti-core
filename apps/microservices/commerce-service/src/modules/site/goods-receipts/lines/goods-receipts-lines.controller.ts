@@ -1,7 +1,7 @@
 import type { GoodsReceiptLineDto } from '@domain/goods-receipt-lines/dto/entity/goods-receipt-line.dto';
+import { AddGoodsReceiptLineDto } from '@domain/goods-receipt-lines/dto/request/add-goods-receipt-line.dto';
+import { UpdateGoodsReceiptLineDto } from '@domain/goods-receipt-lines/dto/request/update-goods-receipt-line.dto';
 import { GoodsReceiptLinesDomainService } from '@domain/goods-receipt-lines/services/goods-receipt-lines.service';
-import { AddGoodsReceiptLineDto } from '@domain/goods-receipts/dto/request/add-goods-receipt-line.dto';
-import { UpdateGoodsReceiptLineDto } from '@domain/goods-receipts/dto/request/update-goods-receipt-line.dto';
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import type { TableViewState } from '@vritti/api-sdk/data-table';
@@ -13,57 +13,55 @@ export class GoodsReceiptsLinesController {
   private readonly logger = new Logger(GoodsReceiptsLinesController.name);
 
   constructor(
-    private readonly service: GoodsReceiptLinesDomainService,
-    private readonly appService: GoodsReceiptsLinesService,
+    private readonly linesService: GoodsReceiptLinesDomainService,
+    private readonly service: GoodsReceiptsLinesService,
   ) {}
 
+  // Returns one page of a goods receipt item's lines
   @MessagePattern({ cmd: 'site.goodsReceipts.linesTable' })
   linesTable(
     @Payload() data: { goodsReceiptId: string; itemId: string } & TableViewState,
   ): Promise<{ result: GoodsReceiptLineDto[]; count: number }> {
-    this.logger.log(`goodsReceipts.linesTable — item: ${data.itemId}`);
+    this.logger.log(`site.goodsReceipts.linesTable — item: ${data.itemId}`);
     const { goodsReceiptId, itemId, ...state } = data;
-    return this.service.findForTable(goodsReceiptId, itemId, state);
+    return this.linesService.findForTable(itemId, state);
   }
 
+  // Returns one page of the lines one lot of a goods receipt item is distributed to
   @MessagePattern({ cmd: 'site.goodsReceipts.linesByLotTable' })
   linesByLotTable(
     @Payload() data: { goodsReceiptId: string; itemId: string; lotId: string } & TableViewState,
   ): Promise<{ result: GoodsReceiptLineDto[]; count: number }> {
-    this.logger.log(`goodsReceipts.linesByLotTable — item: ${data.itemId}, lot: ${data.lotId}`);
+    this.logger.log(`site.goodsReceipts.linesByLotTable — item: ${data.itemId}, lot: ${data.lotId}`);
     const { goodsReceiptId, itemId, lotId, ...state } = data;
-    return this.service.findForTable(goodsReceiptId, itemId, state, lotId);
+    return this.linesService.findForTable(itemId, state, lotId);
   }
 
+  // Returns one line of a goods receipt item
   @MessagePattern({ cmd: 'site.goodsReceipts.lineById' })
   lineById(@Payload() data: { goodsReceiptId: string; itemId: string; lineId: string }): Promise<GoodsReceiptLineDto> {
-    this.logger.log(`goodsReceipts.lineById — line: ${data.lineId}`);
-    return this.service.findById(data.goodsReceiptId, data.itemId, data.lineId);
+    this.logger.log(`site.goodsReceipts.lineById — line: ${data.lineId}`);
+    return this.linesService.findById(data.itemId, data.lineId);
   }
 
+  // Adds a line to a goods receipt item
   @MessagePattern({ cmd: 'site.goodsReceipts.addLine' })
-  addLine(@Payload() data: AddGoodsReceiptLineDto): Promise<CreateResponseDto<GoodsReceiptLineDto>> {
-    this.logger.log(`goodsReceipts.addLine — item: ${data.itemId}`);
-    return this.appService.addLine(data.goodsReceiptId, data.itemId, {
-      goodsReceiptLotId: data.goodsReceiptLotId,
-      locationId: data.locationId,
-      quantity: data.quantity,
-    });
+  addLine(@Payload() dto: AddGoodsReceiptLineDto): Promise<CreateResponseDto<GoodsReceiptLineDto>> {
+    this.logger.log(`site.goodsReceipts.addLine — item: ${dto.itemId}`);
+    return this.service.addLine(dto);
   }
 
+  // Changes a line of a goods receipt item
   @MessagePattern({ cmd: 'site.goodsReceipts.updateLine' })
-  updateLine(@Payload() data: UpdateGoodsReceiptLineDto): Promise<GoodsReceiptLineDto> {
-    this.logger.log(`goodsReceipts.updateLine — line: ${data.lineId}`);
-    return this.appService.updateLine(data.goodsReceiptId, data.itemId, data.lineId, {
-      goodsReceiptLotId: data.goodsReceiptLotId,
-      locationId: data.locationId,
-      quantity: data.quantity,
-    });
+  updateLine(@Payload() dto: UpdateGoodsReceiptLineDto): Promise<SuccessResponseDto> {
+    this.logger.log(`site.goodsReceipts.updateLine — line: ${dto.lineId}`);
+    return this.service.updateLine(dto);
   }
 
+  // Removes a line from a goods receipt item
   @MessagePattern({ cmd: 'site.goodsReceipts.removeLine' })
   removeLine(@Payload() data: { goodsReceiptId: string; itemId: string; lineId: string }): Promise<SuccessResponseDto> {
-    this.logger.log(`goodsReceipts.removeLine — line: ${data.lineId}`);
-    return this.appService.removeLine(data.goodsReceiptId, data.itemId, data.lineId);
+    this.logger.log(`site.goodsReceipts.removeLine — line: ${data.lineId}`);
+    return this.service.removeLine(data.goodsReceiptId, data.itemId, data.lineId);
   }
 }

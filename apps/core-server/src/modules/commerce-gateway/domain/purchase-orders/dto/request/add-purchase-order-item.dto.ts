@@ -9,7 +9,7 @@ export class AddPurchaseOrderItemDto {
 
   @ApiProperty({ description: 'Ordered uomQty', example: 100 })
   @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
+  @IsPositive()
   uomQty: number;
 
   @ApiProperty({

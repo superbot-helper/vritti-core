@@ -4,10 +4,10 @@ import type { GoodsReceiptItemQuantsData } from '@/schemas/goods-receipts';
 import { getGoodsReceiptItemQuants } from '@/services/site/goods-receipts.service';
 import { GOODS_RECEIPT_ITEM_QUANTS_KEY } from './keys';
 
-export function useGoodsReceiptItemQuants(id: string, itemId: string, options?: { enabled?: boolean }) {
+// Fetches the stock batches a published goods receipt item created
+export function useGoodsReceiptItemQuants(id: string, itemId: string) {
   return useQuery<GoodsReceiptItemQuantsData, AxiosError>({
     queryKey: GOODS_RECEIPT_ITEM_QUANTS_KEY(id, itemId),
     queryFn: () => getGoodsReceiptItemQuants(id, itemId),
-    enabled: options?.enabled ?? true,
   });
 }

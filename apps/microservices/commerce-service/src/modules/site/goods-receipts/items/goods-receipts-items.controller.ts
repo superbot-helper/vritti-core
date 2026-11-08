@@ -1,8 +1,7 @@
 import type { GoodsReceiptItemDto } from '@domain/goods-receipts/dto/entity/goods-receipt-item.dto';
 import type { GoodsReceiptItemsCostDto } from '@domain/goods-receipts/dto/entity/goods-receipt-items-cost.dto';
 import type { GoodsReceiptTreeNode } from '@domain/goods-receipts/dto/entity/goods-receipt-tree.dto';
-import { AddGoodsReceiptItemFromPurchaseOrderItemDto } from '@domain/goods-receipts/dto/request/add-goods-receipt-item-from-purchase-order-item.dto';
-import { AddGoodsReceiptItemFromSupplierItemDto } from '@domain/goods-receipts/dto/request/add-goods-receipt-item-from-supplier-item.dto';
+import { AddGoodsReceiptItemDto } from '@domain/goods-receipts/dto/request/add-goods-receipt-item.dto';
 import { UpdateGoodsReceiptItemDto } from '@domain/goods-receipts/dto/request/update-goods-receipt-item.dto';
 import { GoodsReceiptItemsDomainService } from '@domain/goods-receipts/services/goods-receipt-items.service';
 import type { GoodsReceiptItemQuantsDto } from '@domain/inventory-item-quants/dto/entity/goods-receipt-item-quants.dto';
@@ -12,6 +11,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import type { TableViewState } from '@vritti/api-sdk/data-table';
 import { RpcSiteCurrencyCode } from '@vritti/api-sdk/nats';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { GoodsReceiptsItemsService } from './services/goods-receipts-items.service';
 
 @Controller()
 export class GoodsReceiptsItemsController {
@@ -20,111 +20,77 @@ export class GoodsReceiptsItemsController {
   constructor(
     private readonly itemsService: GoodsReceiptItemsDomainService,
     private readonly quantsService: InventoryItemQuantsDomainService,
+    private readonly service: GoodsReceiptsItemsService,
   ) {}
 
+  // Returns a goods receipt's items with their lots and lines as a tree
   @MessagePattern({ cmd: 'site.goodsReceipts.tree' })
   tree(@Payload() data: { goodsReceiptId: string }): Promise<GoodsReceiptTreeNode[]> {
-    this.logger.log(`goodsReceipts.tree — receipt: ${data.goodsReceiptId}`);
-    return this.itemsService.findTreeForReceipt(data.goodsReceiptId);
+    this.logger.log(`site.goodsReceipts.tree — receipt: ${data.goodsReceiptId}`);
+    return this.itemsService.findTree(data.goodsReceiptId);
   }
 
+  // Returns one item of a goods receipt
   @MessagePattern({ cmd: 'site.goodsReceipts.itemById' })
-  itemById(
-    @Payload() data: { goodsReceiptId: string; itemId: string },
-    @RpcSiteCurrencyCode() siteCurrencyCode: string,
-  ): Promise<GoodsReceiptItemDto> {
-    this.logger.log(`goodsReceipts.itemById — item: ${data.itemId}`);
-    return this.itemsService.findById(data.goodsReceiptId, data.itemId, siteCurrencyCode);
+  itemById(@Payload() data: { goodsReceiptId: string; itemId: string }): Promise<GoodsReceiptItemDto> {
+    this.logger.log(`site.goodsReceipts.itemById — item: ${data.itemId}`);
+    return this.itemsService.findById(data.goodsReceiptId, data.itemId);
   }
 
+  // Returns the inventory items counted on a goods receipt
   @MessagePattern({ cmd: 'site.goodsReceipts.inventoryItemIds' })
   inventoryItemIds(@Payload() data: { goodsReceiptId: string }): Promise<string[]> {
-    this.logger.log('goodsReceipts.inventoryItemIds');
+    this.logger.log(`site.goodsReceipts.inventoryItemIds — receipt: ${data.goodsReceiptId}`);
     return this.itemsService.findInventoryItemIds(data.goodsReceiptId);
   }
 
+  // Returns one page of a goods receipt's items
   @MessagePattern({ cmd: 'site.goodsReceipts.itemsTable' })
   itemsTable(
     @Payload() data: { goodsReceiptId: string } & TableViewState,
-    @RpcSiteCurrencyCode() siteCurrencyCode: string,
   ): Promise<{ result: GoodsReceiptItemDto[]; count: number }> {
-    this.logger.log('goodsReceipts.itemsTable');
-    return this.itemsService.findForTable(data.goodsReceiptId, data, siteCurrencyCode);
+    this.logger.log(`site.goodsReceipts.itemsTable — receipt: ${data.goodsReceiptId}`);
+    const { goodsReceiptId, ...state } = data;
+    return this.itemsService.findForTable(goodsReceiptId, state);
   }
 
+  // Returns the provisional cost of a goods receipt's items in the legal entity's currency
   @MessagePattern({ cmd: 'site.goodsReceipts.itemsCost' })
-  itemsCost(@Payload() data: { goodsReceiptId: string }): Promise<GoodsReceiptItemsCostDto> {
-    this.logger.log(`goodsReceipts.itemsCost — receipt: ${data.goodsReceiptId}`);
-    return this.itemsService.findItemsCost(data.goodsReceiptId);
+  itemsCost(
+    @Payload() data: { goodsReceiptId: string },
+    @RpcSiteCurrencyCode() leCurrencyCode: string,
+  ): Promise<GoodsReceiptItemsCostDto> {
+    this.logger.log(`site.goodsReceipts.itemsCost — receipt: ${data.goodsReceiptId}`);
+    return this.itemsService.findItemsCost(data.goodsReceiptId, leCurrencyCode);
   }
 
+  // Returns the quants a published goods receipt item landed in, with their cost
   @MessagePattern({ cmd: 'site.goodsReceipts.itemQuants' })
   itemQuants(@Payload() data: { goodsReceiptId: string; itemId: string }): Promise<GoodsReceiptItemQuantsDto> {
-    this.logger.log(`goodsReceipts.itemQuants — item: ${data.itemId}`);
+    this.logger.log(`site.goodsReceipts.itemQuants — item: ${data.itemId}`);
     return this.quantsService.findCostsByGrItemId(data.itemId);
   }
 
-  @MessagePattern({ cmd: 'site.goodsReceipts.addItemFromSupplierItem' })
-  addItemFromSupplierItem(
-    @Payload() data: AddGoodsReceiptItemFromSupplierItemDto,
-    @RpcSiteCurrencyCode() siteCurrencyCode: string,
-  ): Promise<CreateResponseDto<GoodsReceiptItemDto>> {
-    this.logger.log(`goodsReceipts.addItemFromSupplierItem — supplierItem: ${data.supplierItemId}`);
-    return this.itemsService.addItemFromSupplierItem(
-      data.goodsReceiptId,
-      {
-        supplierItemId: data.supplierItemId,
-        orderedQty: data.orderedQty,
-        rejectedQuantity: data.rejectedQuantity,
-        unitPrice: data.unitPrice !== undefined ? BigInt(data.unitPrice) : undefined,
-        currencyCode: data.currencyCode,
-        schemeBuyQty: data.schemeBuyQty,
-        schemeFreeQty: data.schemeFreeQty,
-        hasScheme: data.hasScheme,
-      },
-      siteCurrencyCode,
-    );
-  }
-
+  // Counts a purchase order line on a goods receipt
   @MessagePattern({ cmd: 'site.goodsReceipts.addItemFromPurchaseOrderItem' })
   addItemFromPurchaseOrderItem(
-    @Payload() data: AddGoodsReceiptItemFromPurchaseOrderItemDto,
-    @RpcSiteCurrencyCode() siteCurrencyCode: string,
+    @Payload() dto: AddGoodsReceiptItemDto,
   ): Promise<CreateResponseDto<GoodsReceiptItemDto>> {
-    this.logger.log(`goodsReceipts.addItemFromPurchaseOrderItem — poItem: ${data.purchaseOrderItemId}`);
-    return this.itemsService.addItemFromPurchaseOrderItem(
-      data.goodsReceiptId,
-      {
-        purchaseOrderItemId: data.purchaseOrderItemId,
-        orderedQty: data.orderedQty,
-        rejectedQuantity: data.rejectedQuantity,
-        unitPrice: data.unitPrice !== undefined ? BigInt(data.unitPrice) : undefined,
-        currencyCode: data.currencyCode,
-        schemeBuyQty: data.schemeBuyQty,
-        schemeFreeQty: data.schemeFreeQty,
-        hasScheme: data.hasScheme,
-      },
-      siteCurrencyCode,
-    );
+    this.logger.log(`site.goodsReceipts.addItemFromPurchaseOrderItem — poItem: ${dto.purchaseOrderItemId}`);
+    return this.service.addItem(dto);
   }
 
+  // Changes the received or rejected quantity of a goods receipt item
   @MessagePattern({ cmd: 'site.goodsReceipts.updateItem' })
-  updateItem(@Payload() data: UpdateGoodsReceiptItemDto): Promise<SuccessResponseDto> {
-    this.logger.log('goodsReceipts.updateItem');
-    return this.itemsService.updateItem(data.goodsReceiptId, data.itemId, {
-      orderedQty: data.orderedQty,
-      rejectedQuantity: data.rejectedQuantity,
-      unitPrice: data.unitPrice !== undefined ? BigInt(data.unitPrice) : undefined,
-      currencyCode: data.currencyCode,
-      schemeBuyQty: data.schemeBuyQty,
-      schemeFreeQty: data.schemeFreeQty,
-      hasScheme: data.hasScheme,
-    });
+  updateItem(@Payload() dto: UpdateGoodsReceiptItemDto): Promise<SuccessResponseDto> {
+    this.logger.log(`site.goodsReceipts.updateItem — item: ${dto.itemId}`);
+    return this.itemsService.updateItem(dto);
   }
 
+  // Removes an item from a goods receipt
   @MessagePattern({ cmd: 'site.goodsReceipts.removeItem' })
   removeItem(@Payload() data: { goodsReceiptId: string; itemId: string }): Promise<SuccessResponseDto> {
-    this.logger.log('goodsReceipts.removeItem');
+    this.logger.log(`site.goodsReceipts.removeItem — item: ${data.itemId}`);
     return this.itemsService.removeItem(data.goodsReceiptId, data.itemId);
   }
 }

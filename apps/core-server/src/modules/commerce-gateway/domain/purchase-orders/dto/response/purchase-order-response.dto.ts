@@ -5,36 +5,35 @@ export class PurchaseOrderResponseDto {
   @ApiProperty({ description: 'Purchase order ID' })
   id: string;
 
+  @ApiProperty({ description: 'Legal entity the purchase order belongs to' })
+  legalEntityId: string;
+
+  @ApiProperty({ description: 'Site the purchase order is raised for' })
+  siteId: string;
+
   @ApiProperty({ description: 'Supplier ID' })
   supplierId: string;
 
-  @ApiPropertyOptional({ description: 'Supplier name', nullable: true })
-  supplierName: string | null;
+  @ApiProperty({ description: 'Supplier name' })
+  supplierName: string;
 
-  @ApiPropertyOptional({ description: 'PO number', nullable: true })
-  poNumber: string | null;
+  @ApiProperty({ description: 'PO number', example: 'PO-202611-0001' })
+  poNumber: string;
 
   @ApiProperty({
     description: 'PO status',
-    enum: ['DRAFT', 'SENT', 'CONFIRMED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'],
+    enum: ['DRAFT', 'SENT', 'CONFIRMED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CLOSED', 'CANCELLED'],
   })
   status: string;
 
-  @ApiProperty({ description: 'PO currency code (ISO 4217) — snapshot from supplier', example: 'USD' })
+  @ApiProperty({ description: "PO currency code (ISO 4217) — one of the supplier's currencies", example: 'USD' })
   currencyCode: string;
 
-  @ApiPropertyOptional({
-    description: 'Exchange rate from supplier currency to site currency. Null when type is VARIABLE.',
-    nullable: true,
+  @ApiProperty({
+    description: "1 unit of the PO currency in the legal entity's currency; 1 when the PO is in that currency",
     example: 83.5,
   })
-  exchangeRate: number | null;
-
-  @ApiProperty({
-    description: 'Exchange rate policy. FIXED locks the rate at PO time; VARIABLE defers to GR/invoice.',
-    enum: ['FIXED', 'VARIABLE'],
-  })
-  exchangeRateType: 'FIXED' | 'VARIABLE';
+  exchangeRate: number;
 
   @ApiProperty({
     description: "Rates from the supplier's other currencies into the PO currency, as decimal strings",
@@ -44,23 +43,25 @@ export class PurchaseOrderResponseDto {
   })
   conversionRates: Record<string, string>;
 
-  @ApiProperty({ description: 'Order date (ISO string)' })
+  @ApiProperty({ description: 'Order date (YYYY-MM-DD)' })
   orderDate: string;
 
   @ApiPropertyOptional({ description: 'Expected-by date/time', nullable: true })
   expectedBy: string | null;
 
-  @ApiProperty({ description: 'IANA timezone the PO was raised under (origin site zone)', example: 'Asia/Kolkata' })
+  @ApiProperty({ description: 'IANA timezone of the site the PO was raised for', example: 'Asia/Kolkata' })
   timezone: string;
 
   @ApiPropertyOptional({ description: 'Notes', nullable: true })
   notes: string | null;
 
-  @ApiPropertyOptional({ type: CurrencyAmountDto, nullable: true })
-  totalAmount: CurrencyAmountDto | null;
+  @ApiProperty({ type: CurrencyAmountDto, description: 'Sum of the line totals in the PO currency' })
+  totalAmount: CurrencyAmountDto;
 
-  @ApiProperty({ description: 'True when any goods receipt exists against this PO; edits are locked' })
-  goodsReceiptExists: boolean;
+  @ApiProperty({
+    description: 'True once a goods receipt of the PO is published; its supplier, prices and rates are then locked',
+  })
+  hasPublishedGoodsReceipt: boolean;
 
   @ApiProperty({ description: 'ISO timestamp of creation' })
   createdAt: string;

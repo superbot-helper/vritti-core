@@ -4,7 +4,7 @@ import type { PurchaseOrderDetail } from '@/schemas/purchase-orders';
 import { getPurchaseOrder } from '@/services/site/purchase-orders.service';
 import { PURCHASE_ORDER_KEY } from './keys';
 
-// Fetches purchase order header/detail
+// Fetches one purchase order
 export function usePurchaseOrder(id: string) {
   return useSuspenseQuery<PurchaseOrderDetail, AxiosError>({
     queryKey: PURCHASE_ORDER_KEY(id),

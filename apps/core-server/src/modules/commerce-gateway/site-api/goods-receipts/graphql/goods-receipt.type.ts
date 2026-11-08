@@ -1,4 +1,4 @@
-import { Field, Float, ID, ObjectType } from '@nestjs/graphql';
+import { Field, ID, Int, ObjectType } from '@nestjs/graphql';
 
 // Major-unit money pair (value is a string, mirroring CurrencyAmountDto / SupplierUnitPrice).
 @ObjectType()
@@ -37,6 +37,12 @@ export class GoodsReceipt {
   @Field(() => String)
   grNumber: string;
 
+  @Field(() => ID)
+  legalEntityId: string;
+
+  @Field(() => ID)
+  siteId: string;
+
   @Field(() => String)
   supplierId: string;
 
@@ -44,22 +50,25 @@ export class GoodsReceipt {
   supplierName: string;
 
   @Field(() => String)
-  supplierCurrencyCode: string;
-
-  @Field(() => String)
   status: string;
 
-  @Field(() => GoodsReceiptPo, { nullable: true })
-  po: GoodsReceiptPo | null;
+  @Field(() => Boolean)
+  isPublishable: boolean;
+
+  @Field(() => Int)
+  itemCount: number;
+
+  @Field(() => ID)
+  purchaseOrderId: string;
+
+  @Field(() => GoodsReceiptPo)
+  po: GoodsReceiptPo;
 
   @Field(() => String)
   receivedDate: string;
 
   @Field(() => String, { nullable: true })
   notes: string | null;
-
-  @Field(() => Float)
-  exchangeRate: number;
 
   @Field(() => String, { nullable: true })
   publishedAt: string | null;

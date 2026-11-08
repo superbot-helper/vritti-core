@@ -1,75 +1,98 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, eq, sql } from '@vritti/api-sdk/drizzle-orm';
-import { type GoodsReceiptLot, goodsReceiptLineItems, goodsReceiptLines, goodsReceiptLots } from '@/db/schema';
+import { and, asc, eq, getColumns, ne, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import type { CurrencyAmountDto } from '@vritti/api-sdk/money';
+import {
+  type GoodsReceiptLot,
+  goodsReceiptLines,
+  goodsReceiptLots,
+  type InventoryTracking,
+  InventoryTrackingValues,
+} from '@/db/schema';
 
-export type GoodsReceiptLotWithStats = GoodsReceiptLot & {
+export type GoodsReceiptLotRow = GoodsReceiptLot & {
   linesCount: number;
   totalQuantity: number;
 };
 
 @Injectable()
 export class GoodsReceiptLotsDomainRepository extends PrimaryBaseRepository<typeof goodsReceiptLots> {
+  private static readonly LOT_TRACKINGS: InventoryTracking[] = [
+    InventoryTrackingValues.LOT,
+    InventoryTrackingValues.LOT_SERIAL,
+  ];
+
   constructor(database: PrimaryDatabaseService) {
     super(database, goodsReceiptLots);
   }
 
-  async findByItemId(itemId: string): Promise<GoodsReceiptLotWithStats[]> {
-    const rows = await this.db
-      .select({
-        id: goodsReceiptLots.id,
-        organizationId: goodsReceiptLots.organizationId,
-        siteId: goodsReceiptLots.siteId,
-        goodsReceiptItemId: goodsReceiptLots.goodsReceiptItemId,
-        lotNumber: goodsReceiptLots.lotNumber,
-        manufacturingDate: goodsReceiptLots.manufacturingDate,
-        expiryDate: goodsReceiptLots.expiryDate,
-        resolvedLotId: goodsReceiptLots.resolvedLotId,
-        mrp: goodsReceiptLots.mrp,
-        metadata: goodsReceiptLots.metadata,
-        createdAt: goodsReceiptLots.createdAt,
-        updatedAt: goodsReceiptLots.updatedAt,
-        linesCount: sql<number>`COALESCE(COUNT(DISTINCT ${goodsReceiptLines.id}), 0)`,
-        totalQuantity: sql<string>`COALESCE(SUM(${goodsReceiptLines.quantity}), 0)`,
-      })
-      .from(goodsReceiptLots)
-      .leftJoin(goodsReceiptLines, eq(goodsReceiptLots.id, goodsReceiptLines.goodsReceiptLotId))
-      .where(eq(goodsReceiptLots.goodsReceiptItemId, itemId))
-      .groupBy(goodsReceiptLots.id)
-      .orderBy(asc(goodsReceiptLots.createdAt));
-
-    return rows.map((row) => ({
-      ...row,
-      linesCount: Number(row.linesCount),
-      totalQuantity: Number(row.totalQuantity),
-    })) as GoodsReceiptLotWithStats[];
+  // Returns the lots of a receipt item with how much of it their lines hold
+  async findByItemId(itemId: string): Promise<GoodsReceiptLotRow[]> {
+    return this.findAllWithSelect<GoodsReceiptLotRow>({
+      select: this.selection(),
+      where: eq(goodsReceiptLots.goodsReceiptItemId, itemId),
+      orderBy: [asc(goodsReceiptLots.createdAt)],
+    });
   }
 
-  async findByItemIdAndNumber(itemId: string, lotNumber: string): Promise<GoodsReceiptLot | undefined> {
-    const rows = await this.db
-      .select()
-      .from(goodsReceiptLots)
-      .where(and(eq(goodsReceiptLots.goodsReceiptItemId, itemId), eq(goodsReceiptLots.lotNumber, lotNumber)))
-      .limit(1);
-    return rows[0] as GoodsReceiptLot | undefined;
+  // Loads a lot of the given receipt item, throwing when it is not on it
+  async findOnItemOrThrow(itemId: string, lotId: string): Promise<GoodsReceiptLotRow> {
+    const lot = await this.findById<GoodsReceiptLotRow>(lotId, {
+      select: this.selection(),
+      where: eq(goodsReceiptLots.goodsReceiptItemId, itemId),
+    });
+    if (!lot) throw new NotFoundException('Goods receipt lot not found.');
+    return lot;
   }
 
-  async createLot(data: typeof goodsReceiptLots.$inferInsert): Promise<GoodsReceiptLot> {
-    const results = await this.db.insert(goodsReceiptLots).values(data).returning();
-    return results[0] as GoodsReceiptLot;
+  // Rejects lots on an item that is not tracked by lot
+  assertLotTracked(item: { tracking: InventoryTracking }): void {
+    if (GoodsReceiptLotsDomainRepository.LOT_TRACKINGS.includes(item.tracking)) return;
+    throw new BadRequestException({
+      label: 'Lots Not Tracked',
+      detail: `This item is tracked by ${item.tracking.toLowerCase()}, so it has no lots.`,
+    });
   }
 
-  async setResolvedLotId(lotId: string, resolvedLotId: string): Promise<void> {
-    await this.db.update(goodsReceiptLots).set({ resolvedLotId }).where(eq(goodsReceiptLots.id, lotId));
+  // Rejects a lot number another lot of the same receipt item already uses
+  async assertLotNumberFree(itemId: string, lotNumber: string, excludeLotId?: string): Promise<void> {
+    const isTaken = await this.exists(
+      and(
+        eq(goodsReceiptLots.goodsReceiptItemId, itemId),
+        eq(goodsReceiptLots.lotNumber, lotNumber),
+        excludeLotId ? ne(goodsReceiptLots.id, excludeLotId) : undefined,
+      ) as SQL,
+    );
+    if (!isTaken) return;
+    throw new ConflictException({
+      label: 'Lot Already Added',
+      detail: `Lot "${lotNumber}" is already on this item. Edit that lot instead.`,
+      errors: [{ field: 'lotNumber', message: 'Already on this item' }],
+    });
   }
 
-  // Counts how many line_items reference any line under this lot — used to validate deletion safety
-  async countLineItemsForLot(lotId: string): Promise<number> {
-    const rows = await this.db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(goodsReceiptLineItems)
-      .innerJoin(goodsReceiptLines, eq(goodsReceiptLineItems.goodsReceiptLineId, goodsReceiptLines.id))
-      .where(eq(goodsReceiptLines.goodsReceiptLotId, lotId));
-    return Number(rows[0]?.count ?? 0);
+  // Rejects an MRP printed in another currency than the legal entity's
+  assertMrpInCurrency(mrp: CurrencyAmountDto | null | undefined, leCurrencyCode: string): void {
+    if (!mrp || mrp.currency === leCurrencyCode) return;
+    throw new BadRequestException({
+      label: 'MRP Currency',
+      detail: `The MRP is printed in ${leCurrencyCode}, the company's currency.`,
+      errors: [{ field: 'mrp', message: `Enter it in ${leCurrencyCode}` }],
+    });
+  }
+
+  // Selects a lot with the number of lines it is distributed to and their total quantity
+  private selection() {
+    const ownLines = eq(goodsReceiptLines.goodsReceiptLotId, goodsReceiptLots.id);
+    const totalQuantity = this.db
+      .select({ total: sql`coalesce(sum(${goodsReceiptLines.quantity}), 0)` })
+      .from(goodsReceiptLines)
+      .where(ownLines);
+    return {
+      ...getColumns(goodsReceiptLots),
+      linesCount: this.db.$count(goodsReceiptLines, ownLines),
+      totalQuantity: sql<number>`(${totalQuantity})`.mapWith(Number),
+    };
   }
 }

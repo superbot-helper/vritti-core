@@ -1,8 +1,10 @@
 import { sql } from '@vritti/api-sdk/drizzle-orm';
-import { index, jsonb, pgPolicy, timestamp, unique, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
+import { index, jsonb, timestamp, unique, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
 import { commerceSchema } from './commerce-schema';
+import { goodsReceiptItems } from './goods-receipt-items';
 import { goodsReceiptLines } from './goods-receipt-lines';
-import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
+import { goodsReceipts } from './goods-receipts';
+import { organizationIdColumn, scopeFromOwnerPolicies } from './workspace-scope';
 
 export const goodsReceiptLineItems = commerceSchema.table(
   'goods_receipt_line_items',
@@ -24,22 +26,14 @@ export const goodsReceiptLineItems = commerceSchema.table(
   (table) => [
     unique('uq_goods_receipt_line_items_line_serial').on(table.goodsReceiptLineId, table.serialNumber),
     index('idx_goods_receipt_line_items_line').on(table.goodsReceiptLineId),
-    orgIsolationPolicy(),
-    pgPolicy('site_read', {
-      for: 'select',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_write', {
-      for: 'insert',
-      withCheck: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_update', {
-      for: 'update',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
-    }),
-    pgPolicy('site_delete', {
-      for: 'delete',
-      using: sql`site_id = (select current_setting('app.site_id', true)::uuid)`,
+    ...scopeFromOwnerPolicies({
+      owner: goodsReceipts,
+      fk: table.goodsReceiptLineId,
+      through: [
+        { table: goodsReceiptLines, fk: (lines) => lines.goodsReceiptItemId },
+        { table: goodsReceiptItems, fk: (items) => items.goodsReceiptId },
+      ],
+      ownerIs: 'siteDocument',
     }),
   ],
 );

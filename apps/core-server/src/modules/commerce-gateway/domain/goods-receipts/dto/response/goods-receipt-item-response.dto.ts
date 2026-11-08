@@ -1,41 +1,84 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CurrencyAmountDto } from '@vritti/api-sdk/money';
 
+export class GoodsReceiptItemFlagResponseDto {
+  @ApiProperty({ enum: ['OVER_RECEIVED', 'SHORT_EXPIRY', 'REJECTED'] })
+  code: 'OVER_RECEIVED' | 'SHORT_EXPIRY' | 'REJECTED';
+
+  @ApiProperty({ description: 'What the flag found, in words', example: '2 strips rejected on receipt.' })
+  detail: string;
+}
+
 export class GoodsReceiptItemResponseDto {
-  @ApiProperty() id: string;
-  @ApiProperty() goodsReceiptId: string;
-  @ApiProperty() inventoryItemId: string;
-  @ApiPropertyOptional({ nullable: true }) inventoryItemName: string | null;
+  @ApiProperty({ description: 'Goods receipt item ID' })
+  id: string;
+
+  @ApiProperty({ description: 'Goods receipt ID' })
+  goodsReceiptId: string;
+
+  @ApiProperty({ description: 'Purchase order line the goods are counted against' })
+  purchaseOrderItemId: string;
+
+  @ApiProperty({ description: 'Inventory item ID' })
+  inventoryItemId: string;
+
+  @ApiProperty({ description: 'Inventory item name' })
+  inventoryItemName: string;
+
   @ApiProperty({ enum: ['QUANTITY', 'LOT', 'LOT_SERIAL', 'SERIAL'] })
   inventoryItemTracking: 'QUANTITY' | 'LOT' | 'LOT_SERIAL' | 'SERIAL';
-  @ApiPropertyOptional({ nullable: true }) inventoryItemUomSymbol: string | null;
-  @ApiProperty() inventoryItemAllowDecimal: boolean;
-  @ApiProperty() inventoryItemHasMrp: boolean;
-  @ApiProperty({ description: 'Ordered (paid) quantity for this item, in the item UOM.' })
+
+  @ApiProperty({ description: 'Unit the goods are counted in — the PO line unit' })
+  uomId: string;
+
+  @ApiProperty({ description: 'Symbol of the unit the goods are counted in' })
+  uomSymbol: string;
+
+  @ApiProperty({ description: 'Whether that unit allows decimal quantities' })
+  uomAllowDecimal: boolean;
+
+  @ApiPropertyOptional({ description: "Symbol of the item's primary unit", nullable: true })
+  primaryUomSymbol: string | null;
+
+  @ApiProperty({ description: 'Quantity received — paid and free together' })
+  receivedQty: number;
+
+  @ApiProperty({ description: 'Part of the received quantity rejected on arrival' })
+  rejectedQuantity: number;
+
+  @ApiProperty({ description: 'Received less rejected — what goes into stock' })
+  acceptedQty: number;
+
+  @ApiProperty({ description: 'Accepted quantity distributed to lines so far; the item is balanced when it is all' })
+  distributedQty: number;
+
+  @ApiProperty({ description: 'Quantity ordered on the PO line' })
   orderedQty: number;
-  @ApiProperty({ description: 'Derived free (bonus) quantity from the scheme.' })
-  freeQty: number;
+
+  @ApiProperty({ description: 'Free quantity the PO line scheme gives on the whole ordered quantity' })
+  expectedFreeQty: number;
+
+  @ApiProperty({ description: 'Accepted against the PO line on other published goods receipts' })
+  alreadyReceivedQty: number;
+
+  @ApiProperty({ type: CurrencyAmountDto, description: 'Unit price agreed on the PO line, in the PO currency' })
+  poUnitPrice: CurrencyAmountDto;
+
+  @ApiProperty({ description: 'Number of lots on the item' })
+  lotsCount: number;
+
+  @ApiProperty({ description: 'Number of lines the item is distributed to' })
+  linesCount: number;
+
+  @ApiProperty({ description: 'Number of lines still waiting for serials' })
+  unbalancedLinesCount: number;
+
   @ApiProperty({
-    description: 'Total received quantity = orderedQty + freeQty. Item is balanced when distributed equals this.',
+    type: [GoodsReceiptItemFlagResponseDto],
+    description: 'Over-receipt, short shelf life and rejection flags — they never block publishing',
   })
-  totalQty: number;
-  @ApiPropertyOptional({ nullable: true, description: 'Free-goods scheme buy qty (e.g. 9 in "9+1").' })
-  schemeBuyQty: number | null;
-  @ApiPropertyOptional({ nullable: true, description: 'Free-goods scheme free qty (e.g. 1 in "9+1").' })
-  schemeFreeQty: number | null;
-  @ApiProperty({ description: 'Whether a free-goods scheme applies.' })
-  hasScheme: boolean;
-  @ApiProperty({ description: 'Distributed so far — sum(lines.quantity). Item is balanced when this equals totalQty.' })
-  acceptedQuantity: number;
-  @ApiProperty() rejectedQuantity: number;
-  @ApiProperty() lotsCount: number;
-  @ApiProperty() linesCount: number;
-  @ApiPropertyOptional({ nullable: true }) poOrderedQuantity: number | null;
-  @ApiPropertyOptional({ nullable: true }) poReceivedQuantity: number | null;
-  @ApiPropertyOptional({ nullable: true }) poRemainingQuantity: number | null;
-  @ApiPropertyOptional({ type: () => CurrencyAmountDto, nullable: true }) unitPrice: CurrencyAmountDto | null;
-  @ApiPropertyOptional({ type: () => CurrencyAmountDto, nullable: true }) unitCost: CurrencyAmountDto | null;
-  @ApiPropertyOptional({ type: () => CurrencyAmountDto, nullable: true }) lineTotal: CurrencyAmountDto | null;
-  @ApiProperty() metadata: Record<string, unknown>;
-  @ApiProperty() createdAt: string;
+  flags: GoodsReceiptItemFlagResponseDto[];
+
+  @ApiProperty({ description: 'ISO timestamp of creation' })
+  createdAt: string;
 }

@@ -250,7 +250,8 @@ export class OrdersDomainService {
         throw new NotFoundException(`Variant ${item.offeringVariantId} not found.`);
       }
 
-      const taxRate = new Decimal(await this.repository.getEffectiveTaxRate(variant.taxClassId));
+      // Orders carry no tax until the tax engine determines it from the item's tax class (tax-design.md §5)
+      const taxRate = new Decimal(0);
       // TODO(pricing): offering_variants.price was removed with the catalog teardown — a variant's
       const unitPrice = new Decimal(0);
 

@@ -246,12 +246,10 @@ export default (rspackEnv) => {
         exposes: {
           './Org/Categories': './src/features/organization/categories/index.tsx',
           './Le/CostCategories': './src/features/legal-entity/cost-categories/index.tsx',
-          './Site/CreditNotes': './src/features/site/credit-notes/index.tsx',
           './Site/Customers': './src/features/site/customers/index.tsx',
           './Site/GoodsReceipts': './src/features/site/goods-receipts/index.tsx',
           './Site/InventoryItems': './src/features/site/inventory-items/index.tsx',
           './Site/StorageLocations': './src/features/site/storage-locations/index.tsx',
-          './Site/Invoices': './src/features/site/invoices/index.tsx',
           './Site/Items': './src/features/site/items/index.tsx',
           './Site/Orders': './src/features/site/orders/index.tsx',
           './Site/POSTerminals': './src/features/site/pos/index.tsx',
@@ -261,7 +259,6 @@ export default (rspackEnv) => {
           './Site/StockAdjustments': './src/features/site/stock-adjustments/index.tsx',
           './Site/StockTransfers': './src/features/site/stock-transfers/index.tsx',
           './Site/Suppliers': './src/features/site/suppliers/index.tsx',
-          './Le/TaxGroups': './src/features/legal-entity/tax-groups/index.tsx',
           './Org/UOM': './src/features/organization/uom/index.tsx',
         },
         shared: {

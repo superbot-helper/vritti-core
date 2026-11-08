@@ -1,5 +1,5 @@
 // Hand type mirroring the GraphQL GoodsReceipt. `status` is a union (the server field is String — the
-// enum-precision caveat in native-graphql.md); `po` is null when no purchase order is linked. `totalAmount`
+// enum-precision caveat in native-graphql.md); every receipt has its purchase order. `totalAmount`
 // is the major-unit money pair ({ currency, value:string }).
 export type GoodsReceiptStatus = 'DRAFT' | 'PUBLISHED';
 
@@ -16,12 +16,10 @@ export interface GoodsReceipt {
   grNumber: string;
   supplierId: string;
   supplierName: string;
-  supplierCurrencyCode: string;
   status: GoodsReceiptStatus;
-  po: GoodsReceiptPo | null;
+  po: GoodsReceiptPo;
   receivedDate: string;
   notes: string | null;
-  exchangeRate: number;
   publishedAt: string | null;
   createdAt: string;
 }

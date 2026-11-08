@@ -7,17 +7,19 @@ import { InventoryItemLotsDomainModule } from '@domain/inventory-item-lots/inven
 import { InventoryItemMrpsDomainModule } from '@domain/inventory-item-mrps/inventory-item-mrps.module';
 import { InventoryItemQuantsDomainModule } from '@domain/inventory-item-quants/inventory-item-quants.module';
 import { InventoryItemSitesDomainModule } from '@domain/inventory-item-sites/inventory-item-sites.module';
-import { InventoryItemsDomainModule } from '@domain/inventory-items/inventory-items.module';
 import { PurchaseOrderItemsDomainModule } from '@domain/purchase-order-items/purchase-order-items.module';
+import { PurchaseOrdersDomainModule } from '@domain/purchase-orders/purchase-orders.module';
 import { SupplierEnrollmentsDomainModule } from '@domain/supplier-enrollments/supplier-enrollments.module';
-import { SuppliersDomainModule } from '@domain/suppliers/suppliers.module';
 import { UomConversionsDomainModule } from '@domain/uom-conversions/uom-conversions.module';
 import { Module } from '@nestjs/common';
 import { GoodsReceiptsItemsController } from './items/goods-receipts-items.controller';
+import { GoodsReceiptsItemsService } from './items/services/goods-receipts-items.service';
 import { GoodsReceiptsLineItemsController } from './line-items/goods-receipts-line-items.controller';
+import { GoodsReceiptsLineItemsService } from './line-items/services/goods-receipts-line-items.service';
 import { GoodsReceiptsLinesController } from './lines/goods-receipts-lines.controller';
 import { GoodsReceiptsLinesService } from './lines/services/goods-receipts-lines.service';
 import { GoodsReceiptsLotsController } from './lots/goods-receipts-lots.controller';
+import { GoodsReceiptsLotsService } from './lots/services/goods-receipts-lots.service';
 import { GoodsReceiptsRootController } from './root/goods-receipts-root.controller';
 import { GoodsReceiptsPublishService } from './root/services/goods-receipts-publish.service';
 import { GoodsReceiptsService } from './root/services/goods-receipts-root.service';
@@ -28,15 +30,14 @@ import { GoodsReceiptsService } from './root/services/goods-receipts-root.servic
     GoodsReceiptLotsDomainModule,
     GoodsReceiptLinesDomainModule,
     GoodsReceiptLineItemsDomainModule,
+    PurchaseOrdersDomainModule,
+    PurchaseOrderItemsDomainModule,
+    SupplierEnrollmentsDomainModule,
     InventoryItemQuantsDomainModule,
-    InventoryItemsDomainModule,
     InventoryItemLedgerDomainModule,
     InventoryItemLotsDomainModule,
     InventoryItemMrpsDomainModule,
     InventoryItemSitesDomainModule,
-    PurchaseOrderItemsDomainModule,
-    SuppliersDomainModule,
-    SupplierEnrollmentsDomainModule,
     UomConversionsDomainModule,
   ],
   controllers: [
@@ -46,6 +47,26 @@ import { GoodsReceiptsService } from './root/services/goods-receipts-root.servic
     GoodsReceiptsLinesController,
     GoodsReceiptsLineItemsController,
   ],
-  providers: [GoodsReceiptsService, GoodsReceiptsPublishService, GoodsReceiptsLinesService],
+  providers: [
+    // Root
+    GoodsReceiptsService,
+    GoodsReceiptsPublishService,
+    // Items
+    GoodsReceiptsItemsService,
+    // Lots
+    GoodsReceiptsLotsService,
+    // Lines
+    GoodsReceiptsLinesService,
+    // Line items
+    GoodsReceiptsLineItemsService,
+  ],
+  exports: [
+    GoodsReceiptsService,
+    GoodsReceiptsPublishService,
+    GoodsReceiptsItemsService,
+    GoodsReceiptsLotsService,
+    GoodsReceiptsLinesService,
+    GoodsReceiptsLineItemsService,
+  ],
 })
 export class SiteGoodsReceiptsModule {}

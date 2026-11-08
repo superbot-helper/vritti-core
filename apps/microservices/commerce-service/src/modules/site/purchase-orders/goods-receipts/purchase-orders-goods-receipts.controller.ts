@@ -10,12 +10,13 @@ export class PurchaseOrdersGoodsReceiptsController {
 
   constructor(private readonly goodsReceiptsService: GoodsReceiptsDomainService) {}
 
+  // Returns one page of the goods receipts counted against a purchase order
   @MessagePattern({ cmd: 'site.purchaseOrders.goodsReceipts' })
   goodsReceipts(
     @Payload() data: { purchaseOrderId: string } & TableViewState,
   ): Promise<{ result: GoodsReceiptDto[]; count: number }> {
-    this.logger.log(`purchaseOrders.goodsReceipts — id: ${data.purchaseOrderId}`);
+    this.logger.log(`site.purchaseOrders.goodsReceipts — id: ${data.purchaseOrderId}`);
     const { purchaseOrderId, ...state } = data;
-    return this.goodsReceiptsService.findForTableByPoId(purchaseOrderId, state);
+    return this.goodsReceiptsService.findForTable(state, { purchaseOrderId });
   }
 }

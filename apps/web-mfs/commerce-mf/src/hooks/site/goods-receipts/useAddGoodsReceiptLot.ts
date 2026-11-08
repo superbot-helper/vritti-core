@@ -1,24 +1,27 @@
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type UseMutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { CreateResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import type { GoodsReceiptLotData } from '@/schemas/goods-receipts';
-import { type AddGoodsReceiptLotPayload, addGoodsReceiptLot } from '@/services/site/goods-receipts.service';
-import { GOODS_RECEIPT_ITEMS_KEY, GOODS_RECEIPT_KEY, GOODS_RECEIPT_LOTS_KEY, GOODS_RECEIPT_TREE_KEY } from './keys';
+import { PURCHASE_ORDERS_KEY } from '@/hooks/site/purchase-orders/keys';
+import type { AddGoodsReceiptLotPayload, GoodsReceiptLotData } from '@/schemas/goods-receipts';
+import { addGoodsReceiptLot } from '@/services/site/goods-receipts.service';
+import { GOODS_RECEIPT_KEY } from './keys';
 
+// Adds a lot to a goods receipt item; the receipt and the purchase orders refresh
 export function useAddGoodsReceiptLot(
   goodsReceiptId: string,
   itemId: string,
-  options?: Omit<UseMutationOptions<GoodsReceiptLotData, AxiosError, AddGoodsReceiptLotPayload>, 'mutationFn'>,
+  options?: Omit<
+    UseMutationOptions<CreateResponse<GoodsReceiptLotData>, AxiosError, AddGoodsReceiptLotPayload>,
+    'mutationFn'
+  >,
 ) {
   const queryClient = useQueryClient();
-  return useMutation<GoodsReceiptLotData, AxiosError, AddGoodsReceiptLotPayload>({
+  return useMutation<CreateResponse<GoodsReceiptLotData>, AxiosError, AddGoodsReceiptLotPayload>({
     ...options,
     mutationFn: (data) => addGoodsReceiptLot(goodsReceiptId, itemId, data),
     onSuccess: (...args) => {
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId), exact: true });
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_ITEMS_KEY(goodsReceiptId) });
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_TREE_KEY(goodsReceiptId) });
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_LOTS_KEY(goodsReceiptId, itemId) });
+      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId) });
+      queryClient.invalidateQueries({ queryKey: PURCHASE_ORDERS_KEY });
       options?.onSuccess?.(...args);
     },
   });

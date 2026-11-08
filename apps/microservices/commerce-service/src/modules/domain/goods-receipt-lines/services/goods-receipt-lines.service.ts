@@ -1,29 +1,15 @@
-import { GoodsReceiptLotsDomainRepository } from '@domain/goods-receipt-lots/repositories/goods-receipt-lots.repository';
-import { GoodsReceiptItemsDomainRepository } from '@domain/goods-receipts/repositories/goods-receipt-items.repository';
-import { GoodsReceiptsDomainRepository } from '@domain/goods-receipts/repositories/goods-receipts.repository';
 import { Injectable, Logger } from '@nestjs/common';
 import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
-import { and } from '@vritti/api-sdk/drizzle-orm';
-import { BadRequestException, NotFoundException, ValidationException } from '@vritti/api-sdk/exceptions';
+import { and, desc } from '@vritti/api-sdk/drizzle-orm';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
-import {
-  GoodsReceiptStatusValues,
-  goodsReceiptLines,
-  type InventoryTracking,
-  InventoryTrackingValues,
-  locations,
-} from '@/db/schema';
+import { goodsReceiptLines, type InventoryTracking, locations } from '@/db/schema';
 import { GoodsReceiptLineDto } from '../dto/entity/goods-receipt-line.dto';
-import { GoodsReceiptLinesDomainRepository } from '../repositories/goods-receipt-lines.repository';
-
-export interface ItemContext {
-  goodsReceiptId: string;
-  itemId: string;
-  inventoryItemId: string;
-  uomId: string;
-  tracking: InventoryTracking;
-  itemQuantity: number;
-}
+import type { AddGoodsReceiptLineDto } from '../dto/request/add-goods-receipt-line.dto';
+import type { UpdateGoodsReceiptLineDto } from '../dto/request/update-goods-receipt-line.dto';
+import {
+  type DistributedReceiptItem,
+  GoodsReceiptLinesDomainRepository,
+} from '../repositories/goods-receipt-lines.repository';
 
 @Injectable()
 export class GoodsReceiptLinesDomainService {
@@ -33,35 +19,28 @@ export class GoodsReceiptLinesDomainService {
     locationName: { column: locations.name, type: 'string' },
     locationPath: { column: locations.pathBreadcrumb, type: 'string' },
   };
-
-  private static readonly FILTER_FIELD_MAP: FieldMap = {
+  private static readonly FIELD_MAP: FieldMap = {
+    ...GoodsReceiptLinesDomainService.SEARCH_FIELD_MAP,
     quantity: { column: goodsReceiptLines.quantity, type: 'number' },
   };
 
-  constructor(
-    private readonly repository: GoodsReceiptLinesDomainRepository,
-    private readonly itemsRepository: GoodsReceiptItemsDomainRepository,
-    private readonly receiptsRepository: GoodsReceiptsDomainRepository,
-    private readonly lotsRepository: GoodsReceiptLotsDomainRepository,
-  ) {}
+  constructor(private readonly repository: GoodsReceiptLinesDomainRepository) {}
 
+  // Returns one page of a receipt item's lines, narrowed to one of its lots when given
   async findForTable(
-    goodsReceiptId: string,
     itemId: string,
     state: TableViewState,
-    lotId?: string | null,
+    lotId?: string,
   ): Promise<{ result: GoodsReceiptLineDto[]; count: number }> {
-    await this.ensureItemBelongsToReceipt(goodsReceiptId, itemId);
-    const filterWhere = FilterProcessor.buildWhere(state.filters, GoodsReceiptLinesDomainService.FILTER_FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, GoodsReceiptLinesDomainService.SEARCH_FIELD_MAP);
-    const where = and(filterWhere, searchWhere);
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, GoodsReceiptLinesDomainService.FIELD_MAP);
     const { limit = 20, offset = 0 } = state.pagination;
+
     const { result, count } = await this.repository.findForTable(itemId, {
-      where,
-      orderBy: FilterProcessor.buildOrderBy(state.sort, {
-        ...GoodsReceiptLinesDomainService.SEARCH_FIELD_MAP,
-        ...GoodsReceiptLinesDomainService.FILTER_FIELD_MAP,
-      }),
+      where: and(
+        FilterProcessor.buildWhere(state.filters, GoodsReceiptLinesDomainService.FIELD_MAP),
+        FilterProcessor.buildSearch(state.search, GoodsReceiptLinesDomainService.SEARCH_FIELD_MAP),
+      ),
+      orderBy: orderBy.length > 0 ? orderBy : [desc(goodsReceiptLines.createdAt)],
       limit,
       offset,
       lotId,
@@ -69,224 +48,73 @@ export class GoodsReceiptLinesDomainService {
     return { result: result.map(GoodsReceiptLineDto.from), count };
   }
 
-  async findByItemId(goodsReceiptId: string, itemId: string): Promise<GoodsReceiptLineDto[]> {
-    await this.ensureItemBelongsToReceipt(goodsReceiptId, itemId);
-    const rows = await this.repository.findByItemId(itemId);
-    return rows.map(GoodsReceiptLineDto.from);
+  // Returns one line of a receipt item with its location and lot
+  async findById(itemId: string, lineId: string): Promise<GoodsReceiptLineDto> {
+    return GoodsReceiptLineDto.from(await this.repository.findOnItemOrThrow(itemId, lineId));
   }
 
-  async findByLotId(goodsReceiptId: string, itemId: string, lotId: string): Promise<GoodsReceiptLineDto[]> {
-    await this.ensureItemBelongsToReceipt(goodsReceiptId, itemId);
-    const lot = await this.lotsRepository.findById(lotId);
-    if (!lot || lot.goodsReceiptItemId !== itemId) {
-      throw new NotFoundException('Goods receipt lot not found.');
-    }
-    const rows = await this.repository.findByLotId(lotId);
-    return rows.map(GoodsReceiptLineDto.from);
-  }
-
-  async findById(goodsReceiptId: string, itemId: string, lineId: string): Promise<GoodsReceiptLineDto> {
-    await this.ensureItemBelongsToReceipt(goodsReceiptId, itemId);
-    const line = await this.repository.findByItemIdAndLineId(itemId, lineId);
-    if (!line) throw new NotFoundException('Goods receipt line not found.');
-    return GoodsReceiptLineDto.from(line);
-  }
-
+  // Puts part of a draft item's accepted quantity at a location, in one of its lots when it is lot-tracked
   async addLine(
-    goodsReceiptId: string,
-    itemId: string,
-    data: { goodsReceiptLotId?: string | null; locationId: string; quantity: number; primaryUomQty: number },
+    item: DistributedReceiptItem,
+    dto: AddGoodsReceiptLineDto,
+    primaryUomQty: number,
   ): Promise<CreateResponseDto<GoodsReceiptLineDto>> {
-    const ctx = await this.getItemContext(goodsReceiptId, itemId);
-    await this.validateIntent(ctx, data);
+    const goodsReceiptLotId = dto.goodsReceiptLotId ?? null;
+    await this.repository.assertLotFitsItem(item, goodsReceiptLotId);
+    this.repository.assertQuantityAllowed(item, dto.quantity);
+    await this.repository.assertWithinAcceptedQuantity(item, dto.quantity);
+    await this.repository.assertLocationFree(item.id, { goodsReceiptLotId, locationId: dto.locationId });
 
-    const isSerial =
-      ctx.tracking === InventoryTrackingValues.SERIAL || ctx.tracking === InventoryTrackingValues.LOT_SERIAL;
-    if (!Number.isFinite(data.quantity) || data.quantity < 0 || (data.quantity === 0 && !isSerial)) {
-      throw new ValidationException({
-        detail: 'Quantity must be a positive number.',
-        errors: [{ field: 'quantity', message: 'Quantity is required.' }],
-      });
-    }
-
-    if (!isSerial) {
-      await this.validateItemQuantityCap(ctx, data.quantity);
-    }
-
-    // Reject a duplicate (item, lot?, location) line
-    const duplicate = await this.repository.findOneByItemLotLocation({
-      itemId,
-      goodsReceiptLotId: data.goodsReceiptLotId ?? null,
-      locationId: data.locationId,
-    });
-    if (duplicate) {
-      throw new ValidationException({
-        label: 'Duplicate Line',
-        detail: 'A line for this location already exists on this item. Edit that line instead.',
-        errors: [{ field: 'locationId', message: 'This location already has a line for this item.' }],
-      });
-    }
-
-    // 23505 race fallback handled globally by api-sdk's pg-error filter.
     const created = await this.repository.create({
-      goodsReceiptItemId: itemId,
-      goodsReceiptLotId: data.goodsReceiptLotId ?? null,
-      locationId: data.locationId,
-      quantity: data.quantity,
-      primaryUomQty: data.primaryUomQty,
+      goodsReceiptItemId: item.id,
+      siteId: item.siteId,
+      goodsReceiptLotId,
+      locationId: dto.locationId,
+      quantity: dto.quantity,
+      primaryUomQty,
     });
+    await this.repository.refreshIsBalanced(created.id, item.tracking);
 
-    // Recompute is_balanced for the new line
-    await this.repository.refreshIsBalanced(created.id, ctx.tracking);
-
-    this.logger.log(`Added line ${created.id} to goods-receipt-item ${itemId}`);
-    const refreshed = await this.repository.findByItemIdAndLineId(itemId, created.id);
-    if (!refreshed) throw new NotFoundException('Line not found after insert.');
+    this.logger.log(`Added line ${created.id} to goods receipt item ${item.id}`);
     return {
       success: true,
       message: 'Line added successfully.',
-      data: GoodsReceiptLineDto.from(refreshed),
+      data: GoodsReceiptLineDto.from(await this.repository.findOnItemOrThrow(item.id, created.id)),
     };
   }
 
+  // Moves a line of a draft item to another lot or location, or changes its quantity
   async updateLine(
-    goodsReceiptId: string,
-    itemId: string,
-    lineId: string,
-    data: { goodsReceiptLotId?: string | null; locationId?: string; quantity?: number; primaryUomQty?: number },
-  ): Promise<GoodsReceiptLineDto> {
-    const ctx = await this.getItemContext(goodsReceiptId, itemId);
-    const line = await this.repository.findById(lineId);
-    if (!line || line.goodsReceiptItemId !== itemId) throw new NotFoundException('Goods receipt line not found.');
+    item: DistributedReceiptItem,
+    dto: UpdateGoodsReceiptLineDto,
+    primaryUomQty: number | undefined,
+  ): Promise<SuccessResponseDto> {
+    const line = await this.repository.findOnItemOrThrow(item.id, dto.lineId);
+    const goodsReceiptLotId = dto.goodsReceiptLotId === undefined ? line.goodsReceiptLotId : dto.goodsReceiptLotId;
+    const locationId = dto.locationId ?? line.locationId;
+    const quantity = dto.quantity ?? line.quantity;
+    await this.repository.assertLotFitsItem(item, goodsReceiptLotId);
+    this.repository.assertQuantityAllowed(item, quantity);
+    await this.repository.assertWithinAcceptedQuantity(item, quantity, line.id);
+    await this.repository.assertLocationFree(item.id, { goodsReceiptLotId, locationId }, line.id);
 
-    const next = {
-      goodsReceiptLotId: data.goodsReceiptLotId !== undefined ? data.goodsReceiptLotId : line.goodsReceiptLotId,
-      locationId: data.locationId !== undefined ? data.locationId : line.locationId,
-      quantity: data.quantity !== undefined ? data.quantity : line.quantity,
-    };
-    await this.validateIntent(ctx, next);
+    await this.repository.update(line.id, { goodsReceiptLotId, locationId, quantity, primaryUomQty });
+    await this.repository.refreshIsBalanced(line.id, item.tracking);
 
-    const isSerial =
-      ctx.tracking === InventoryTrackingValues.SERIAL || ctx.tracking === InventoryTrackingValues.LOT_SERIAL;
-    if (!isSerial && data.quantity !== undefined) {
-      // PO cap re-check using the new quantity (excluding this line's existing contribution)
-      await this.validateItemQuantityCap(ctx, data.quantity, lineId);
-    }
-
-    // Re-check the duplicate guard when lot or location changed, excluding this line
-    if (data.goodsReceiptLotId !== undefined || data.locationId !== undefined) {
-      const duplicate = await this.repository.findOneByItemLotLocation({
-        itemId,
-        goodsReceiptLotId: next.goodsReceiptLotId ?? null,
-        locationId: next.locationId,
-        excludeLineId: lineId,
-      });
-      if (duplicate) {
-        throw new ValidationException({
-          label: 'Duplicate Line',
-          detail: 'A line for this location already exists on this item. Edit that line instead.',
-          errors: [{ field: 'locationId', message: 'This location already has a line for this item.' }],
-        });
-      }
-    }
-
-    await this.repository.update(lineId, {
-      ...(data.quantity !== undefined ? { quantity: data.quantity } : {}),
-      ...(data.primaryUomQty !== undefined ? { primaryUomQty: data.primaryUomQty } : {}),
-      ...(data.goodsReceiptLotId !== undefined ? { goodsReceiptLotId: data.goodsReceiptLotId } : {}),
-      ...(data.locationId !== undefined ? { locationId: data.locationId } : {}),
-    });
-
-    await this.repository.refreshIsBalanced(lineId, ctx.tracking);
-
-    const refreshed = await this.repository.findByItemIdAndLineId(itemId, lineId);
-    if (!refreshed) throw new NotFoundException('Line not found after update.');
-    return GoodsReceiptLineDto.from(refreshed);
+    this.logger.log(`Updated line ${line.id} on goods receipt item ${item.id}`);
+    return { success: true, message: 'Line updated successfully.' };
   }
 
-  async removeLine(goodsReceiptId: string, itemId: string, lineId: string): Promise<SuccessResponseDto> {
-    const ctx = await this.getItemContext(goodsReceiptId, itemId);
-    const line = await this.repository.findById(lineId);
-    if (!line || line.goodsReceiptItemId !== itemId) throw new NotFoundException('Goods receipt line not found.');
-    void ctx;
-    await this.repository.deleteLine(lineId);
-    this.logger.log(`Removed line ${lineId} from goods-receipt-item ${itemId}`);
+  // Removes a line, with its serials, from a draft receipt item
+  async removeLine(item: DistributedReceiptItem, lineId: string): Promise<SuccessResponseDto> {
+    const line = await this.repository.findOnItemOrThrow(item.id, lineId);
+    await this.repository.delete(line.id);
+    this.logger.log(`Removed line ${line.id} from goods receipt item ${item.id}`);
     return { success: true, message: 'Line removed successfully.' };
   }
 
-  async refreshIsBalanced(itemId: string, lineId: string, tracking: InventoryTracking): Promise<void> {
+  // Re-checks whether a line's serials match its quantity after its serials change
+  async refreshIsBalanced(lineId: string, tracking: InventoryTracking): Promise<void> {
     await this.repository.refreshIsBalanced(lineId, tracking);
-    void itemId;
-  }
-
-  // Validates that the lines' distributed total does not exceed the item's declared quantity
-  async validateItemQuantityCap(ctx: ItemContext, additionalQuantity: number, excludeLineId?: string): Promise<void> {
-    const currentSum = await this.repository.totalQuantityForItem(ctx.itemId, excludeLineId);
-    const total = currentSum + additionalQuantity;
-    if (total > ctx.itemQuantity + 1e-9) {
-      throw new ValidationException({
-        detail: `Total distributed quantity ${total} exceeds the item quantity ${ctx.itemQuantity}.`,
-        errors: [{ field: 'quantity', message: 'Exceeds the item quantity.' }],
-      });
-    }
-  }
-
-  // Validates the line shape against the item's tracking type
-  private async validateIntent(
-    ctx: ItemContext,
-    data: { goodsReceiptLotId?: string | null; locationId?: string },
-  ): Promise<void> {
-    if (!data.locationId) {
-      throw new ValidationException({
-        detail: 'Storage location is required for goods-receipt lines.',
-        errors: [{ field: 'locationId', message: 'Storage location is required.' }],
-      });
-    }
-    if (ctx.tracking === InventoryTrackingValues.QUANTITY || ctx.tracking === InventoryTrackingValues.SERIAL) {
-      if (data.goodsReceiptLotId) {
-        throw new ValidationException({
-          detail: `Lot must not be set for items with tracking=${ctx.tracking}.`,
-          errors: [{ field: 'goodsReceiptLotId', message: `Not allowed for tracking=${ctx.tracking}.` }],
-        });
-      }
-      return;
-    }
-    if (!data.goodsReceiptLotId) {
-      throw new ValidationException({
-        detail: 'A lot must be selected for items with tracking=LOT or tracking=LOT_SERIAL.',
-        errors: [{ field: 'goodsReceiptLotId', message: 'Lot is required.' }],
-      });
-    }
-    const lot = await this.lotsRepository.findById(data.goodsReceiptLotId);
-    if (!lot || lot.goodsReceiptItemId !== ctx.itemId) {
-      throw new ValidationException({
-        detail: 'Lot does not belong to this item.',
-        errors: [{ field: 'goodsReceiptLotId', message: 'Invalid lot reference.' }],
-      });
-    }
-  }
-
-  async getItemContext(goodsReceiptId: string, itemId: string): Promise<ItemContext> {
-    const receipt = await this.receiptsRepository.findById(goodsReceiptId);
-    if (!receipt) throw new NotFoundException('Goods receipt not found.');
-    if (receipt.status !== GoodsReceiptStatusValues.DRAFT) {
-      throw new BadRequestException('Lines can only be modified on DRAFT goods receipts.');
-    }
-    const item = await this.itemsRepository.findByReceiptIdAndItemIdWithRefs(goodsReceiptId, itemId);
-    if (!item) throw new NotFoundException('Goods receipt item not found.');
-    return {
-      goodsReceiptId,
-      itemId,
-      inventoryItemId: item.inventoryItemId,
-      uomId: item.uomId,
-      tracking: item.inventoryItemTracking,
-      // Lines distribute the TOTAL received quantity (ordered + free).
-      itemQuantity: Number(item.totalQty),
-    };
-  }
-
-  private async ensureItemBelongsToReceipt(goodsReceiptId: string, itemId: string): Promise<void> {
-    const item = await this.itemsRepository.findByReceiptIdAndItemId(goodsReceiptId, itemId);
-    if (!item) throw new NotFoundException('Goods receipt item not found.');
   }
 }

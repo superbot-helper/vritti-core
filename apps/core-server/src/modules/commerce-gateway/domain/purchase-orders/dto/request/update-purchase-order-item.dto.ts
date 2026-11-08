@@ -11,7 +11,7 @@ export class UpdatePurchaseOrderItemDto {
   @ApiPropertyOptional({ description: 'Ordered uomQty', example: 100 })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 3 })
-  @Min(0)
+  @IsPositive()
   uomQty?: number;
 
   @ApiPropertyOptional({

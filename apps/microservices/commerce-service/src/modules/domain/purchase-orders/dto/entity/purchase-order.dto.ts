@@ -1,45 +1,47 @@
 import { CurrencyAmountDto } from '@vritti/api-sdk/money';
-import type { ExchangeRateType, PurchaseOrder, PurchaseOrderStatus } from '@/db/schema';
+import type { PurchaseOrderStatus } from '@/db/schema';
+import type { PurchaseOrderRow } from '../../repositories/purchase-orders.repository';
 
 export class PurchaseOrderDto {
   id: string;
+  legalEntityId: string;
+  siteId: string;
   supplierId: string;
   supplierName: string;
   poNumber: string;
   status: PurchaseOrderStatus;
   currencyCode: string;
-  exchangeRate: number | null;
-  exchangeRateType: ExchangeRateType;
-  // Rates from other supplier currencies into the PO currency, as decimal strings: { "USD": "83.250000" }
+  exchangeRate: number;
   conversionRates: Record<string, string>;
   orderDate: string;
   expectedBy: string | null;
   timezone: string;
   notes: string | null;
   totalAmount: CurrencyAmountDto;
-  goodsReceiptExists: boolean;
+  hasPublishedGoodsReceipt: boolean;
   createdAt: string;
   updatedAt: string;
 
-  static from(entity: PurchaseOrder, supplierName?: string | null): PurchaseOrderDto {
+  static from(row: PurchaseOrderRow): PurchaseOrderDto {
     const dto = new PurchaseOrderDto();
-    dto.id = entity.id;
-    dto.supplierId = entity.supplierId;
-    dto.supplierName = supplierName ?? '';
-    dto.poNumber = entity.poNumber;
-    dto.status = entity.status;
-    dto.currencyCode = entity.currencyCode;
-    dto.exchangeRate = entity.exchangeRate;
-    dto.exchangeRateType = entity.exchangeRateType;
-    dto.conversionRates = entity.conversionRates ?? {};
-    dto.orderDate = entity.orderDate;
-    dto.expectedBy = entity.expectedBy ?? null;
-    dto.timezone = entity.timezone;
-    dto.notes = entity.notes ?? null;
-    dto.totalAmount = CurrencyAmountDto.from(entity.totalAmount, entity.currencyCode);
-    dto.goodsReceiptExists = false;
-    dto.createdAt = entity.createdAt.toISOString();
-    dto.updatedAt = entity.updatedAt.toISOString();
+    dto.id = row.id;
+    dto.legalEntityId = row.legalEntityId;
+    dto.siteId = row.siteId;
+    dto.supplierId = row.supplierId;
+    dto.supplierName = row.supplierName ?? '';
+    dto.poNumber = row.poNumber;
+    dto.status = row.status;
+    dto.currencyCode = row.currencyCode;
+    dto.exchangeRate = row.exchangeRate;
+    dto.conversionRates = row.conversionRates;
+    dto.orderDate = row.orderDate;
+    dto.expectedBy = row.expectedBy;
+    dto.timezone = row.timezone;
+    dto.notes = row.notes;
+    dto.totalAmount = CurrencyAmountDto.from(row.totalAmount, row.currencyCode);
+    dto.hasPublishedGoodsReceipt = row.hasPublishedGoodsReceipt;
+    dto.createdAt = row.createdAt.toISOString();
+    dto.updatedAt = row.updatedAt.toISOString();
     return dto;
   }
 }

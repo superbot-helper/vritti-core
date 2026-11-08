@@ -1,32 +1,64 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, eq, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { aliasedTable, and, asc, desc, eq, getColumns, ne, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import {
   type GoodsReceiptItem,
+  type GoodsReceiptStatus,
+  GoodsReceiptStatusValues,
   goodsReceiptItems,
+  goodsReceiptLineItems,
   goodsReceiptLines,
   goodsReceiptLots,
   goodsReceipts,
   type InventoryTracking,
+  InventoryTrackingValues,
   inventoryItems,
+  locations,
   purchaseOrderItems,
+  purchaseOrders,
   uom,
 } from '@/db/schema';
 import type { GoodsReceiptTreeNode } from '../dto/entity/goods-receipt-tree.dto';
 
-export type GoodsReceiptItemWithRefs = GoodsReceiptItem & {
-  inventoryItemName: string;
+const itemUom = aliasedTable(uom, 'item_uom');
+const otherReceiptItems = aliasedTable(goodsReceiptItems, 'other_receipt_items');
+const otherReceipts = aliasedTable(goodsReceipts, 'other_receipts');
+
+export type GoodsReceiptItemRow = GoodsReceiptItem & {
+  inventoryItemName: string | null;
   inventoryItemTracking: InventoryTracking;
-  inventoryItemUomSymbol: string;
-  inventoryItemAllowDecimal: boolean;
-  inventoryItemHasMrp: boolean;
-  acceptedQuantity: number;
+  uomSymbol: string | null;
+  uomAllowDecimal: boolean;
+  primaryUomSymbol: string | null;
+  receivedDate: string;
+  orderedQty: number;
+  expectedFreeQty: number;
+  poPrimaryUomQty: number;
+  poUnitPrice: bigint;
+  poTotalPrice: bigint;
+  poCurrencyCode: string;
+  poExchangeRate: number;
+  alreadyReceivedQty: number;
+  distributedQty: number;
   lotsCount: number;
   linesCount: number;
   unbalancedLinesCount: number;
-  poItemId: string | null;
-  poOrderedQuantity: string | null;
-  poReceivedQuantity: string | null;
+  earliestExpiryDate: string | null;
+  earliestExpiryLotNumber: string | null;
+};
+
+export type PurchaseOrderReceiptItemRow = GoodsReceiptItemRow & {
+  grNumber: string;
+  receiptStatus: GoodsReceiptStatus;
+};
+
+export type GoodsReceiptItemContext = Pick<
+  GoodsReceiptItem,
+  'id' | 'goodsReceiptId' | 'siteId' | 'inventoryItemId' | 'uomId' | 'receivedQty' | 'rejectedQuantity'
+> & {
+  receiptStatus: GoodsReceiptStatus;
+  tracking: InventoryTracking;
 };
 
 @Injectable()
@@ -35,414 +67,261 @@ export class GoodsReceiptItemsDomainRepository extends PrimaryBaseRepository<typ
     super(database, goodsReceiptItems);
   }
 
-  async findByReceiptId(goodsReceiptId: string): Promise<GoodsReceiptItemWithRefs[]> {
-    return this.runRichSelect(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId));
+  // Returns one page of a receipt's items with their purchase order line and distribution progress
+  async findForTable(
+    goodsReceiptId: string,
+    options: { where?: SQL; orderBy: SQL[]; limit: number; offset: number },
+  ): Promise<{ result: GoodsReceiptItemRow[]; count: number }> {
+    return this.findAllAndCount<GoodsReceiptItemRow>({
+      select: this.selection(),
+      leftJoins: this.joins(),
+      ...options,
+      where: and(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId), options.where),
+    });
   }
 
-  // Returns the unified GR tree (items → lots → lines) as GoodsReceiptTreeNode[] in one query
-  async findTreeNodesByReceiptId(goodsReceiptId: string): Promise<GoodsReceiptTreeNode[]> {
-    const acceptedQty = sql`(
-      SELECT COALESCE(SUM(quantity), 0)
-      FROM commerce.goods_receipt_lines
-      WHERE goods_receipt_item_id = ${goodsReceiptItems.id}
-    )`;
-    const itemLinesCount = sql`(
-      SELECT COUNT(*)
-      FROM commerce.goods_receipt_lines
-      WHERE goods_receipt_item_id = ${goodsReceiptItems.id}
-    )`;
-    const itemUnbalanced = sql`(
-      SELECT COALESCE(SUM(CASE WHEN is_balanced = false THEN 1 ELSE 0 END), 0)
-      FROM commerce.goods_receipt_lines
-      WHERE goods_receipt_item_id = ${goodsReceiptItems.id}
-    )`;
-    const itemBalanced = sql`(
-      ${itemLinesCount} > 0
-      AND ${itemUnbalanced} = 0
-      AND ${acceptedQty} = ${goodsReceiptItems.totalQty}
-    )`;
-    // Badge reads `<distributed>/<total received qty> <uom>` for every item.
-    const itemBadge = sql`CONCAT(
-      trim_scale(${acceptedQty})::text,
-      '/',
-      trim_scale(${goodsReceiptItems.totalQty})::text,
-      CASE WHEN ${uom.symbol} IS NOT NULL THEN CONCAT(' ', ${uom.symbol}) ELSE '' END
-    )`;
+  // Returns every item of a receipt with its purchase order line and distribution progress
+  async findByReceiptId(goodsReceiptId: string): Promise<GoodsReceiptItemRow[]> {
+    return this.findAllWithSelect<GoodsReceiptItemRow>({
+      select: this.selection(),
+      leftJoins: this.joins(),
+      where: eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId),
+      orderBy: [asc(goodsReceiptItems.createdAt)],
+    });
+  }
 
-    // tracking='LOT': lots as leaves, badge is the lot's accepted total
-    const lotsOnlyJson = sql`(
-      SELECT COALESCE(
-        json_agg(
-          json_build_object(
-            'id', l.id,
-            'name', l.lot_number,
-            'kind', 'lot',
-            'balanced', COALESCE(la.lines_count, 0) > 0 AND COALESCE(la.unbalanced_lines_count, 0) = 0,
-            'badge', trim_scale(COALESCE(la.total_quantity, 0))::text
-          ) ORDER BY l.created_at
-        ),
-        '[]'::json
-      )
-      FROM commerce.goods_receipt_lots l
-      LEFT JOIN LATERAL (
-        SELECT
-          SUM(quantity) AS total_quantity,
-          COUNT(*) AS lines_count,
-          SUM(CASE WHEN is_balanced = false THEN 1 ELSE 0 END) AS unbalanced_lines_count
-        FROM commerce.goods_receipt_lines
-        WHERE goods_receipt_lot_id = l.id
-      ) la ON TRUE
-      WHERE l.goods_receipt_item_id = ${goodsReceiptItems.id}
-    )`;
+  // Returns every item counted on a purchase order's receipts, newest receipt first and each receipt's items in line order
+  async findByPurchaseOrderId(purchaseOrderId: string): Promise<PurchaseOrderReceiptItemRow[]> {
+    return this.findAllWithSelect<PurchaseOrderReceiptItemRow>({
+      select: { ...this.selection(), grNumber: goodsReceipts.grNumber, receiptStatus: goodsReceipts.status },
+      leftJoins: this.joins(),
+      where: eq(goodsReceipts.purchaseOrderId, purchaseOrderId),
+      orderBy: [desc(goodsReceipts.receivedDate), desc(goodsReceipts.createdAt), asc(goodsReceiptItems.createdAt)],
+    });
+  }
 
-    // tracking='LOT_SERIAL': lots with line children showing serial-fill progress
-    const lotsWithLinesJson = sql`(
-      SELECT COALESCE(
-        json_agg(
-          json_build_object(
-            'id', l.id,
-            'name', l.lot_number,
-            'kind', 'lot',
-            'balanced', COALESCE(la.lines_count, 0) > 0 AND COALESCE(la.unbalanced_lines_count, 0) = 0,
-            'badge', trim_scale(COALESCE(la.total_quantity, 0))::text,
-            'children', COALESCE(lc.lines_json, '[]'::json)
-          ) ORDER BY l.created_at
-        ),
-        '[]'::json
-      )
-      FROM commerce.goods_receipt_lots l
-      LEFT JOIN LATERAL (
-        SELECT
-          SUM(quantity) AS total_quantity,
-          COUNT(*) AS lines_count,
-          SUM(CASE WHEN is_balanced = false THEN 1 ELSE 0 END) AS unbalanced_lines_count
-        FROM commerce.goods_receipt_lines
-        WHERE goods_receipt_lot_id = l.id
-      ) la ON TRUE
-      LEFT JOIN LATERAL (
-        SELECT json_agg(
-          json_build_object(
-            'id', line.id,
-            'name', COALESCE(loc.name, '—'),
-            'kind', 'line',
-            'balanced', line.is_balanced,
-            'badge', CONCAT(
-              (SELECT COUNT(*) FROM commerce.goods_receipt_line_items li WHERE li.goods_receipt_line_id = line.id)::text,
-              '/',
-              trim_scale(line.quantity)::text
-            )
-          ) ORDER BY line.created_at
-        ) AS lines_json
-        FROM commerce.goods_receipt_lines line
-        LEFT JOIN commerce.locations loc ON line.location_id = loc.id
-        WHERE line.goods_receipt_lot_id = l.id
-      ) lc ON TRUE
-      WHERE l.goods_receipt_item_id = ${goodsReceiptItems.id}
-    )`;
+  // Loads an item of the given receipt, throwing when it is not on it
+  async findOnReceiptOrThrow(goodsReceiptId: string, itemId: string): Promise<GoodsReceiptItemRow> {
+    const row = await this.findById<GoodsReceiptItemRow>(itemId, {
+      select: this.selection(),
+      leftJoins: this.joins(),
+      where: eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId),
+    });
+    if (!row) throw new NotFoundException('Goods receipt item not found.');
+    return row;
+  }
 
-    // tracking='SERIAL': lines as direct children of the item.
-    const linesOnlyJson = sql`(
-      SELECT COALESCE(
-        json_agg(
-          json_build_object(
-            'id', line.id,
-            'name', COALESCE(loc.name, '—'),
-            'kind', 'line',
-            'balanced', line.is_balanced,
-            'badge', CONCAT(
-              (SELECT COUNT(*) FROM commerce.goods_receipt_line_items li WHERE li.goods_receipt_line_id = line.id)::text,
-              '/',
-              trim_scale(line.quantity)::text
-            )
-          ) ORDER BY line.created_at
-        ),
-        '[]'::json
-      )
-      FROM commerce.goods_receipt_lines line
-      LEFT JOIN commerce.locations loc ON line.location_id = loc.id
-      WHERE line.goods_receipt_item_id = ${goodsReceiptItems.id}
-    )`;
+  // Loads what the item's lots, lines and serials are written against, throwing unless its receipt is a draft
+  async findDraftContextOrThrow(goodsReceiptId: string, itemId: string): Promise<GoodsReceiptItemContext> {
+    const [context] = await this.db
+      .select({
+        id: goodsReceiptItems.id,
+        goodsReceiptId: goodsReceiptItems.goodsReceiptId,
+        siteId: goodsReceiptItems.siteId,
+        inventoryItemId: goodsReceiptItems.inventoryItemId,
+        uomId: goodsReceiptItems.uomId,
+        receivedQty: goodsReceiptItems.receivedQty,
+        rejectedQuantity: goodsReceiptItems.rejectedQuantity,
+        receiptStatus: goodsReceipts.status,
+        tracking: inventoryItems.tracking,
+      })
+      .from(goodsReceiptItems)
+      .innerJoin(goodsReceipts, eq(goodsReceipts.id, goodsReceiptItems.goodsReceiptId))
+      .innerJoin(inventoryItems, eq(inventoryItems.id, goodsReceiptItems.inventoryItemId))
+      .where(and(eq(goodsReceiptItems.id, itemId), eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId)))
+      .limit(1);
+    if (!context) throw new NotFoundException('Goods receipt item not found.');
+    if (context.receiptStatus !== GoodsReceiptStatusValues.DRAFT) {
+      throw new BadRequestException({
+        label: 'Goods Receipt Published',
+        detail: 'The goods receipt is published, so its lots, lines and serials can no longer change.',
+      });
+    }
+    return context;
+  }
+
+  // Returns the inventory items counted on a receipt
+  async findInventoryItemIds(goodsReceiptId: string): Promise<string[]> {
+    const rows = await this.findMany({ where: { goodsReceiptId } });
+    return rows.map((row) => row.inventoryItemId);
+  }
+
+  // Returns the receipt's item tree in one query: items, then lots and lines below them by how each item is tracked
+  async findTreeByReceiptId(goodsReceiptId: string): Promise<GoodsReceiptTreeNode[]> {
+    const itemLines = eq(goodsReceiptLines.goodsReceiptItemId, goodsReceiptItems.id);
+    const itemLots = eq(goodsReceiptLots.goodsReceiptItemId, goodsReceiptItems.id);
+    const distributedQuantity = this.sumLineQuantity(itemLines);
+    const acceptedQuantity = sql`${goodsReceiptItems.receivedQty} - ${goodsReceiptItems.rejectedQuantity}`;
 
     const node = sql<GoodsReceiptTreeNode>`json_build_object(
       'id', ${goodsReceiptItems.id},
-      'name', COALESCE(${inventoryItems.name}, ${goodsReceiptItems.inventoryItemId}::text),
+      'name', coalesce(${inventoryItems.name}, ${goodsReceiptItems.inventoryItemId}::text),
       'kind', 'item',
-      'balanced', ${itemBalanced},
-      'badge', ${itemBadge},
-      'children', CASE ${inventoryItems.tracking}
-        WHEN 'LOT' THEN ${lotsOnlyJson}
-        WHEN 'LOT_SERIAL' THEN ${lotsWithLinesJson}
-        WHEN 'SERIAL' THEN ${linesOnlyJson}
-        ELSE '[]'::json
-      END
+      'balanced', ${this.linesBalanced(itemLines)} and ${distributedQuantity} = ${acceptedQuantity},
+      'badge', concat_ws(' ', concat(trim_scale(${distributedQuantity})::text, '/', trim_scale(${acceptedQuantity})::text), ${itemUom.symbol}),
+      'children', case ${inventoryItems.tracking}
+        when ${InventoryTrackingValues.LOT} then ${this.lotNodes(itemLots, false)}
+        when ${InventoryTrackingValues.LOT_SERIAL} then ${this.lotNodes(itemLots, true)}
+        when ${InventoryTrackingValues.SERIAL} then ${this.lineNodes(itemLines)}
+        else '[]'::json
+      end
     )`;
 
     const rows = await this.db
       .select({ node })
       .from(goodsReceiptItems)
-      .leftJoin(inventoryItems, eq(goodsReceiptItems.inventoryItemId, inventoryItems.id))
-      .leftJoin(uom, eq(goodsReceiptItems.uomId, uom.id))
+      .leftJoin(inventoryItems, eq(inventoryItems.id, goodsReceiptItems.inventoryItemId))
+      .leftJoin(itemUom, eq(itemUom.id, goodsReceiptItems.uomId))
       .where(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId))
       .orderBy(asc(goodsReceiptItems.createdAt));
-
-    return rows.map((r) => r.node);
+    return rows.map((row) => row.node);
   }
 
-  async findByReceiptIdAndItemId(goodsReceiptId: string, itemId: string): Promise<GoodsReceiptItem | null> {
-    const [row] = await this.db
-      .select()
-      .from(goodsReceiptItems)
-      .where(and(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId), eq(goodsReceiptItems.id, itemId)));
-    return row ?? null;
-  }
-
-  async findByReceiptIdAndItemIdWithRefs(
-    goodsReceiptId: string,
-    itemId: string,
-  ): Promise<GoodsReceiptItemWithRefs | undefined> {
-    const result = await this.runRichSelect(
-      and(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId), eq(goodsReceiptItems.id, itemId)),
+  // Rejects counting a purchase order line twice on the same receipt
+  async assertPurchaseOrderItemNotOnReceipt(goodsReceiptId: string, purchaseOrderItemId: string): Promise<void> {
+    const isOnReceipt = await this.exists(
+      and(
+        eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId),
+        eq(goodsReceiptItems.purchaseOrderItemId, purchaseOrderItemId),
+      ) as SQL,
     );
-    return result[0];
-  }
-
-  async countByReceiptId(goodsReceiptId: string): Promise<number> {
-    const [row] = await this.db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(goodsReceiptItems)
-      .where(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId));
-    return Number(row?.count ?? 0);
-  }
-
-  async findInventoryItemIds(goodsReceiptId: string): Promise<string[]> {
-    const rows = await this.db
-      .select({ inventoryItemId: goodsReceiptItems.inventoryItemId })
-      .from(goodsReceiptItems)
-      .where(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId));
-    return rows.map((row) => row.inventoryItemId);
-  }
-
-  async findForTable(
-    goodsReceiptId: string,
-    options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
-  ): Promise<{ result: GoodsReceiptItemWithRefs[]; count: number }> {
-    const baseWhere = eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId);
-    const where = options.where ? and(baseWhere, options.where) : baseWhere;
-    const acceptedQtySql = sql<number>`COALESCE((
-      SELECT SUM(${goodsReceiptLines.quantity})
-      FROM ${goodsReceiptLines}
-      WHERE ${goodsReceiptLines.goodsReceiptItemId} = ${goodsReceiptItems.id}
-    ), 0)`.mapWith(Number);
-    const lotsCountSql = sql<number>`(
-      SELECT COUNT(*) FROM ${goodsReceiptLots}
-      WHERE ${goodsReceiptLots.goodsReceiptItemId} = ${goodsReceiptItems.id}
-    )`.mapWith(Number);
-    const linesCountSql = sql<number>`(
-      SELECT COUNT(*) FROM ${goodsReceiptLines}
-      WHERE ${goodsReceiptLines.goodsReceiptItemId} = ${goodsReceiptItems.id}
-    )`.mapWith(Number);
-    const unbalancedLinesCountSql = sql<number>`(
-      SELECT COUNT(*) FROM ${goodsReceiptLines}
-      WHERE ${goodsReceiptLines.goodsReceiptItemId} = ${goodsReceiptItems.id} AND ${goodsReceiptLines.isBalanced} = false
-    )`.mapWith(Number);
-    const { result, count } = await this.findAllAndCount<GoodsReceiptItemWithRefs>({
-      select: {
-        id: goodsReceiptItems.id,
-        organizationId: goodsReceiptItems.organizationId,
-        siteId: goodsReceiptItems.siteId,
-        goodsReceiptId: goodsReceiptItems.goodsReceiptId,
-        inventoryItemId: goodsReceiptItems.inventoryItemId,
-        orderedQty: goodsReceiptItems.orderedQty,
-        freeQty: goodsReceiptItems.freeQty,
-        totalQty: goodsReceiptItems.totalQty,
-        schemeBuyQty: goodsReceiptItems.schemeBuyQty,
-        schemeFreeQty: goodsReceiptItems.schemeFreeQty,
-        hasScheme: goodsReceiptItems.hasScheme,
-        rejectedQuantity: goodsReceiptItems.rejectedQuantity,
-        unitPrice: goodsReceiptItems.unitPrice,
-        unitCost: goodsReceiptItems.unitCost,
-        currencyCode: goodsReceiptItems.currencyCode,
-        metadata: goodsReceiptItems.metadata,
-        createdAt: goodsReceiptItems.createdAt,
-        updatedAt: goodsReceiptItems.updatedAt,
-        inventoryItemName: inventoryItems.name,
-        inventoryItemTracking: inventoryItems.tracking,
-        inventoryItemUomSymbol: uom.symbol,
-        inventoryItemAllowDecimal: uom.allowDecimal,
-        inventoryItemHasMrp: sql<boolean>`true`,
-        poItemId: purchaseOrderItems.id,
-        poOrderedQuantity: purchaseOrderItems.uomQty,
-        poReceivedQuantity: purchaseOrderItems.receivedQuantity,
-        acceptedQuantity: acceptedQtySql,
-        lotsCount: lotsCountSql,
-        linesCount: linesCountSql,
-        unbalancedLinesCount: unbalancedLinesCountSql,
-      },
-      leftJoins: [
-        { table: inventoryItems, on: eq(goodsReceiptItems.inventoryItemId, inventoryItems.id) },
-        { table: uom, on: eq(goodsReceiptItems.uomId, uom.id) },
-        { table: goodsReceipts, on: eq(goodsReceiptItems.goodsReceiptId, goodsReceipts.id) },
-        {
-          table: purchaseOrderItems,
-          on: and(
-            eq(purchaseOrderItems.purchaseOrderId, goodsReceipts.purchaseOrderId),
-            eq(purchaseOrderItems.inventoryItemId, goodsReceiptItems.inventoryItemId),
-            eq(purchaseOrderItems.uomId, goodsReceiptItems.uomId),
-          ),
-        },
-      ],
-      where,
-      orderBy: options.orderBy?.length ? options.orderBy : [asc(goodsReceiptItems.createdAt)],
-      limit: options.limit,
-      offset: options.offset,
+    if (!isOnReceipt) return;
+    throw new ConflictException({
+      label: 'Already Received',
+      detail: 'This purchase order line is already on the goods receipt. Edit its quantities instead.',
+      errors: [{ field: 'purchaseOrderItemId', message: 'Already on this receipt' }],
     });
-    return { result, count };
   }
 
-  // Finds an existing GR-item row by receipt, inventory item, and UOM for duplicate checks
-  async findByReceiptInventoryItemAndUom(
-    goodsReceiptId: string,
-    inventoryItemId: string,
-    uomId: string,
-  ): Promise<GoodsReceiptItem | undefined> {
-    const rows = await this.db
-      .select()
-      .from(goodsReceiptItems)
+  // Rejects rejecting more than was received
+  assertRejectedWithinReceived(receivedQty: number, rejectedQuantity: number): void {
+    if (rejectedQuantity <= receivedQty) return;
+    throw new BadRequestException({
+      label: 'Too Many Rejected',
+      detail: `Only ${receivedQty} were received, so no more than that can be rejected.`,
+      errors: [{ field: 'rejectedQuantity', message: 'More than received' }],
+    });
+  }
+
+  // Selects an item with its units, PO line, earlier published receipts, distribution progress and earliest expiry
+  private selection() {
+    const ownLines = eq(goodsReceiptLines.goodsReceiptItemId, goodsReceiptItems.id);
+    const ownLots = eq(goodsReceiptLots.goodsReceiptItemId, goodsReceiptItems.id);
+    const receivedOnOtherPublishedReceipts = this.db
+      .select({
+        total: sql`coalesce(sum(${otherReceiptItems.receivedQty} - ${otherReceiptItems.rejectedQuantity}), 0)`,
+      })
+      .from(otherReceiptItems)
+      .innerJoin(otherReceipts, eq(otherReceipts.id, otherReceiptItems.goodsReceiptId))
       .where(
         and(
-          eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId),
-          eq(goodsReceiptItems.inventoryItemId, inventoryItemId),
-          eq(goodsReceiptItems.uomId, uomId),
+          eq(otherReceiptItems.purchaseOrderItemId, goodsReceiptItems.purchaseOrderItemId),
+          ne(otherReceiptItems.goodsReceiptId, goodsReceiptItems.goodsReceiptId),
+          eq(otherReceipts.status, GoodsReceiptStatusValues.PUBLISHED),
         ),
-      )
+      );
+    const earliestExpiryDate = this.db
+      .select({ expiryDate: goodsReceiptLots.expiryDate })
+      .from(goodsReceiptLots)
+      .where(ownLots)
+      .orderBy(asc(goodsReceiptLots.expiryDate))
       .limit(1);
-    return rows[0] as GoodsReceiptItem | undefined;
+    const earliestExpiryLotNumber = this.db
+      .select({ lotNumber: goodsReceiptLots.lotNumber })
+      .from(goodsReceiptLots)
+      .where(ownLots)
+      .orderBy(asc(goodsReceiptLots.expiryDate))
+      .limit(1);
+
+    return {
+      ...getColumns(goodsReceiptItems),
+      inventoryItemName: inventoryItems.name,
+      inventoryItemTracking: inventoryItems.tracking,
+      uomSymbol: itemUom.symbol,
+      uomAllowDecimal: itemUom.allowDecimal,
+      primaryUomSymbol: uom.symbol,
+      receivedDate: goodsReceipts.receivedDate,
+      orderedQty: purchaseOrderItems.uomQty,
+      expectedFreeQty: purchaseOrderItems.freeQty,
+      poPrimaryUomQty: purchaseOrderItems.primaryUomQty,
+      poUnitPrice: purchaseOrderItems.unitPrice,
+      poTotalPrice: purchaseOrderItems.totalPrice,
+      poCurrencyCode: purchaseOrderItems.currencyCode,
+      poExchangeRate: purchaseOrders.exchangeRate,
+      alreadyReceivedQty: sql<number>`(${receivedOnOtherPublishedReceipts})`.mapWith(Number),
+      distributedQty: this.sumLineQuantity(ownLines).mapWith(Number),
+      lotsCount: this.db.$count(goodsReceiptLots, ownLots),
+      linesCount: this.db.$count(goodsReceiptLines, ownLines),
+      unbalancedLinesCount: this.db.$count(goodsReceiptLines, and(ownLines, eq(goodsReceiptLines.isBalanced, false))),
+      earliestExpiryDate: sql<string | null>`(${earliestExpiryDate})`.mapWith(goodsReceiptLots.expiryDate),
+      earliestExpiryLotNumber: sql<string | null>`(${earliestExpiryLotNumber})`,
+    };
   }
 
-  // Returns a minimal GR-item projection used by the publish flow
-  async findByReceiptIdForPublish(goodsReceiptId: string): Promise<
-    {
-      id: string;
-      inventoryItemId: string;
-      uomId: string;
-      rejectedQuantity: number;
-      tracking: InventoryTracking;
-      poItemId: string | null;
-      poOrderedQuantity: number | null;
-      poReceivedQuantity: number | null;
-      primaryUomUnitPrice: bigint | null;
-      orderedQty: number;
-      totalQty: number;
-    }[]
-  > {
-    const rows = await this.db
-      .select({
-        id: goodsReceiptItems.id,
-        inventoryItemId: goodsReceiptItems.inventoryItemId,
-        uomId: goodsReceiptItems.uomId,
-        rejectedQuantity: goodsReceiptItems.rejectedQuantity,
-        tracking: inventoryItems.tracking,
-        poItemId: purchaseOrderItems.id,
-        poOrderedQuantity: purchaseOrderItems.uomQty,
-        poReceivedQuantity: purchaseOrderItems.receivedQuantity,
-        primaryUomUnitPrice: goodsReceiptItems.primaryUomUnitPrice,
-        orderedQty: goodsReceiptItems.orderedQty,
-        totalQty: goodsReceiptItems.totalQty,
-      })
-      .from(goodsReceiptItems)
-      .innerJoin(inventoryItems, eq(goodsReceiptItems.inventoryItemId, inventoryItems.id))
-      .innerJoin(goodsReceipts, eq(goodsReceiptItems.goodsReceiptId, goodsReceipts.id))
-      .leftJoin(
-        purchaseOrderItems,
-        and(
-          eq(purchaseOrderItems.purchaseOrderId, goodsReceipts.purchaseOrderId),
-          eq(purchaseOrderItems.inventoryItemId, goodsReceiptItems.inventoryItemId),
-          // Match the UOM too to avoid duplicate GR-item rows when a PO repeats an item per UOM
-          eq(purchaseOrderItems.uomId, goodsReceiptItems.uomId),
-        ),
-      )
-      .where(eq(goodsReceiptItems.goodsReceiptId, goodsReceiptId))
-      .orderBy(asc(goodsReceiptItems.createdAt));
-    return rows;
+  // Joins the inventory item, the received and primary units, the receipt, and the purchase order line with its order
+  private joins() {
+    return [
+      { table: inventoryItems, on: eq(inventoryItems.id, goodsReceiptItems.inventoryItemId) },
+      { table: itemUom, on: eq(itemUom.id, goodsReceiptItems.uomId) },
+      { table: uom, on: eq(uom.id, inventoryItems.uomId) },
+      { table: goodsReceipts, on: eq(goodsReceipts.id, goodsReceiptItems.goodsReceiptId) },
+      { table: purchaseOrderItems, on: eq(purchaseOrderItems.id, goodsReceiptItems.purchaseOrderItemId) },
+      { table: purchaseOrders, on: eq(purchaseOrders.id, purchaseOrderItems.purchaseOrderId) },
+    ];
   }
 
-  private async runRichSelect(
-    where: SQL | undefined,
-    orderBy?: SQL[],
-    limit?: number,
-    offset?: number,
-  ): Promise<GoodsReceiptItemWithRefs[]> {
-    const acceptedQtySql = sql<number>`COALESCE((
-      SELECT SUM(${goodsReceiptLines.quantity})
-      FROM ${goodsReceiptLines}
-      WHERE ${goodsReceiptLines.goodsReceiptItemId} = ${goodsReceiptItems.id}
-    ), 0)`.mapWith(Number);
-    const lotsCountSql = sql<number>`(
-      SELECT COUNT(*) FROM ${goodsReceiptLots}
-      WHERE ${goodsReceiptLots.goodsReceiptItemId} = ${goodsReceiptItems.id}
-    )`.mapWith(Number);
-    const linesCountSql = sql<number>`(
-      SELECT COUNT(*) FROM ${goodsReceiptLines}
-      WHERE ${goodsReceiptLines.goodsReceiptItemId} = ${goodsReceiptItems.id}
-    )`.mapWith(Number);
-    const unbalancedLinesCountSql = sql<number>`(
-      SELECT COUNT(*) FROM ${goodsReceiptLines}
-      WHERE ${goodsReceiptLines.goodsReceiptItemId} = ${goodsReceiptItems.id} AND ${goodsReceiptLines.isBalanced} = false
-    )`.mapWith(Number);
+  // Sums the quantity of the lines matching the condition
+  private sumLineQuantity(lines: SQL) {
+    const total = this.db
+      .select({ total: sql`coalesce(sum(${goodsReceiptLines.quantity}), 0)` })
+      .from(goodsReceiptLines)
+      .where(lines);
+    return sql<number>`(${total})`;
+  }
 
-    const query = this.db
-      .select({
-        id: goodsReceiptItems.id,
-        organizationId: goodsReceiptItems.organizationId,
-        siteId: goodsReceiptItems.siteId,
-        goodsReceiptId: goodsReceiptItems.goodsReceiptId,
-        inventoryItemId: goodsReceiptItems.inventoryItemId,
-        uomId: goodsReceiptItems.uomId,
-        orderedQty: goodsReceiptItems.orderedQty,
-        freeQty: goodsReceiptItems.freeQty,
-        totalQty: goodsReceiptItems.totalQty,
-        schemeBuyQty: goodsReceiptItems.schemeBuyQty,
-        schemeFreeQty: goodsReceiptItems.schemeFreeQty,
-        hasScheme: goodsReceiptItems.hasScheme,
-        rejectedQuantity: goodsReceiptItems.rejectedQuantity,
-        unitPrice: goodsReceiptItems.unitPrice,
-        primaryUomUnitPrice: goodsReceiptItems.primaryUomUnitPrice,
-        unitCost: goodsReceiptItems.unitCost,
-        currencyCode: goodsReceiptItems.currencyCode,
-        metadata: goodsReceiptItems.metadata,
-        createdAt: goodsReceiptItems.createdAt,
-        updatedAt: goodsReceiptItems.updatedAt,
-        inventoryItemName: inventoryItems.name,
-        inventoryItemTracking: inventoryItems.tracking,
-        inventoryItemUomSymbol: uom.symbol,
-        inventoryItemAllowDecimal: uom.allowDecimal,
-        inventoryItemHasMrp: sql<boolean>`true`,
-        poItemId: purchaseOrderItems.id,
-        poOrderedQuantity: purchaseOrderItems.uomQty,
-        poReceivedQuantity: purchaseOrderItems.receivedQuantity,
-        acceptedQuantity: acceptedQtySql,
-        lotsCount: lotsCountSql,
-        linesCount: linesCountSql,
-        unbalancedLinesCount: unbalancedLinesCountSql,
-      })
-      .from(goodsReceiptItems)
-      .leftJoin(inventoryItems, eq(goodsReceiptItems.inventoryItemId, inventoryItems.id))
-      .leftJoin(uom, eq(goodsReceiptItems.uomId, uom.id))
-      .leftJoin(goodsReceipts, eq(goodsReceiptItems.goodsReceiptId, goodsReceipts.id))
-      .leftJoin(
-        purchaseOrderItems,
-        and(
-          eq(purchaseOrderItems.purchaseOrderId, goodsReceipts.purchaseOrderId),
-          eq(purchaseOrderItems.inventoryItemId, goodsReceiptItems.inventoryItemId),
-          eq(purchaseOrderItems.uomId, goodsReceiptItems.uomId),
-        ),
-      )
-      .where(where ?? sql`TRUE`)
-      .orderBy(...(orderBy?.length ? orderBy : [asc(goodsReceiptItems.createdAt)]));
+  // Whether the lines matching the condition exist and every one of them is balanced
+  private linesBalanced(lines: SQL) {
+    const unbalanced = this.db.$count(goodsReceiptLines, and(lines, eq(goodsReceiptLines.isBalanced, false)));
+    return sql`(${this.db.$count(goodsReceiptLines, lines)} > 0 and ${unbalanced} = 0)`;
+  }
 
-    const finalQuery = limit !== undefined ? query.limit(limit).offset(offset ?? 0) : query;
-    const rows = await finalQuery;
+  // Aggregates the lots matching the condition into tree nodes, with their lines below them when asked
+  private lotNodes(lots: SQL, withLines: boolean) {
+    const lotLines = eq(goodsReceiptLines.goodsReceiptLotId, goodsReceiptLots.id);
+    const children = withLines ? sql`, 'children', ${this.lineNodes(lotLines)}` : sql``;
+    const node = sql`json_build_object(
+      'id', ${goodsReceiptLots.id},
+      'name', ${goodsReceiptLots.lotNumber},
+      'kind', 'lot',
+      'balanced', ${this.linesBalanced(lotLines)},
+      'badge', trim_scale(${this.sumLineQuantity(lotLines)})::text
+      ${children}
+    )`;
+    const nodes = this.db
+      .select({ nodes: sql`coalesce(json_agg(${node} order by ${goodsReceiptLots.createdAt}), '[]'::json)` })
+      .from(goodsReceiptLots)
+      .where(lots);
+    return sql`(${nodes})`;
+  }
 
-    return rows as GoodsReceiptItemWithRefs[];
+  // Aggregates the lines matching the condition into tree nodes, badged with their serial progress
+  private lineNodes(lines: SQL) {
+    const serialCount = this.db.$count(
+      goodsReceiptLineItems,
+      eq(goodsReceiptLineItems.goodsReceiptLineId, goodsReceiptLines.id),
+    );
+    const node = sql`json_build_object(
+      'id', ${goodsReceiptLines.id},
+      'name', coalesce(${locations.name}, '—'),
+      'kind', 'line',
+      'balanced', ${goodsReceiptLines.isBalanced},
+      'badge', concat(${serialCount}::text, '/', trim_scale(${goodsReceiptLines.quantity})::text)
+    )`;
+    const nodes = this.db
+      .select({ nodes: sql`coalesce(json_agg(${node} order by ${goodsReceiptLines.createdAt}), '[]'::json)` })
+      .from(goodsReceiptLines)
+      .leftJoin(locations, eq(locations.id, goodsReceiptLines.locationId))
+      .where(lines);
+    return sql`(${nodes})`;
   }
 }

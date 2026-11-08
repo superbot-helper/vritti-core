@@ -1,24 +1,25 @@
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type UseMutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import type { GoodsReceiptLineData } from '@/schemas/goods-receipts';
-import { type UpdateGoodsReceiptLinePayload, updateGoodsReceiptLine } from '@/services/site/goods-receipts.service';
-import { GOODS_RECEIPT_ITEMS_KEY, GOODS_RECEIPT_KEY, GOODS_RECEIPT_TREE_KEY } from './keys';
+import { PURCHASE_ORDERS_KEY } from '@/hooks/site/purchase-orders/keys';
+import type { UpdateGoodsReceiptLinePayload } from '@/schemas/goods-receipts';
+import { updateGoodsReceiptLine } from '@/services/site/goods-receipts.service';
+import { GOODS_RECEIPT_KEY } from './keys';
 
+// Updates a line's location or quantity; the receipt and the purchase orders refresh
 export function useUpdateGoodsReceiptLine(
   goodsReceiptId: string,
   itemId: string,
   lineId: string,
-  options?: Omit<UseMutationOptions<GoodsReceiptLineData, AxiosError, UpdateGoodsReceiptLinePayload>, 'mutationFn'>,
+  options?: Omit<UseMutationOptions<SuccessResponse, AxiosError, UpdateGoodsReceiptLinePayload>, 'mutationFn'>,
 ) {
   const queryClient = useQueryClient();
-  return useMutation<GoodsReceiptLineData, AxiosError, UpdateGoodsReceiptLinePayload>({
+  return useMutation<SuccessResponse, AxiosError, UpdateGoodsReceiptLinePayload>({
     ...options,
     mutationFn: (data) => updateGoodsReceiptLine(goodsReceiptId, itemId, lineId, data),
     onSuccess: (...args) => {
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId), exact: true });
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_ITEMS_KEY(goodsReceiptId) });
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_TREE_KEY(goodsReceiptId) });
+      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId) });
+      queryClient.invalidateQueries({ queryKey: PURCHASE_ORDERS_KEY });
       options?.onSuccess?.(...args);
     },
   });

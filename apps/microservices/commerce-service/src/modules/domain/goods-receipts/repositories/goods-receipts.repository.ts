@@ -1,30 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, desc, eq, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, eq, exists, getColumns, notExists, or, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { BadRequestException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import {
   type GoodsReceipt,
+  GoodsReceiptStatusValues,
+  goodsReceiptItems,
+  goodsReceiptLines,
   goodsReceiptNumberSeq,
   goodsReceipts,
-  type NewGoodsReceipt,
-  type PurchaseOrderStatus,
   parties,
-  purchaseOrderItems,
   purchaseOrders,
-  type Supplier,
   suppliers,
 } from '@/db/schema';
 
-export type GoodsReceiptWithRefs = GoodsReceipt & {
+export type GoodsReceiptRow = GoodsReceipt & {
   supplierName: string | null;
-  supplierCurrencyCode: string | null;
-  poNumber: string | null;
-  poOrderDate: string | null;
+  poNumber: string;
+  poOrderDate: string;
   poExpectedBy: string | null;
-  poTotalAmount: bigint | null;
-  poCurrencyCode: string | null;
+  poTotalAmount: bigint;
+  poCurrencyCode: string;
+  poTimezone: string;
+  itemCount: number;
+  isPublishable: boolean;
 };
-
-export type GoodsReceiptTableRow = Omit<GoodsReceiptWithRefs, 'supplierCurrencyCode'>;
 
 @Injectable()
 export class GoodsReceiptsDomainRepository extends PrimaryBaseRepository<typeof goodsReceipts> {
@@ -32,6 +32,7 @@ export class GoodsReceiptsDomainRepository extends PrimaryBaseRepository<typeof 
     super(database, goodsReceipts, { sequence: goodsReceiptNumberSeq });
   }
 
+  // Generates the next sequential GR number for the current month
   async generateGrNumber(): Promise<string> {
     const now = new Date();
     const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -39,206 +40,104 @@ export class GoodsReceiptsDomainRepository extends PrimaryBaseRepository<typeof 
     return `GR-${yearMonth}-${String(nextNumber).padStart(4, '0')}`;
   }
 
-  async create(data: Omit<NewGoodsReceipt, 'grNumber'>): Promise<GoodsReceipt> {
-    const grNumber = await this.generateGrNumber();
-    return super.create({ ...data, grNumber });
+  // Loads a receipt with its supplier, purchase order and publish readiness, throwing when it is out of reach
+  async findDetailOrThrow(id: string): Promise<GoodsReceiptRow> {
+    const row = await this.findById<GoodsReceiptRow>(id, { select: this.selection(), leftJoins: this.joins() });
+    if (!row) throw new NotFoundException('Goods receipt not found.');
+    return row;
   }
 
-  async findForTable(options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number }): Promise<{
-    result: GoodsReceiptTableRow[];
-    count: number;
-  }> {
-    return this.findAllAndCount({
-      select: {
-        id: goodsReceipts.id,
-        organizationId: goodsReceipts.organizationId,
-        siteId: goodsReceipts.siteId,
-        supplierId: goodsReceipts.supplierId,
-        grNumber: goodsReceipts.grNumber,
-        status: goodsReceipts.status,
-        purchaseOrderId: goodsReceipts.purchaseOrderId,
-        exchangeRate: goodsReceipts.exchangeRate,
-        receivedDate: goodsReceipts.receivedDate,
-        notes: goodsReceipts.notes,
-        metadata: goodsReceipts.metadata,
-        publishedAt: goodsReceipts.publishedAt,
-        createdAt: goodsReceipts.createdAt,
-        supplierName: parties.displayName,
-        poNumber: purchaseOrders.poNumber,
-        poOrderDate: purchaseOrders.orderDate,
-        poExpectedBy: purchaseOrders.expectedBy,
-        poTotalAmount: purchaseOrders.totalAmount,
-        poCurrencyCode: purchaseOrders.currencyCode,
-      },
-      leftJoins: [
-        { table: suppliers, on: eq(goodsReceipts.supplierId, suppliers.id) },
-        { table: parties, on: eq(suppliers.partyId, parties.id) },
-        { table: purchaseOrders, on: eq(goodsReceipts.purchaseOrderId, purchaseOrders.id) },
-      ],
-      where: options.where,
-      orderBy: options.orderBy?.length ? options.orderBy : [desc(goodsReceipts.createdAt)],
-      limit: options.limit,
-      offset: options.offset,
+  // Loads a receipt that is still a draft — the only state whose items, lots and lines may change
+  async findDraftOrThrow(id: string, label: string): Promise<GoodsReceiptRow> {
+    const receipt = await this.findDetailOrThrow(id);
+    if (receipt.status === GoodsReceiptStatusValues.DRAFT) return receipt;
+    throw new BadRequestException({
+      label,
+      detail: `"${receipt.grNumber}" is published, so it can no longer change.`,
     });
   }
 
-  async findForTableByPoId(
-    poId: string,
-    options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
-  ): Promise<{
-    result: GoodsReceiptTableRow[];
-    count: number;
-  }> {
-    return this.findAllAndCount({
-      select: {
-        id: goodsReceipts.id,
-        organizationId: goodsReceipts.organizationId,
-        siteId: goodsReceipts.siteId,
-        supplierId: goodsReceipts.supplierId,
-        grNumber: goodsReceipts.grNumber,
-        status: goodsReceipts.status,
-        purchaseOrderId: goodsReceipts.purchaseOrderId,
-        exchangeRate: goodsReceipts.exchangeRate,
-        receivedDate: goodsReceipts.receivedDate,
-        notes: goodsReceipts.notes,
-        metadata: goodsReceipts.metadata,
-        publishedAt: goodsReceipts.publishedAt,
-        createdAt: goodsReceipts.createdAt,
-        supplierName: parties.displayName,
-        poNumber: purchaseOrders.poNumber,
-        poOrderDate: purchaseOrders.orderDate,
-        poExpectedBy: purchaseOrders.expectedBy,
-        poTotalAmount: purchaseOrders.totalAmount,
-        poCurrencyCode: purchaseOrders.currencyCode,
-      },
-      leftJoins: [
-        { table: suppliers, on: eq(goodsReceipts.supplierId, suppliers.id) },
-        { table: parties, on: eq(suppliers.partyId, parties.id) },
-        { table: purchaseOrders, on: eq(goodsReceipts.purchaseOrderId, purchaseOrders.id) },
-      ],
-      where: and(eq(goodsReceipts.purchaseOrderId, poId), options.where),
-      orderBy: options.orderBy?.length ? options.orderBy : [desc(goodsReceipts.createdAt)],
-      limit: options.limit,
-      offset: options.offset,
+  // Returns one page of receipts with their supplier, purchase order and publish readiness
+  async findForTable(options: {
+    where?: SQL;
+    orderBy: SQL[];
+    limit: number;
+    offset: number;
+  }): Promise<{ result: GoodsReceiptRow[]; count: number }> {
+    return this.findAllAndCount<GoodsReceiptRow>({ select: this.selection(), leftJoins: this.joins(), ...options });
+  }
+
+  // Returns up to limit + 1 receipts after a cursor, for the mobile feed
+  async findKeysetForFeed(options: {
+    where?: SQL;
+    orderBy: SQL[];
+    limit: number;
+  }): Promise<{ rows: GoodsReceiptRow[]; hasMore: boolean }> {
+    return this.findKeyset<GoodsReceiptRow>({ select: this.selection(), leftJoins: this.joins(), ...options });
+  }
+
+  // Rejects publishing a receipt until every item's accepted quantity is fully distributed to balanced lines
+  assertPublishable(receipt: GoodsReceiptRow): void {
+    if (receipt.isPublishable) return;
+    throw new BadRequestException({
+      label: 'Not Ready to Publish',
+      detail:
+        receipt.itemCount === 0
+          ? `Add at least one item to "${receipt.grNumber}" before publishing it.`
+          : 'Distribute the accepted quantity of every item to lines, and finish their serials, before publishing.',
     });
   }
 
-  // Returns up to limit+1 GR rows (keyset) joined with supplier + PO display fields, for the mobile feed.
-  async findKeysetForFeed(options: { where?: SQL; orderBy: SQL[]; limit: number }): Promise<{
-    rows: GoodsReceiptWithRefs[];
-    hasMore: boolean;
-  }> {
-    return this.findKeyset<GoodsReceiptWithRefs>({
-      select: {
-        ...goodsReceipts,
-        supplierName: parties.displayName,
-        // The receipt's currency: its PO's when it has one, otherwise the supplier's default
-        supplierCurrencyCode: sql<string>`COALESCE(${purchaseOrders.currencyCode}, ${suppliers.currencyCode})`,
-        poNumber: purchaseOrders.poNumber,
-        poOrderDate: purchaseOrders.orderDate,
-        poExpectedBy: purchaseOrders.expectedBy,
-        poTotalAmount: purchaseOrders.totalAmount,
-        poCurrencyCode: purchaseOrders.currencyCode,
-      },
-      leftJoins: [
-        { table: suppliers, on: eq(goodsReceipts.supplierId, suppliers.id) },
-        { table: parties, on: eq(suppliers.partyId, parties.id) },
-        { table: purchaseOrders, on: eq(goodsReceipts.purchaseOrderId, purchaseOrders.id) },
-      ],
-      where: options.where,
-      orderBy: options.orderBy,
-      limit: options.limit,
-    });
-  }
-
-  async findSupplierById(id: string): Promise<(Supplier & { supplierName: string | null }) | null> {
-    const [row] = await this.db
-      .select({ supplier: suppliers, supplierName: parties.displayName })
-      .from(suppliers)
-      .leftJoin(parties, eq(suppliers.partyId, parties.id))
-      .where(eq(suppliers.id, id))
-      .limit(1);
-    return row ? { ...row.supplier, supplierName: row.supplierName ?? null } : null;
-  }
-
-  async findByIdWithRefs(id: string): Promise<GoodsReceiptWithRefs | null> {
-    const [row] = await this.db
-      .select({
-        id: goodsReceipts.id,
-        organizationId: goodsReceipts.organizationId,
-        siteId: goodsReceipts.siteId,
-        supplierId: goodsReceipts.supplierId,
-        grNumber: goodsReceipts.grNumber,
-        status: goodsReceipts.status,
-        purchaseOrderId: goodsReceipts.purchaseOrderId,
-        exchangeRate: goodsReceipts.exchangeRate,
-        receivedDate: goodsReceipts.receivedDate,
-        notes: goodsReceipts.notes,
-        metadata: goodsReceipts.metadata,
-        publishedAt: goodsReceipts.publishedAt,
-        createdAt: goodsReceipts.createdAt,
-        supplierName: parties.displayName,
-        // The receipt's currency: its PO's when it has one, otherwise the supplier's default
-        supplierCurrencyCode: sql<string>`COALESCE(${purchaseOrders.currencyCode}, ${suppliers.currencyCode})`,
-        poNumber: purchaseOrders.poNumber,
-        poOrderDate: purchaseOrders.orderDate,
-        poExpectedBy: purchaseOrders.expectedBy,
-        poTotalAmount: purchaseOrders.totalAmount,
-        poCurrencyCode: purchaseOrders.currencyCode,
-      })
-      .from(goodsReceipts)
-      .leftJoin(suppliers, eq(goodsReceipts.supplierId, suppliers.id))
-      .leftJoin(parties, eq(suppliers.partyId, parties.id))
-      .leftJoin(purchaseOrders, eq(goodsReceipts.purchaseOrderId, purchaseOrders.id))
-      .where(eq(goodsReceipts.id, id))
-      .limit(1);
-    return row ?? null;
-  }
-
-  async updatePoItemReceivedQty(poItemId: string, addQty: number): Promise<void> {
-    await this.db
-      .update(purchaseOrderItems)
-      .set({
-        receivedQuantity: sql`${purchaseOrderItems.receivedQuantity} + ${addQty}`,
-      })
-      .where(eq(purchaseOrderItems.id, poItemId));
-  }
-
-  async getPoTotals(poId: string): Promise<{ uomQty: number; receivedQuantity: number }> {
-    const [row] = await this.db
-      .select({
-        uomQty: sql<string>`COALESCE(SUM(${purchaseOrderItems.uomQty}), 0)`,
-        receivedQuantity: sql<string>`COALESCE(SUM(${purchaseOrderItems.receivedQuantity}), 0)`,
-      })
-      .from(purchaseOrderItems)
-      .where(eq(purchaseOrderItems.purchaseOrderId, poId));
+  // Selects a receipt with its supplier name, purchase order, item count and whether it is ready to publish
+  private selection() {
+    const ownItems = eq(goodsReceiptItems.goodsReceiptId, goodsReceipts.id);
+    const itemLines = eq(goodsReceiptLines.goodsReceiptItemId, goodsReceiptItems.id);
+    const distributedQuantity = this.db
+      .select({ total: sql`coalesce(sum(${goodsReceiptLines.quantity}), 0)` })
+      .from(goodsReceiptLines)
+      .where(itemLines);
+    const unbalancedLine = this.db
+      .select({ id: goodsReceiptLines.id })
+      .from(goodsReceiptLines)
+      .where(and(itemLines, eq(goodsReceiptLines.isBalanced, false)));
+    const undistributedItem = this.db
+      .select({ id: goodsReceiptItems.id })
+      .from(goodsReceiptItems)
+      .where(
+        and(
+          ownItems,
+          or(
+            sql`(${distributedQuantity}) <> ${goodsReceiptItems.receivedQty} - ${goodsReceiptItems.rejectedQuantity}`,
+            exists(unbalancedLine),
+          ),
+        ),
+      );
+    const anyItem = this.db.select({ id: goodsReceiptItems.id }).from(goodsReceiptItems).where(ownItems);
 
     return {
-      uomQty: Number(row?.uomQty ?? 0),
-      receivedQuantity: Number(row?.receivedQuantity ?? 0),
+      ...getColumns(goodsReceipts),
+      supplierName: parties.displayName,
+      poNumber: purchaseOrders.poNumber,
+      poOrderDate: purchaseOrders.orderDate,
+      poExpectedBy: purchaseOrders.expectedBy,
+      poTotalAmount: purchaseOrders.totalAmount,
+      poCurrencyCode: purchaseOrders.currencyCode,
+      poTimezone: purchaseOrders.timezone,
+      itemCount: this.db.$count(goodsReceiptItems, ownItems),
+      isPublishable: sql<boolean>`${and(
+        eq(goodsReceipts.status, GoodsReceiptStatusValues.DRAFT),
+        exists(anyItem),
+        notExists(undistributedItem),
+      )}`,
     };
   }
 
-  async updatePoStatus(poId: string, status: PurchaseOrderStatus): Promise<void> {
-    await this.db.update(purchaseOrders).set({ status }).where(eq(purchaseOrders.id, poId));
-  }
-
-  async existsByPoId(poId: string): Promise<boolean> {
-    const [row] = await this.db
-      .select({ exists: sql<boolean>`true` })
-      .from(goodsReceipts)
-      .where(eq(goodsReceipts.purchaseOrderId, poId))
-      .limit(1);
-    return !!row;
-  }
-
-  async updateStatus(id: string, status: GoodsReceipt['status'], publishedAt?: Date): Promise<void> {
-    await this.db
-      .update(goodsReceipts)
-      .set({
-        status,
-        ...(publishedAt ? { publishedAt } : {}),
-      })
-      .where(eq(goodsReceipts.id, id));
+  // Joins the supplier with its party, and the purchase order
+  private joins() {
+    return [
+      { table: suppliers, on: eq(suppliers.id, goodsReceipts.supplierId) },
+      { table: parties, on: eq(parties.id, suppliers.partyId) },
+      { table: purchaseOrders, on: eq(purchaseOrders.id, goodsReceipts.purchaseOrderId) },
+    ];
   }
 }

@@ -1,20 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsNumber, IsOptional, Min } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNumber, IsPositive } from 'class-validator';
 
 export class ChangePurchaseOrderExchangeRateDto {
-  @ApiProperty({
-    description: 'Exchange rate policy. FIXED locks the rate; VARIABLE clears it (resolved at GR/invoice).',
-    enum: ['FIXED', 'VARIABLE'],
-  })
-  @IsIn(['FIXED', 'VARIABLE'])
-  exchangeRateType: 'FIXED' | 'VARIABLE';
-
-  @ApiPropertyOptional({
-    description: 'Exchange rate from supplier currency to site currency. Required when FIXED.',
-    example: 83.5,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  exchangeRate?: number | null;
+  @ApiProperty({ description: "1 unit of the PO currency in the legal entity's currency", example: 83.5 })
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @IsPositive()
+  exchangeRate: number;
 }

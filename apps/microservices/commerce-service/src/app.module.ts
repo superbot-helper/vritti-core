@@ -14,10 +14,12 @@ import { LeCatalogChannelsModule } from './modules/legal-entity/catalog-channels
 import { LeCatalogsModule } from './modules/legal-entity/catalogs/catalogs.module';
 import { LeCostCategoriesModule } from './modules/legal-entity/cost-categories/cost-categories.module';
 import { LeDimensionTemplatesModule } from './modules/legal-entity/dimension-templates/dimension-templates.module';
+import { LeGoodsReceiptsModule } from './modules/legal-entity/goods-receipts/goods-receipts.module';
 import { LeInventoryItemsModule } from './modules/legal-entity/inventory-items/inventory-items.module';
 import { LeOfferingsModule } from './modules/legal-entity/offerings/offerings.module';
+import { LePurchaseOrdersModule } from './modules/legal-entity/purchase-orders/purchase-orders.module';
+import { LeSupplierInvoicesModule } from './modules/legal-entity/supplier-invoices/supplier-invoices.module';
 import { LeSuppliersModule } from './modules/legal-entity/suppliers/suppliers.module';
-import { LeTaxGroupsModule } from './modules/legal-entity/tax-groups/tax-groups.module';
 import { LeTaxRegistrationsModule } from './modules/legal-entity/tax-registrations/tax-registrations.module';
 import { OrgAttributeTemplatesModule } from './modules/organization/attribute-templates/attribute-templates.module';
 import { OrgCatalogChannelsModule } from './modules/organization/catalog-channels/catalog-channels.module';
@@ -32,6 +34,7 @@ import { OrgPaymentTermsModule } from './modules/organization/payment-terms/paym
 import { OrgPeopleModule } from './modules/organization/people/people.module';
 import { OrgTaxClassesModule } from './modules/organization/tax-classes/tax-classes.module';
 import { OrgTaxComponentsModule } from './modules/organization/tax-components/tax-components.module';
+import { OrgTaxGroupsModule } from './modules/organization/tax-groups/tax-groups.module';
 import { OrgTaxJurisdictionsModule } from './modules/organization/tax-jurisdictions/tax-jurisdictions.module';
 import { OrgUomModule } from './modules/organization/uom/uom.module';
 import { OrgWishlistModule } from './modules/organization/wishlist/wishlist.module';
@@ -40,17 +43,14 @@ import { SiteAttributeTemplatesModule } from './modules/site/attribute-templates
 import { SiteCartsModule } from './modules/site/carts/carts.module';
 import { SiteCatalogChannelsModule } from './modules/site/catalog-channels/catalog-channels.module';
 import { SiteCatalogsModule } from './modules/site/catalogs/catalogs.module';
-import { SiteCreditNotesModule } from './modules/site/credit-notes/credit-notes.module';
 import { SiteCustomersModule } from './modules/site/customers/customers.module';
 import { SiteDimensionTemplatesModule } from './modules/site/dimension-templates/dimension-templates.module';
 import { SiteGoodsReceiptsModule } from './modules/site/goods-receipts/goods-receipts.module';
 import { SiteInventoryItemsModule } from './modules/site/inventory-items/inventory-items.module';
-import { SiteInvoicesModule } from './modules/site/invoices/invoices.module';
 import { SiteLocationsModule } from './modules/site/locations/locations.module';
 import { SiteLocationQuantsModule } from './modules/site/locations/quants/location-quants.module';
 import { SiteOfferingsModule } from './modules/site/offerings/offerings.module';
 import { SiteOrdersModule } from './modules/site/orders/orders.module';
-import { SitePaymentsModule } from './modules/site/payments/payments.module';
 import { SitePosTerminalsModule } from './modules/site/pos-terminals/pos-terminals.module';
 import { SitePurchaseOrdersModule } from './modules/site/purchase-orders/purchase-orders.module';
 import { SiteStockAdjustmentsModule } from './modules/site/stock-adjustments/stock-adjustments.module';
@@ -130,6 +130,7 @@ import { SiteGroupInventoryItemsModule } from './modules/site-group/inventory-it
     OrgPaymentTermsModule,
     OrgTaxClassesModule,
     OrgTaxComponentsModule,
+    OrgTaxGroupsModule,
     OrgTaxJurisdictionsModule,
     OrgUomModule,
     OrgCatalogsModule,
@@ -144,9 +145,11 @@ import { SiteGroupInventoryItemsModule } from './modules/site-group/inventory-it
     OrgOfferingsModule,
     LeCostCategoriesModule,
     LeInventoryItemsModule,
-    LeTaxGroupsModule,
     LeTaxRegistrationsModule,
     LeSuppliersModule,
+    LeSupplierInvoicesModule,
+    LePurchaseOrdersModule,
+    LeGoodsReceiptsModule,
     LeAttributeTemplatesModule,
     LeDimensionTemplatesModule,
     LeOfferingsModule,
@@ -161,10 +164,7 @@ import { SiteGroupInventoryItemsModule } from './modules/site-group/inventory-it
     SiteLocationQuantsModule,
     SiteStockAdjustmentsModule,
     SiteStockTransfersModule,
-    SiteInvoicesModule,
-    SitePaymentsModule,
     SitePosTerminalsModule,
-    SiteCreditNotesModule,
     SiteCustomersModule,
     SiteOrdersModule,
     SiteSuppliersModule,

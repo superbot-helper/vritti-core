@@ -1,24 +1,24 @@
-import { GoodsReceiptsDomainService } from '@domain/goods-receipts/services/goods-receipts.service';
 import { InventoryItemSitesDomainService } from '@domain/inventory-item-sites/services/inventory-item-sites.service';
-import type { PurchaseOrderItemDto } from '@domain/purchase-order-items/dto/entity/purchase-order-item.dto';
 import type { AddPurchaseOrderItemDto } from '@domain/purchase-order-items/dto/request/add-purchase-order-item.dto';
 import type { UpdatePurchaseOrderItemDto } from '@domain/purchase-order-items/dto/request/update-purchase-order-item.dto';
 import { PurchaseOrderItemsDomainRepository } from '@domain/purchase-order-items/repositories/purchase-order-items.repository';
 import {
-  type PurchaseOrderContext,
   PurchaseOrderItemsDomainService,
+  type PurchaseOrderLinesContext,
 } from '@domain/purchase-order-items/services/purchase-order-items.service';
 import type { PurchaseOrderDto } from '@domain/purchase-orders/dto/entity/purchase-order.dto';
-import { PurchaseOrderDto as PurchaseOrderDtoClass } from '@domain/purchase-orders/dto/entity/purchase-order.dto';
-import { PurchaseOrdersDomainRepository } from '@domain/purchase-orders/repositories/purchase-orders.repository';
+import {
+  type PurchaseOrderRow,
+  PurchaseOrdersDomainRepository,
+} from '@domain/purchase-orders/repositories/purchase-orders.repository';
 import { PurchaseOrdersDomainService } from '@domain/purchase-orders/services/purchase-orders.service';
 import { SupplierItemPricesDomainRepository } from '@domain/supplier-item-prices/repositories/supplier-item-prices.repository';
 import { SupplierItemsDomainRepository } from '@domain/supplier-items/repositories/supplier-items.repository';
+import { SuppliersDomainRepository } from '@domain/suppliers/repositories/suppliers.repository';
 import { UomConversionsDomainService } from '@domain/uom-conversions/services/uom-conversions.service';
 import { Injectable, Logger } from '@nestjs/common';
-import type { TableViewState } from '@vritti/api-sdk/data-table';
 import { PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { BadRequestException, NotFoundException, ValidationException } from '@vritti/api-sdk/exceptions';
+import { BadRequestException, ValidationException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 
 @Injectable()
@@ -26,61 +26,34 @@ export class PurchaseOrdersItemsService {
   private readonly logger = new Logger(PurchaseOrdersItemsService.name);
 
   constructor(
+    private readonly database: PrimaryDatabaseService,
+    private readonly purchaseOrdersService: PurchaseOrdersDomainService,
+    private readonly purchaseOrdersRepository: PurchaseOrdersDomainRepository,
     private readonly itemsService: PurchaseOrderItemsDomainService,
     private readonly itemsRepository: PurchaseOrderItemsDomainRepository,
-    private readonly repository: PurchaseOrdersDomainRepository,
-    private readonly purchaseOrdersService: PurchaseOrdersDomainService,
+    private readonly suppliersRepository: SuppliersDomainRepository,
     private readonly supplierItemsRepository: SupplierItemsDomainRepository,
     private readonly supplierItemPricesRepository: SupplierItemPricesDomainRepository,
     private readonly uomConversionsService: UomConversionsDomainService,
-    private readonly database: PrimaryDatabaseService,
-    private readonly goodsReceiptsService: GoodsReceiptsDomainService,
     private readonly inventoryItemSitesService: InventoryItemSitesDomainService,
   ) {}
 
-  async findItems(poId: string): Promise<PurchaseOrderItemDto[]> {
-    await this.getPurchaseOrderContext(poId);
-    return this.itemsService.findByPoId(poId);
-  }
-
-  async findItemIds(poId: string): Promise<string[]> {
-    const po = await this.repository.findByIdWithSupplierName(poId);
-    if (!po) throw new NotFoundException('Purchase order not found.');
-    return this.itemsService.findIdsByPoId(poId);
-  }
-
-  async findItemsForTable(
-    poId: string,
-    state: TableViewState,
-  ): Promise<{ result: PurchaseOrderItemDto[]; count: number }> {
-    await this.getPurchaseOrderContext(poId);
-    return this.itemsService.findForTable(poId, state);
-  }
-
-  async addItem(poId: string, data: AddPurchaseOrderItemDto): Promise<CreateResponseDto<PurchaseOrderDto>> {
-    const po = await this.getPurchaseOrderContext(poId);
-    await this.assertNoGoodsReceipt(poId);
-
-    const supplierItem = await this.supplierItemsRepository.findById(data.supplierItemId);
-    if (!supplierItem) {
+  // Orders a supplier item set up at the PO's site, its scheme defaulting to the site price, and enables it there
+  async addItem(dto: AddPurchaseOrderItemDto): Promise<CreateResponseDto<PurchaseOrderDto>> {
+    const po = await this.purchaseOrdersRepository.findDetailOrThrow(dto.purchaseOrderId);
+    const supplierItem = await this.supplierItemsRepository.findById(dto.supplierItemId);
+    if (!supplierItem || supplierItem.supplierId !== po.supplierId) {
       throw new ValidationException({
-        detail: 'Supplier item not found.',
-        errors: [{ field: 'supplierItemId', message: 'Supplier item not found.' }],
+        label: 'Unknown Supplier Item',
+        detail: "The item is not one of the purchase order supplier's items.",
+        errors: [{ field: 'supplierItemId', message: "Not this supplier's item" }],
       });
     }
-
-    if (supplierItem.supplierId !== po.supplierId) {
-      throw new ValidationException({
-        detail: 'This supplier item does not belong to the purchase order supplier.',
-        errors: [{ field: 'supplierItemId', message: 'Supplier mismatch.' }],
-      });
-    }
-
     const supplierSiteItem = await this.supplierItemsRepository.findSiteItem(supplierItem.id, po.siteId);
     if (!supplierSiteItem) {
       throw new BadRequestException({
         label: 'Item Not At Site',
-        detail: 'This supplier item is not set up at this site.',
+        detail: "This supplier item is not set up at the purchase order's site.",
         errors: [{ field: 'supplierItemId', message: 'Not set up at this site' }],
       });
     }
@@ -88,121 +61,86 @@ export class PurchaseOrdersItemsService {
     const primaryUomQty = await this.uomConversionsService.toPrimaryUomQuantity(
       supplierItem.inventoryItemId,
       supplierItem.uomId,
-      data.uomQty,
+      dto.uomQty,
     );
-
-    // Scheme override from the form, falling back to the site's price in force on the order date.
     const price = await this.supplierItemPricesRepository.resolvePrice(supplierItem.id, po.siteId, po.orderDate);
-    const scheme = {
-      buyQty: data.schemeBuyQty ?? price?.schemeBuyQty ?? null,
-      freeQty: data.schemeFreeQty ?? price?.schemeFreeQty ?? null,
-      hasScheme: data.hasScheme ?? (price?.schemeBuyQty != null && price?.schemeFreeQty != null),
-    };
+    const supplier = await this.suppliersRepository.findByIdOrThrow(po.supplierId);
 
-    const supplierCurrencies = await this.supplierCurrencies(po.supplierId);
     await this.database.runInTransaction(async () => {
-      const priced = await this.withConversionRate(po, data.unitPrice.currency, data.conversionRate);
-      await this.itemsService.addItem(
-        priced,
-        data,
-        supplierItem.inventoryItemId,
-        supplierItem.uomId,
+      const pricedPo = await this.withConversionRate(po, dto.unitPrice.currency, dto.conversionRate);
+      await this.itemsService.addItem(pricedPo, dto, {
+        inventoryItemId: supplierItem.inventoryItemId,
+        uomId: supplierItem.uomId,
         primaryUomQty,
-        scheme,
-        supplierCurrencies,
-      );
+        scheme: {
+          buyQty: dto.schemeBuyQty ?? price?.schemeBuyQty ?? null,
+          freeQty: dto.schemeFreeQty ?? price?.schemeFreeQty ?? null,
+          hasScheme: dto.hasScheme ?? (price?.schemeBuyQty != null && price?.schemeFreeQty != null),
+        },
+        supplierCurrencies: supplier.currencyCodes,
+      });
       await this.inventoryItemSitesService.ensureEnabled(po.siteId, [supplierItem.inventoryItemId]);
-      await this.repository.syncTotalAmount(poId);
+      await this.purchaseOrdersRepository.syncTotalAmount(po.id);
     });
 
-    this.logger.log(`Added PO item: ${po.poNumber} (${poId})`);
+    this.logger.log(`purchaseOrders.addItem — PO: ${po.poNumber}, supplierItem: ${supplierItem.id}`);
     return {
       success: true,
       message: `Line item added to purchase order "${po.poNumber}".`,
-      data: PurchaseOrderDtoClass.from(po, po.supplierName),
+      data: await this.purchaseOrdersService.findById(po.id),
     };
   }
 
-  async updateItem(poId: string, itemId: string, data: UpdatePurchaseOrderItemDto): Promise<SuccessResponseDto> {
-    const po = await this.getPurchaseOrderContext(poId);
-    await this.assertNoGoodsReceipt(poId);
+  // Changes a line's item, quantity, price or scheme and syncs the PO total
+  async updateItem(dto: UpdatePurchaseOrderItemDto): Promise<SuccessResponseDto> {
+    const po = await this.purchaseOrdersRepository.findDetailOrThrow(dto.purchaseOrderId);
+    const item = await this.itemsRepository.findOnPurchaseOrderOrThrow(po.id, dto.itemId);
+    const inventoryItemId = dto.inventoryItemId ?? item.inventoryItemId;
+    const primaryUomQty = await this.uomConversionsService.toPrimaryUomQuantity(
+      inventoryItemId,
+      item.uomId,
+      dto.uomQty ?? item.uomQty,
+    );
+    const supplier = await this.suppliersRepository.findByIdOrThrow(po.supplierId);
 
-    const existingItem = await this.itemsRepository.findItemById(poId, itemId);
-    if (!existingItem) throw new NotFoundException('Purchase order line item not found.');
-
-    const inventoryItemId = data.inventoryItemId ?? existingItem.inventoryItemId;
-    const uomId = existingItem.uomId;
-    const orderedUomQty = data.uomQty ?? existingItem.uomQty;
-
-    // Recompute the primary-UOM quantity for the current item, uom, and qty
-    const primaryUomQty = await this.uomConversionsService.toPrimaryUomQuantity(inventoryItemId, uomId, orderedUomQty);
-
-    // Scheme override from the form, falling back to the line's existing scheme.
-    const scheme = {
-      buyQty: data.schemeBuyQty ?? existingItem.schemeBuyQty ?? null,
-      freeQty: data.schemeFreeQty ?? existingItem.schemeFreeQty ?? null,
-      hasScheme: data.hasScheme ?? existingItem.hasScheme ?? false,
-    };
-
-    const supplierCurrencies = await this.supplierCurrencies(po.supplierId);
-    await this.database.runInTransaction(async () => {
-      const priced = data.unitPrice
-        ? await this.withConversionRate(po, data.unitPrice.currency, data.conversionRate)
+    return this.database.runInTransaction(async () => {
+      const pricedPo = dto.unitPrice
+        ? await this.withConversionRate(po, dto.unitPrice.currency, dto.conversionRate)
         : po;
-      await this.itemsService.updateItem(priced, itemId, data, primaryUomQty, scheme, supplierCurrencies);
-      await this.repository.syncTotalAmount(poId);
+      const result = await this.itemsService.updateItem(pricedPo, dto, {
+        primaryUomQty,
+        scheme: {
+          buyQty: dto.schemeBuyQty ?? item.schemeBuyQty,
+          freeQty: dto.schemeFreeQty ?? item.schemeFreeQty,
+          hasScheme: dto.hasScheme ?? item.hasScheme,
+        },
+        supplierCurrencies: supplier.currencyCodes,
+      });
+      await this.purchaseOrdersRepository.syncTotalAmount(po.id);
+      return result;
     });
-
-    this.logger.log(`Updated PO item: ${po.poNumber} (${itemId})`);
-    return { success: true, message: `Line item updated for purchase order "${po.poNumber}".` };
   }
 
-  async removeItem(poId: string, itemId: string): Promise<SuccessResponseDto> {
-    const po = await this.getPurchaseOrderContext(poId);
-    await this.assertNoGoodsReceipt(poId);
-
-    await this.database.runInTransaction(async () => {
-      await this.itemsService.removeItem(po, itemId);
-      await this.repository.syncTotalAmount(poId);
+  // Removes a line and syncs the PO total
+  async removeItem(purchaseOrderId: string, itemId: string): Promise<SuccessResponseDto> {
+    const po = await this.purchaseOrdersRepository.findDetailOrThrow(purchaseOrderId);
+    return this.database.runInTransaction(async () => {
+      const result = await this.itemsService.removeItem(po, itemId);
+      await this.purchaseOrdersRepository.syncTotalAmount(po.id);
+      return result;
     });
-
-    this.logger.log(`Removed PO item: ${po.poNumber} (${itemId})`);
-    return { success: true, message: `Line item removed from purchase order "${po.poNumber}".` };
   }
 
-  // Every currency the PO's supplier trades in — what a line's price may be quoted in
-  private async supplierCurrencies(supplierId: string): Promise<string[]> {
-    const supplier = await this.supplierItemsRepository.findSupplierById(supplierId);
-    if (!supplier) throw new NotFoundException('Supplier not found.');
-    return supplier.currencyCodes;
-  }
-
-  // Applies a rate sent with a line for the currency it is quoted in — stored on the PO and re-converting the PO's
-  // other lines in that currency — and returns the PO as the line should be priced against
+  // Stores a rate sent with a line for its quoted currency, converting the PO's other lines in it, and returns the PO
   private async withConversionRate(
-    po: PurchaseOrderContext,
+    po: PurchaseOrderRow,
     currencyCode: string,
     rate: number | undefined,
-  ): Promise<PurchaseOrderContext> {
-    if (rate == null || currencyCode === po.currencyCode) return po;
-    const stored = await this.purchaseOrdersService.setConversionRate(po.id, currencyCode, rate);
-    const updated = { ...po, conversionRates: { ...po.conversionRates, [currencyCode]: stored } };
-    await this.itemsService.repriceSourceCurrency(updated, currencyCode, stored);
-    return updated;
-  }
-
-  private async getPurchaseOrderContext(poId: string) {
-    const po = await this.repository.findByIdWithSupplierName(poId);
-    if (!po) throw new NotFoundException('Purchase order not found.');
-    return po;
-  }
-
-  private async assertNoGoodsReceipt(poId: string): Promise<void> {
-    if (await this.goodsReceiptsService.hasGoodsReceiptForPo(poId)) {
-      throw new BadRequestException({
-        label: 'Cannot Edit Line Items',
-        detail: 'A goods receipt exists for this purchase order, so its line items can no longer be edited.',
-      });
-    }
+  ): Promise<PurchaseOrderLinesContext> {
+    if (rate === undefined || currencyCode === po.currencyCode) return po;
+    const stored = await this.purchaseOrdersService.setConversionRate(po, currencyCode, rate);
+    const pricedPo = { ...po, conversionRates: { ...po.conversionRates, [currencyCode]: stored } };
+    await this.itemsService.repriceSourceCurrency(pricedPo, currencyCode, stored);
+    return pricedPo;
   }
 }

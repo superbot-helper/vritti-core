@@ -1,63 +1,41 @@
-import Decimal from '@vritti/api-sdk/decimal';
 import { CurrencyAmountDto } from '@vritti/api-sdk/money';
-import type { GoodsReceiptItemWithRefs } from '../../repositories/goods-receipt-items.repository';
+import type { GoodsReceiptItemCost } from '../../services/goods-receipt-items.service';
 
-export class GoodsReceiptItemsCostRowDto {
+export class GoodsReceiptItemCostDto {
   id: string;
   inventoryItemId: string;
   inventoryItemName: string;
   uomSymbol: string;
-  orderedQty: number;
-  freeQty: number;
-  totalQty: number;
-  unitPrice: CurrencyAmountDto | null;
-  unitCost: CurrencyAmountDto | null;
-  lineTotal: CurrencyAmountDto | null;
+  primaryUomSymbol: string | null;
+  acceptedQty: number;
+  acceptedPrimaryQty: number;
+  unitCost: CurrencyAmountDto;
+  value: CurrencyAmountDto;
 }
 
 export class GoodsReceiptItemsCostDto {
-  rows: GoodsReceiptItemsCostRowDto[];
-  currencyCode: string | null;
-  grandTotal: CurrencyAmountDto | null;
+  rows: GoodsReceiptItemCostDto[];
+  currencyCode: string;
+  grandTotal: CurrencyAmountDto;
 
-  // Line total = unitPrice (minor) × orderedQty (the paid quantity; free units are not billed), rounded once to minor
-  // units; grand total sums the line totals.
-  static from(items: GoodsReceiptItemWithRefs[]): GoodsReceiptItemsCostDto {
+  static from(costs: GoodsReceiptItemCost[], leCurrencyCode: string): GoodsReceiptItemsCostDto {
     const dto = new GoodsReceiptItemsCostDto();
-    let currencyCode: string | null = null;
-    let grandTotalMinor = 0n;
-
-    dto.rows = items.map((item) => {
-      const row = new GoodsReceiptItemsCostRowDto();
-      row.id = item.id;
-      row.inventoryItemId = item.inventoryItemId;
-      row.inventoryItemName = item.inventoryItemName ?? '';
-      row.uomSymbol = item.inventoryItemUomSymbol ?? '';
-      row.orderedQty = Number(item.orderedQty ?? 0);
-      row.freeQty = Number(item.freeQty ?? 0);
-      row.totalQty = Number(item.totalQty ?? 0);
-
-      const unitPriceMinor = item.unitPrice != null ? BigInt(item.unitPrice as unknown as string) : null;
-      if (unitPriceMinor != null && item.currencyCode) {
-        currencyCode ??= item.currencyCode;
-        const lineTotalMinor = BigInt(new Decimal(unitPriceMinor.toString()).times(row.orderedQty).toFixed(0));
-        grandTotalMinor += lineTotalMinor;
-        row.unitPrice = CurrencyAmountDto.from(unitPriceMinor, item.currencyCode);
-        row.unitCost =
-          item.unitCost != null
-            ? CurrencyAmountDto.from(BigInt(item.unitCost as unknown as string), item.currencyCode)
-            : null;
-        row.lineTotal = CurrencyAmountDto.from(lineTotalMinor, item.currencyCode);
-      } else {
-        row.unitPrice = null;
-        row.unitCost = null;
-        row.lineTotal = null;
-      }
-      return row;
-    });
-
-    dto.currencyCode = currencyCode;
-    dto.grandTotal = currencyCode ? CurrencyAmountDto.from(grandTotalMinor, currencyCode) : null;
+    dto.rows = costs.map((cost) => ({
+      id: cost.item.id,
+      inventoryItemId: cost.item.inventoryItemId,
+      inventoryItemName: cost.item.inventoryItemName ?? '',
+      uomSymbol: cost.item.uomSymbol ?? '',
+      primaryUomSymbol: cost.item.primaryUomSymbol,
+      acceptedQty: cost.acceptedQty,
+      acceptedPrimaryQty: cost.acceptedPrimaryQty,
+      unitCost: CurrencyAmountDto.from(cost.unitCost, leCurrencyCode),
+      value: CurrencyAmountDto.from(cost.value, leCurrencyCode),
+    }));
+    dto.currencyCode = leCurrencyCode;
+    dto.grandTotal = CurrencyAmountDto.from(
+      costs.reduce((total, cost) => total + cost.value, 0n),
+      leCurrencyCode,
+    );
     return dto;
   }
 }

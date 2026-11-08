@@ -1,10 +1,11 @@
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type UseMutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
+import { PURCHASE_ORDER_KEY, PURCHASE_ORDERS_TABLE_KEY } from '@/hooks/site/purchase-orders/keys';
 import type { GoodsReceiptData } from '@/schemas/goods-receipts';
 import { publishGoodsReceipt } from '@/services/site/goods-receipts.service';
-import { GOODS_RECEIPT_KEY, GOODS_RECEIPT_TREE_KEY, GOODS_RECEIPTS_TABLE_KEY } from './keys';
+import { GOODS_RECEIPT_KEY, GOODS_RECEIPTS_TABLE_KEY } from './keys';
 
+// Publishes a goods receipt; its purchase order's received quantities and status move with it
 export function usePublishGoodsReceipt(
   id: string,
   options?: Omit<UseMutationOptions<GoodsReceiptData, AxiosError, void>, 'mutationFn'>,
@@ -14,9 +15,11 @@ export function usePublishGoodsReceipt(
     ...options,
     mutationFn: () => publishGoodsReceipt(id),
     onSuccess: (...args) => {
+      const [receipt] = args;
       queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(id) });
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_TREE_KEY(id) });
       queryClient.invalidateQueries({ queryKey: GOODS_RECEIPTS_TABLE_KEY });
+      queryClient.invalidateQueries({ queryKey: PURCHASE_ORDER_KEY(receipt.purchaseOrderId) });
+      queryClient.invalidateQueries({ queryKey: PURCHASE_ORDERS_TABLE_KEY });
       options?.onSuccess?.(...args);
     },
   });

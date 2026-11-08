@@ -1,184 +1,84 @@
-import { GoodsReceiptItemsDomainService } from '@domain/goods-receipts/services/goods-receipt-items.service';
-import { GoodsReceiptsDomainService } from '@domain/goods-receipts/services/goods-receipts.service';
-import { InventoryItemLotsDomainService } from '@domain/inventory-item-lots/services/inventory-item-lots.service';
 import { Injectable, Logger } from '@nestjs/common';
-import { PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { BadRequestException, NotFoundException, ValidationException } from '@vritti/api-sdk/exceptions';
+import { type CurrencyCode, majorToMinor } from '@vritti/api-sdk/money';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
-import { GoodsReceiptStatusValues, type InventoryItemLot, InventoryTrackingValues } from '@/db/schema';
+import type { InventoryTracking } from '@/db/schema';
 import { GoodsReceiptLotDto } from '../dto/entity/goods-receipt-lot.dto';
+import type { AddGoodsReceiptLotDto } from '../dto/request/add-goods-receipt-lot.dto';
+import type { UpdateGoodsReceiptLotDto } from '../dto/request/update-goods-receipt-lot.dto';
 import { GoodsReceiptLotsDomainRepository } from '../repositories/goods-receipt-lots.repository';
+
+export interface GoodsReceiptLotItem {
+  id: string;
+  siteId: string;
+  tracking: InventoryTracking;
+}
 
 @Injectable()
 export class GoodsReceiptLotsDomainService {
   private readonly logger = new Logger(GoodsReceiptLotsDomainService.name);
 
-  constructor(
-    private readonly database: PrimaryDatabaseService,
-    private readonly repository: GoodsReceiptLotsDomainRepository,
-    private readonly itemsService: GoodsReceiptItemsDomainService,
-    private readonly receiptsService: GoodsReceiptsDomainService,
-    private readonly inventoryItemLotsService: InventoryItemLotsDomainService,
-  ) {}
+  constructor(private readonly repository: GoodsReceiptLotsDomainRepository) {}
 
-  async listByItem(goodsReceiptId: string, itemId: string, siteCurrencyCode?: string): Promise<GoodsReceiptLotDto[]> {
-    await this.ensureItem(goodsReceiptId, itemId);
-    const rows = await this.repository.findByItemId(itemId);
-    return rows.map((row) => GoodsReceiptLotDto.from(row, siteCurrencyCode));
+  // Returns the lots of a receipt item, their MRP in the legal entity's currency
+  async findByItem(itemId: string, leCurrencyCode: string): Promise<GoodsReceiptLotDto[]> {
+    const lots = await this.repository.findByItemId(itemId);
+    return lots.map((lot) => GoodsReceiptLotDto.from(lot, leCurrencyCode));
   }
 
+  // Adds a lot to a lot-tracked item of a draft receipt; its MRP is printed in the legal entity's currency
   async addLot(
-    goodsReceiptId: string,
-    itemId: string,
-    data: { lotNumber: string; manufacturingDate?: string | null; expiryDate: string; mrp?: bigint | null },
-    siteCurrencyCode?: string,
+    item: GoodsReceiptLotItem,
+    dto: AddGoodsReceiptLotDto,
+    leCurrencyCode: string,
   ): Promise<CreateResponseDto<GoodsReceiptLotDto>> {
-    const { receipt, item } = await this.ensureItem(goodsReceiptId, itemId);
-    if (receipt.status !== GoodsReceiptStatusValues.DRAFT) {
-      throw new BadRequestException('Lots can only be added to DRAFT goods receipts.');
-    }
-    if (
-      item.inventoryItemTracking === InventoryTrackingValues.QUANTITY ||
-      item.inventoryItemTracking === InventoryTrackingValues.SERIAL
-    ) {
-      throw new BadRequestException(`Items with tracking=${item.inventoryItemTracking} cannot have lots.`);
-    }
-
-    const lotNumber = data.lotNumber?.trim();
-    if (!lotNumber) {
-      throw new ValidationException({
-        detail: 'Lot number is required.',
-        errors: [{ field: 'lotNumber', message: 'Lot number is required.' }],
-      });
-    }
-
-    const existing = await this.repository.findByItemIdAndNumber(itemId, lotNumber);
-    if (existing) {
-      throw new ValidationException({
-        detail: `Lot "${lotNumber}" is already on this item.`,
-        errors: [{ field: 'lotNumber', message: 'Lot already added to this item.' }],
-      });
-    }
-
-    const inventoryLot = await this.inventoryItemLotsService.findByItemAndNumber(item.inventoryItemId, lotNumber);
-    if (inventoryLot) {
-      throw new ValidationException({
-        detail: `Lot "${lotNumber}" already exists in inventory. Goods receipts can only register new lots.`,
-        errors: [{ field: 'lotNumber', message: 'Lot already exists in inventory.' }],
-      });
-    }
+    this.repository.assertLotTracked(item);
+    await this.repository.assertLotNumberFree(item.id, dto.lotNumber);
+    this.repository.assertMrpInCurrency(dto.mrp, leCurrencyCode);
 
     const created = await this.repository.create({
-      goodsReceiptItemId: itemId,
-      lotNumber,
-      manufacturingDate: data.manufacturingDate ?? null,
-      expiryDate: data.expiryDate,
-      mrp: data.mrp ?? null,
+      goodsReceiptItemId: item.id,
+      siteId: item.siteId,
+      lotNumber: dto.lotNumber,
+      manufacturingDate: dto.manufacturingDate ?? null,
+      expiryDate: dto.expiryDate,
+      mrp: dto.mrp ? majorToMinor(dto.mrp.value, dto.mrp.currency as CurrencyCode, 'mrp') : null,
     });
 
-    this.logger.log(`Added lot ${lotNumber} to goods-receipt-item ${itemId}`);
-
-    const refreshed = (await this.repository.findByItemId(itemId)).find((r) => r.id === created.id);
-    if (!refreshed) throw new NotFoundException('Lot not found after creation.');
-
+    this.logger.log(`Added lot ${dto.lotNumber} to goods receipt item ${item.id}`);
     return {
       success: true,
-      message: `Lot "${lotNumber}" added successfully.`,
-      data: GoodsReceiptLotDto.from(refreshed, siteCurrencyCode),
+      message: `Lot "${dto.lotNumber}" added successfully.`,
+      data: GoodsReceiptLotDto.from(await this.repository.findOnItemOrThrow(item.id, created.id), leCurrencyCode),
     };
   }
 
+  // Changes a lot's number, dates or MRP on a draft receipt
   async updateLot(
-    goodsReceiptId: string,
-    itemId: string,
-    lotId: string,
-    data: { lotNumber?: string; manufacturingDate?: string | null; expiryDate?: string; mrp?: bigint | null },
-    siteCurrencyCode?: string,
-  ): Promise<GoodsReceiptLotDto> {
-    const { receipt, item } = await this.ensureItem(goodsReceiptId, itemId);
-    if (receipt.status !== GoodsReceiptStatusValues.DRAFT) {
-      throw new BadRequestException('Lots can only be updated on DRAFT goods receipts.');
+    item: GoodsReceiptLotItem,
+    dto: UpdateGoodsReceiptLotDto,
+    leCurrencyCode: string,
+  ): Promise<SuccessResponseDto> {
+    const lot = await this.repository.findOnItemOrThrow(item.id, dto.lotId);
+    if (dto.lotNumber !== undefined && dto.lotNumber !== lot.lotNumber) {
+      await this.repository.assertLotNumberFree(item.id, dto.lotNumber, lot.id);
     }
-    const existing = await this.ensureLotBelongsToItem(itemId, lotId);
+    this.repository.assertMrpInCurrency(dto.mrp, leCurrencyCode);
 
-    if (data.lotNumber !== undefined && data.lotNumber !== existing.lotNumber) {
-      const trimmed = data.lotNumber.trim();
-      if (!trimmed) {
-        throw new ValidationException({
-          detail: 'Lot number cannot be empty.',
-          errors: [{ field: 'lotNumber', message: 'Lot number is required.' }],
-        });
-      }
-      const dup = await this.repository.findByItemIdAndNumber(itemId, trimmed);
-      if (dup && dup.id !== lotId) {
-        throw new ValidationException({
-          detail: `Lot "${trimmed}" is already on this item.`,
-          errors: [{ field: 'lotNumber', message: 'Lot already on this item.' }],
-        });
-      }
-      const inventoryDup = await this.inventoryItemLotsService.findByItemAndNumber(item.inventoryItemId, trimmed);
-      if (inventoryDup) {
-        throw new ValidationException({
-          detail: `Lot "${trimmed}" already exists in inventory.`,
-          errors: [{ field: 'lotNumber', message: 'Lot already exists in inventory.' }],
-        });
-      }
-    }
-
-    await this.repository.update(lotId, {
-      ...(data.lotNumber !== undefined ? { lotNumber: data.lotNumber.trim() } : {}),
-      ...(data.manufacturingDate !== undefined ? { manufacturingDate: data.manufacturingDate ?? null } : {}),
-      ...(data.expiryDate !== undefined ? { expiryDate: data.expiryDate } : {}),
-      ...(data.mrp !== undefined ? { mrp: data.mrp } : {}),
+    await this.repository.update(lot.id, {
+      lotNumber: dto.lotNumber,
+      manufacturingDate: dto.manufacturingDate,
+      expiryDate: dto.expiryDate,
+      mrp: dto.mrp ? majorToMinor(dto.mrp.value, dto.mrp.currency as CurrencyCode, 'mrp') : dto.mrp,
     });
-
-    const refreshed = (await this.repository.findByItemId(itemId)).find((r) => r.id === lotId);
-    if (!refreshed) throw new NotFoundException('Lot not found after update.');
-    return GoodsReceiptLotDto.from(refreshed, siteCurrencyCode);
+    this.logger.log(`Updated lot ${lot.id} on goods receipt item ${item.id}`);
+    return { success: true, message: `Lot "${dto.lotNumber ?? lot.lotNumber}" updated successfully.` };
   }
 
-  async removeLot(goodsReceiptId: string, itemId: string, lotId: string): Promise<SuccessResponseDto> {
-    const { receipt } = await this.ensureItem(goodsReceiptId, itemId);
-    if (receipt.status !== GoodsReceiptStatusValues.DRAFT) {
-      throw new BadRequestException('Lots can only be removed from DRAFT goods receipts.');
-    }
-    const existing = await this.ensureLotBelongsToItem(itemId, lotId);
-    await this.repository.delete(lotId);
-    this.logger.log(`Removed lot ${existing.lotNumber} from goods-receipt-item ${itemId}`);
-    return { success: true, message: `Lot "${existing.lotNumber}" removed successfully.` };
-  }
-
-  // Used by the publish flow: creates the matching inventory_item_lots row from this draft lot.
-  async resolveInventoryLot(inventoryItemId: string, lotId: string): Promise<InventoryItemLot> {
-    const gr = await this.repository.findById(lotId);
-    if (!gr) throw new NotFoundException(`Goods receipt lot ${lotId} not found.`);
-    if (!gr.expiryDate) {
-      throw new BadRequestException(`Goods receipt lot ${lotId} is missing an expiry date.`);
-    }
-    return this.database.runInTransaction(async () => {
-      const inserted = await this.inventoryItemLotsService.createLot({
-        inventoryItemId,
-        lotNumber: gr.lotNumber,
-        manufacturingDate: gr.manufacturingDate ?? null,
-        expiryDate: gr.expiryDate,
-      });
-      await this.repository.setResolvedLotId(lotId, inserted.id);
-      return inserted;
-    });
-  }
-
-  // Validates the receipt and item exist and returns both for downstream guards
-  private async ensureItem(goodsReceiptId: string, itemId: string) {
-    const receipt = await this.receiptsService.findById(goodsReceiptId);
-    const item = await this.itemsService.findById(goodsReceiptId, itemId);
-    return { receipt, item };
-  }
-
-  private async ensureLotBelongsToItem(itemId: string, lotId: string) {
-    const lot = await this.repository.findById(lotId);
-    if (!lot || lot.goodsReceiptItemId !== itemId) {
-      throw new NotFoundException('Goods receipt lot not found.');
-    }
-    return lot;
+  // Removes a lot, with the lines it is distributed to, from a draft receipt
+  async removeLot(item: GoodsReceiptLotItem, lotId: string): Promise<SuccessResponseDto> {
+    const lot = await this.repository.findOnItemOrThrow(item.id, lotId);
+    await this.repository.delete(lot.id);
+    this.logger.log(`Removed lot ${lot.lotNumber} from goods receipt item ${item.id}`);
+    return { success: true, message: `Lot "${lot.lotNumber}" removed successfully.` };
   }
 }

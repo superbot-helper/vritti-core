@@ -1,145 +1,109 @@
-import { GoodsReceiptsDomainService } from '@domain/goods-receipts/services/goods-receipts.service';
-import { PurchaseOrderItemsDomainRepository } from '@domain/purchase-order-items/repositories/purchase-order-items.repository';
+import { GoodsReceiptItemsDomainService } from '@domain/goods-receipts/services/goods-receipt-items.service';
 import { PurchaseOrderItemsDomainService } from '@domain/purchase-order-items/services/purchase-order-items.service';
 import type { PurchaseOrderDto } from '@domain/purchase-orders/dto/entity/purchase-order.dto';
-import type { ChangePurchaseOrderExchangeRateDto } from '@domain/purchase-orders/dto/request/change-purchase-order-exchange-rate.dto';
 import type { ChangePurchaseOrderSupplierDto } from '@domain/purchase-orders/dto/request/change-purchase-order-supplier.dto';
 import type { CreatePurchaseOrderDto } from '@domain/purchase-orders/dto/request/create-purchase-order.dto';
 import type { SetPurchaseOrderConversionRateDto } from '@domain/purchase-orders/dto/request/set-purchase-order-conversion-rate.dto';
 import { PurchaseOrdersDomainRepository } from '@domain/purchase-orders/repositories/purchase-orders.repository';
 import { PurchaseOrdersDomainService } from '@domain/purchase-orders/services/purchase-orders.service';
 import { SupplierEnrollmentsDomainRepository } from '@domain/supplier-enrollments/repositories/supplier-enrollments.repository';
+import { SupplierInvoicesDomainService } from '@domain/supplier-invoices/services/supplier-invoices.service';
 import { SuppliersDomainRepository } from '@domain/suppliers/repositories/suppliers.repository';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { BadRequestException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import { BadRequestException } from '@vritti/api-sdk/exceptions';
 import { pluralize } from '@vritti/api-sdk/pluralize';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import type { Supplier } from '@/db/schema';
+import { PurchaseOrderProblemsDto } from '../dto/entity/purchase-order-problems.dto';
+
+export interface PurchaseOrderSite {
+  siteId: string;
+  timezone: string;
+  leCurrencyCode: string;
+}
 
 @Injectable()
 export class PurchaseOrdersService {
   private readonly logger = new Logger(PurchaseOrdersService.name);
 
   constructor(
-    private readonly purchaseOrdersService: PurchaseOrdersDomainService,
-    private readonly repository: PurchaseOrdersDomainRepository,
-    private readonly itemsRepository: PurchaseOrderItemsDomainRepository,
-    private readonly itemsService: PurchaseOrderItemsDomainService,
     private readonly database: PrimaryDatabaseService,
+    private readonly purchaseOrdersService: PurchaseOrdersDomainService,
+    private readonly purchaseOrdersRepository: PurchaseOrdersDomainRepository,
+    private readonly itemsService: PurchaseOrderItemsDomainService,
     private readonly suppliersRepository: SuppliersDomainRepository,
     private readonly supplierEnrollmentsRepository: SupplierEnrollmentsDomainRepository,
-    private readonly goodsReceiptsService: GoodsReceiptsDomainService,
+    private readonly goodsReceiptItemsService: GoodsReceiptItemsDomainService,
+    private readonly supplierInvoicesService: SupplierInvoicesDomainService,
   ) {}
 
-  async create(
-    dto: CreatePurchaseOrderDto,
-    siteId: string,
-    siteCurrencyCode: string,
-  ): Promise<CreateResponseDto<PurchaseOrderDto>> {
-    const supplier = await this.suppliersRepository.findById(dto.supplierId);
-    if (!supplier) throw new NotFoundException('Supplier not found.');
-    await this.supplierEnrollmentsRepository.assertPurchasable(supplier.id, siteId);
+  // Creates a PO at a site the supplier may be purchased from, in one of the supplier's currencies
+  async create(dto: CreatePurchaseOrderDto, site: PurchaseOrderSite): Promise<CreateResponseDto<PurchaseOrderDto>> {
+    const supplier = await this.suppliersRepository.findByIdOrThrow(dto.supplierId);
+    await this.supplierEnrollmentsRepository.assertPurchasable(supplier.id, site.siteId);
     const currencyCode = dto.currencyCode ?? supplier.currencyCode;
-    if (!supplier.currencyCodes.includes(currencyCode)) {
-      throw new BadRequestException({
-        label: 'Currency Not Accepted',
-        detail: `This supplier trades in ${supplier.currencyCodes.join(', ')}, not ${currencyCode}.`,
-        errors: [{ field: 'currencyCode', message: "Not one of the supplier's currencies" }],
-      });
-    }
-    this.logger.log(`purchaseOrders.create — supplier: ${dto.supplierId}, currency: ${currencyCode}`);
-    return this.purchaseOrdersService.create(dto, currencyCode, siteCurrencyCode);
+    this.assertTradesIn(supplier, currencyCode);
+
+    this.logger.log(
+      `purchaseOrders.create — supplier: ${supplier.id}, site: ${site.siteId}, currency: ${currencyCode}`,
+    );
+    return this.purchaseOrdersService.create(dto, { ...site, currencyCode });
   }
 
-  async findById(id: string): Promise<PurchaseOrderDto> {
-    const dto = await this.purchaseOrdersService.findById(id);
-    dto.goodsReceiptExists = await this.goodsReceiptsService.hasGoodsReceiptForPo(id);
-    return dto;
-  }
-
-  async changeSupplier(
-    id: string,
-    dto: ChangePurchaseOrderSupplierDto,
-    siteId: string,
-    siteCurrencyCode: string,
-  ): Promise<SuccessResponseDto> {
-    const supplier = await this.suppliersRepository.findByIdWithParty(dto.supplierId);
-    if (!supplier) throw new NotFoundException('Supplier not found.');
-    await this.supplierEnrollmentsRepository.assertPurchasable(supplier.id, siteId);
-
-    await this.assertNoGoodsReceipt(id, 'Cannot Change Supplier');
-
-    const inventoryItemIds = await this.itemsRepository.findInventoryItemIdsByPoId(id);
-    if (inventoryItemIds.length > 0) {
-      throw new BadRequestException({
-        label: 'Cannot Change Supplier',
-        detail: 'Remove all line items before changing the supplier.',
-      });
-    }
+  // Moves a draft PO to another supplier its site may purchase from
+  async changeSupplier(dto: ChangePurchaseOrderSupplierDto, leCurrencyCode: string): Promise<SuccessResponseDto> {
+    const po = await this.purchaseOrdersRepository.findDetailOrThrow(dto.id);
+    const supplier = await this.suppliersRepository.findWithPartyOrThrow(dto.supplierId);
+    await this.supplierEnrollmentsRepository.assertPurchasable(supplier.id, po.siteId);
 
     return this.purchaseOrdersService.changeSupplier(
-      id,
+      po,
       {
         id: supplier.id,
-        name: supplier.partyName ?? '',
+        name: supplier.partyName,
         currencyCode: supplier.currencyCode,
         currencyCodes: supplier.currencyCodes,
       },
-      siteCurrencyCode,
+      leCurrencyCode,
+      dto.exchangeRate,
     );
   }
 
-  async changeExchangeRate(
-    id: string,
-    dto: ChangePurchaseOrderExchangeRateDto,
-    siteCurrencyCode: string,
-  ): Promise<SuccessResponseDto> {
-    const po = await this.repository.findById(id);
-    if (!po) throw new NotFoundException('Purchase order not found.');
-
-    await this.assertNoGoodsReceipt(id, 'Cannot Change Exchange Rate');
-
-    this.logger.log(`purchaseOrders.changeExchangeRate — id: ${id}, type: ${dto.exchangeRateType}`);
-    return this.purchaseOrdersService.changeExchangeRate(id, dto, siteCurrencyCode);
-  }
-
-  // Sets the rate from another of the supplier's currencies into the PO currency and re-converts its lines in it
+  // Sets the rate from another of the supplier's currencies into the PO currency and converts its lines in it again
   async setConversionRate(dto: SetPurchaseOrderConversionRateDto): Promise<SuccessResponseDto> {
-    const po = await this.repository.findByIdWithSupplierName(dto.id);
-    if (!po) throw new NotFoundException('Purchase order not found.');
-    await this.assertNoGoodsReceipt(dto.id, 'Cannot Change Conversion Rate');
-    const supplier = await this.suppliersRepository.findById(po.supplierId);
-    if (!supplier) throw new NotFoundException('Supplier not found.');
-    if (!supplier.currencyCodes.includes(dto.currencyCode)) {
-      throw new BadRequestException({
-        label: 'Currency Not Accepted',
-        detail: `This supplier trades in ${supplier.currencyCodes.join(', ')}, not ${dto.currencyCode}.`,
-        errors: [{ field: 'currencyCode', message: "Not one of the supplier's currencies" }],
-      });
-    }
+    const po = await this.purchaseOrdersRepository.findDetailOrThrow(dto.id);
+    const supplier = await this.suppliersRepository.findByIdOrThrow(po.supplierId);
+    this.assertTradesIn(supplier, dto.currencyCode);
 
-    const repriced = await this.database.runInTransaction(async () => {
-      const rate = await this.purchaseOrdersService.setConversionRate(dto.id, dto.currencyCode, dto.rate);
-      const count = await this.itemsService.repriceSourceCurrency(
-        { ...po, conversionRates: { ...po.conversionRates, [dto.currencyCode]: rate } },
-        dto.currencyCode,
-        rate,
-      );
-      await this.repository.syncTotalAmount(dto.id);
+    const repricedCount = await this.database.runInTransaction(async () => {
+      const rate = await this.purchaseOrdersService.setConversionRate(po, dto.currencyCode, dto.rate);
+      const conversionRates = { ...po.conversionRates, [dto.currencyCode]: rate };
+      const count = await this.itemsService.repriceSourceCurrency({ ...po, conversionRates }, dto.currencyCode, rate);
+      await this.purchaseOrdersRepository.syncTotalAmount(po.id);
       return count;
     });
     return {
       success: true,
-      message: `1 ${dto.currencyCode} = ${dto.rate} ${po.currencyCode}; ${pluralize('line', repriced, true)} re-converted.`,
+      message: `1 ${dto.currencyCode} = ${dto.rate} ${po.currencyCode} on "${po.poNumber}"; ${pluralize('line', repricedCount, true)} converted again.`,
     };
   }
 
-  private async assertNoGoodsReceipt(poId: string, label: string): Promise<void> {
-    if (await this.goodsReceiptsService.hasGoodsReceiptForPo(poId)) {
-      throw new BadRequestException({
-        label,
-        detail: 'A goods receipt exists for this purchase order.',
-      });
-    }
+  // Gathers the flags raised on a PO's receipts and invoices, grouped by order line, invoice header flags kept for the order
+  async findProblems(id: string): Promise<PurchaseOrderProblemsDto> {
+    const po = await this.purchaseOrdersRepository.findDetailOrThrow(id);
+    const receiptItems = await this.goodsReceiptItemsService.findFlaggedForPurchaseOrder(po.id);
+    const invoices = await this.supplierInvoicesService.findFlaggedForPurchaseOrder(po.id);
+    return PurchaseOrderProblemsDto.from(receiptItems, invoices);
+  }
+
+  // Rejects a currency the supplier does not trade in
+  private assertTradesIn(supplier: Supplier, currencyCode: string): void {
+    if (supplier.currencyCodes.includes(currencyCode)) return;
+    throw new BadRequestException({
+      label: 'Currency Not Accepted',
+      detail: `This supplier trades in ${supplier.currencyCodes.join(', ')}, not ${currencyCode}.`,
+      errors: [{ field: 'currencyCode', message: "Not one of the supplier's currencies" }],
+    });
   }
 }

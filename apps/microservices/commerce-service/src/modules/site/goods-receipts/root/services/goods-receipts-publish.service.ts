@@ -1,15 +1,19 @@
 import { GoodsReceiptLineItemsDomainRepository } from '@domain/goods-receipt-line-items/repositories/goods-receipt-line-items.repository';
 import {
+  type GoodsReceiptLineRow,
   GoodsReceiptLinesDomainRepository,
-  type GoodsReceiptLineWithRefs,
 } from '@domain/goods-receipt-lines/repositories/goods-receipt-lines.repository';
 import { GoodsReceiptLotsDomainRepository } from '@domain/goods-receipt-lots/repositories/goods-receipt-lots.repository';
-import { GoodsReceiptDto } from '@domain/goods-receipts/dto/entity/goods-receipt.dto';
-import { GoodsReceiptItemsDomainRepository } from '@domain/goods-receipts/repositories/goods-receipt-items.repository';
+import type { GoodsReceiptDto } from '@domain/goods-receipts/dto/entity/goods-receipt.dto';
+import type { GoodsReceiptItemRow } from '@domain/goods-receipts/repositories/goods-receipt-items.repository';
 import {
+  type GoodsReceiptRow,
   GoodsReceiptsDomainRepository,
-  type GoodsReceiptWithRefs,
 } from '@domain/goods-receipts/repositories/goods-receipts.repository';
+import {
+  type GoodsReceiptItemCost,
+  GoodsReceiptItemsDomainService,
+} from '@domain/goods-receipts/services/goods-receipt-items.service';
 import { GoodsReceiptsDomainService } from '@domain/goods-receipts/services/goods-receipts.service';
 import { InventoryItemLedgerDomainService } from '@domain/inventory-item-ledger/services/inventory-item-ledger.service';
 import { InventoryItemLotsDomainService } from '@domain/inventory-item-lots/services/inventory-item-lots.service';
@@ -17,306 +21,203 @@ import { InventoryItemMrpsDomainService } from '@domain/inventory-item-mrps/serv
 import { InventoryItemCostsDomainRepository } from '@domain/inventory-item-quants/repositories/inventory-item-costs.repository';
 import { InventoryItemQuantsDomainService } from '@domain/inventory-item-quants/services/inventory-item-quants.service';
 import { InventoryItemSitesDomainService } from '@domain/inventory-item-sites/services/inventory-item-sites.service';
-import { Injectable } from '@nestjs/common';
+import { PurchaseOrderItemsDomainRepository } from '@domain/purchase-order-items/repositories/purchase-order-items.repository';
+import { PurchaseOrdersDomainRepository } from '@domain/purchase-orders/repositories/purchase-orders.repository';
+import { PurchaseOrdersDomainService } from '@domain/purchase-orders/services/purchase-orders.service';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import Decimal from '@vritti/api-sdk/decimal';
-import { BadRequestException, NotFoundException } from '@vritti/api-sdk/exceptions';
-import { pluralize } from '@vritti/api-sdk/pluralize';
+import type { NatsHeaders } from '@vritti/api-sdk/nats';
 import { allocateByWeight } from '@/common/allocate';
 import {
   CostDistributionMethodValues,
   CostSourceTypeValues,
-  GoodsReceiptStatusValues,
+  type GoodsReceiptLot,
   InventoryItemLedgerReferenceTypeValues,
   InventoryItemLedgerTypeValues,
-  type InventoryTracking,
   InventoryTrackingValues,
-  PurchaseOrderStatusValues,
 } from '@/db/schema';
-
-const SERIAL_TRACKINGS = new Set<InventoryTracking>([
-  InventoryTrackingValues.SERIAL,
-  InventoryTrackingValues.LOT_SERIAL,
-]);
-
-type PublishItem = Awaited<ReturnType<GoodsReceiptItemsDomainRepository['findByReceiptIdForPublish']>>[number];
-
-// Lot snapshot for quant creation; a lot line missing its expiry is a hard error.
-function toLotInfo(line: GoodsReceiptLineWithRefs) {
-  if (!line.lotNumber) return undefined;
-  if (!line.lotExpiryDate) {
-    throw new BadRequestException({
-      label: 'Missing Expiry Date',
-      detail: `Line ${line.id} has a lot without an expiry date.`,
-    });
-  }
-  return {
-    lotNumber: line.lotNumber,
-    manufacturingDate: line.lotManufacturingDate ?? null,
-    expiryDate: line.lotExpiryDate,
-  };
-}
 
 @Injectable()
 export class GoodsReceiptsPublishService {
+  private readonly logger = new Logger(GoodsReceiptsPublishService.name);
+
   constructor(
     private readonly database: PrimaryDatabaseService,
+    private readonly goodsReceiptsService: GoodsReceiptsDomainService,
     private readonly goodsReceiptsRepository: GoodsReceiptsDomainRepository,
-    private readonly grItemsRepository: GoodsReceiptItemsDomainRepository,
-    private readonly grLotsRepository: GoodsReceiptLotsDomainRepository,
-    private readonly grLinesRepository: GoodsReceiptLinesDomainRepository,
-    private readonly grLineItemsRepository: GoodsReceiptLineItemsDomainRepository,
+    private readonly itemsService: GoodsReceiptItemsDomainService,
+    private readonly lotsRepository: GoodsReceiptLotsDomainRepository,
+    private readonly linesRepository: GoodsReceiptLinesDomainRepository,
+    private readonly lineItemsRepository: GoodsReceiptLineItemsDomainRepository,
+    private readonly purchaseOrdersService: PurchaseOrdersDomainService,
+    private readonly purchaseOrdersRepository: PurchaseOrdersDomainRepository,
+    private readonly purchaseOrderItemsRepository: PurchaseOrderItemsDomainRepository,
     private readonly quantsService: InventoryItemQuantsDomainService,
     private readonly costsRepository: InventoryItemCostsDomainRepository,
     private readonly inventoryLotsService: InventoryItemLotsDomainService,
     private readonly ledgerService: InventoryItemLedgerDomainService,
-    private readonly goodsReceiptsService: GoodsReceiptsDomainService,
-    private readonly inventoryItemMrpsService: InventoryItemMrpsDomainService,
+    private readonly mrpsService: InventoryItemMrpsDomainService,
     private readonly inventoryItemSitesService: InventoryItemSitesDomainService,
   ) {}
 
-  async publish(id: string, siteCurrencyCode: string): Promise<GoodsReceiptDto> {
-    const goodsReceipt = await this.goodsReceiptsRepository.findByIdWithRefs(id);
-    if (!goodsReceipt) {
-      throw new NotFoundException({ label: 'Goods Receipt Not Found', detail: 'Goods receipt not found.' });
-    }
-    if (goodsReceipt.status !== GoodsReceiptStatusValues.DRAFT) {
-      throw new BadRequestException({
-        label: 'Cannot Publish',
-        detail: 'Only DRAFT goods receipts can be published.',
-      });
-    }
+  // Lands a draft receipt's accepted stock at its site at provisional PO cost, in that site's context, and moves the PO
+  async publish(id: string, leCurrencyCode: string, headers: NatsHeaders): Promise<GoodsReceiptDto> {
+    const receipt = await this.goodsReceiptsRepository.findDraftOrThrow(id, 'Cannot Publish');
+    this.goodsReceiptsRepository.assertPublishable(receipt);
+    const siteContext: NatsHeaders = {
+      ...headers,
+      siteId: receipt.siteId,
+      siteTimezone: receipt.poTimezone,
+      siteCurrencyCode: leCurrencyCode,
+    };
 
-    const grItems = await this.grItemsRepository.findByReceiptIdForPublish(id);
-    if (grItems.length === 0) {
-      throw new BadRequestException({
-        label: 'Cannot Publish',
-        detail: 'Add at least one item before publishing this goods receipt.',
+    await this.database.runWithRlsContext(siteContext, async () => {
+      const costs = await this.itemsService.findProvisionalCosts(receipt.id, leCurrencyCode);
+      await this.database.runInTransaction(async () => {
+        await this.inventoryItemSitesService.ensureEnabled(
+          receipt.siteId,
+          costs.map((cost) => cost.item.inventoryItemId),
+        );
+        for (const cost of costs) {
+          await this.landItem(receipt, cost, leCurrencyCode);
+        }
+        await this.goodsReceiptsService.markPublished(receipt.id);
+        await this.purchaseOrderItemsRepository.syncReceivedQuantities(receipt.purchaseOrderId);
+        const purchaseOrder = await this.purchaseOrdersRepository.findDetailOrThrow(receipt.purchaseOrderId);
+        const purchaseOrderLines = await this.purchaseOrderItemsRepository.findByPurchaseOrderId(purchaseOrder.id);
+        await this.purchaseOrdersService.syncReceiptStatus(purchaseOrder, purchaseOrderLines);
       });
-    }
-    // Same gate as the UI's Publish button: every item fully distributed + all serial lines balanced.
-    await this.goodsReceiptsService.assertPublishable(id, goodsReceipt.status, goodsReceipt.purchaseOrderId);
-
-    // Cost is set on the quant at creation (price × exchange rate), so every item must carry a price.
-    const itemsMissingPrice = grItems.filter((grItem) => (grItem.primaryUomUnitPrice ?? 0n) <= 0n);
-    if (itemsMissingPrice.length > 0) {
-      throw new BadRequestException({
-        label: 'Missing Unit Price',
-        detail: `${pluralize('item', itemsMissingPrice.length, true)} have no unit price. Set a price for every item before publishing.`,
-      });
-    }
-
-    await this.database.runInTransaction(async () => {
-      await this.inventoryItemSitesService.ensureEnabled(
-        goodsReceipt.siteId,
-        grItems.map((grItem) => grItem.inventoryItemId),
-      );
-      for (const grItem of grItems) {
-        await this.publishItem(goodsReceipt, grItem, siteCurrencyCode);
-      }
-      if (goodsReceipt.purchaseOrderId) await this.finalizePoStatus(goodsReceipt.purchaseOrderId);
-      await this.goodsReceiptsRepository.updateStatus(id, GoodsReceiptStatusValues.PUBLISHED, new Date());
     });
 
+    this.logger.log(`goodsReceipts.publish — ${receipt.grNumber} at site ${receipt.siteId}`);
     return this.goodsReceiptsService.findById(id);
   }
 
-  // Turns one item's lines into quants, then reconciles the linked PO line.
-  private async publishItem(
-    goodsReceipt: GoodsReceiptWithRefs,
-    grItem: PublishItem,
-    siteCurrencyCode: string,
-  ): Promise<void> {
-    const grLines = await this.grLinesRepository.findByItemId(grItem.id);
-    const inventoryLotByGrLot = await this.resolveLots(grItem, grLines, siteCurrencyCode);
+  // Turns an item's lines into quants with ledger entries, records its printed MRP and spreads its value over them
+  private async landItem(receipt: GoodsReceiptRow, cost: GoodsReceiptItemCost, leCurrencyCode: string): Promise<void> {
+    const lines = await this.linesRepository.findByItemId(cost.item.id);
+    const lots = await this.lotsRepository.findByItemId(cost.item.id);
+    const inventoryLotIdByReceiptLotId = await this.resolveInventoryLots(cost.item, lots, leCurrencyCode);
 
-    // Sum the primary-UOM qty added per quant — a line may merge into an already-seen quant.
-    const qtyByQuant = new Map<string, number>();
-    let lastMrp: bigint | null = null;
-    let lastMrpLotId: string | null = null;
-    for (const grLine of grLines) {
-      const { quantId, quantity } = await this.publishLine(
-        goodsReceipt,
-        grItem,
-        grLine,
-        inventoryLotByGrLot,
-        siteCurrencyCode,
-      );
-      qtyByQuant.set(quantId, (qtyByQuant.get(quantId) ?? 0) + quantity);
-      if (grLine.lotMrp != null) {
-        lastMrp = grLine.lotMrp;
-        lastMrpLotId = grLine.goodsReceiptLotId ? (inventoryLotByGrLot.get(grLine.goodsReceiptLotId) ?? null) : null;
-      }
+    const quantityByQuantId = new Map<string, Decimal>();
+    for (const line of lines) {
+      const quantId = await this.landLine(receipt, cost, line, lots, inventoryLotIdByReceiptLotId, leCurrencyCode);
+      quantityByQuantId.set(quantId, (quantityByQuantId.get(quantId) ?? new Decimal(0)).plus(line.primaryUomQty));
     }
 
-    // Record the received MRP as the org-wide suggestion for this item at the received unit and currency.
-    if (lastMrp != null) {
-      await this.inventoryItemMrpsService.upsert(
-        grItem.inventoryItemId,
-        grItem.uomId,
-        siteCurrencyCode,
-        lastMrp,
-        lastMrpLotId,
+    const lastPricedLot = lots.findLast((lot) => lot.mrp !== null);
+    if (lastPricedLot?.mrp) {
+      await this.mrpsService.upsert(
+        cost.item.inventoryItemId,
+        cost.item.uomId,
+        leCurrencyCode,
+        lastPricedLot.mrp,
+        inventoryLotIdByReceiptLotId.get(lastPricedLot.id) ?? null,
       );
     }
 
-    await this.allocateItemCost(goodsReceipt, grItem, qtyByQuant, siteCurrencyCode);
-
-    // Only the paid (ordered) qty reconciles against the PO; free qty is bonus stock, not ordered.
-    await this.reconcilePoItem(goodsReceipt, grItem, grItem.orderedQty);
+    await this.allocateItemValue(receipt, cost, quantityByQuantId, leCurrencyCode);
   }
 
-  // Splits the item's paid amount across its quants by received qty so Σ quant_cost == paid exactly, pinning each slice
-  // in inventory_item_costs/_quant_costs when an ITEM cost category exists.
-  private async allocateItemCost(
-    goodsReceipt: GoodsReceiptWithRefs,
-    grItem: PublishItem,
-    qtyByQuant: Map<string, number>,
-    siteCurrencyCode: string,
+  // Finds or creates the inventory lot of each receipt lot, carrying its MRP, and links the two
+  private async resolveInventoryLots(
+    item: GoodsReceiptItemRow,
+    lots: GoodsReceiptLot[],
+    leCurrencyCode: string,
+  ): Promise<Map<string, string>> {
+    const inventoryLotIdByReceiptLotId = new Map<string, string>();
+    for (const lot of lots) {
+      const inventoryLot = await this.inventoryLotsService.findOrCreateLot({
+        inventoryItemId: item.inventoryItemId,
+        lotNumber: lot.lotNumber,
+        manufacturingDate: lot.manufacturingDate,
+        expiryDate: lot.expiryDate,
+        mrp: lot.mrp,
+        mrpCurrencyCode: lot.mrp === null ? null : leCurrencyCode,
+      });
+      await this.lotsRepository.update(lot.id, { resolvedLotId: inventoryLot.id });
+      inventoryLotIdByReceiptLotId.set(lot.id, inventoryLot.id);
+    }
+    return inventoryLotIdByReceiptLotId;
+  }
+
+  // Creates (or merges into) the quant one line lands in at the item's provisional unit cost, and its ledger entry
+  private async landLine(
+    receipt: GoodsReceiptRow,
+    cost: GoodsReceiptItemCost,
+    line: GoodsReceiptLineRow,
+    lots: GoodsReceiptLot[],
+    inventoryLotIdByReceiptLotId: Map<string, string>,
+    leCurrencyCode: string,
+  ): Promise<string> {
+    const lot = lots.find((receiptLot) => receiptLot.id === line.goodsReceiptLotId);
+    const isSerialTracked =
+      cost.item.inventoryItemTracking === InventoryTrackingValues.SERIAL ||
+      cost.item.inventoryItemTracking === InventoryTrackingValues.LOT_SERIAL;
+    const serials = isSerialTracked ? await this.lineItemsRepository.findByLineId(line.id) : [];
+
+    const { quant } = await this.quantsService.createQuantScoped({
+      inventoryItemId: cost.item.inventoryItemId,
+      locationId: line.locationId,
+      quantity: line.primaryUomQty,
+      tracking: cost.item.inventoryItemTracking,
+      unitCost: cost.unitCost,
+      lotId: lot ? (inventoryLotIdByReceiptLotId.get(lot.id) ?? null) : null,
+      lot: lot
+        ? { lotNumber: lot.lotNumber, manufacturingDate: lot.manufacturingDate, expiryDate: lot.expiryDate }
+        : undefined,
+      serialNumbers: isSerialTracked ? serials.map((serial) => serial.serialNumber) : undefined,
+      costCurrency: leCurrencyCode,
+      sourceType: CostSourceTypeValues.GOODS_RECEIPT,
+      sourceId: receipt.id,
+      skipCostBaseline: true,
+    });
+    await this.linesRepository.update(line.id, { resolvedQuantId: quant.id });
+
+    await this.ledgerService.createEntry({
+      inventoryItemId: cost.item.inventoryItemId,
+      type: InventoryItemLedgerTypeValues.GOODS_RECEIPT,
+      quantity: line.primaryUomQty,
+      referenceType: InventoryItemLedgerReferenceTypeValues.GOODS_RECEIPT,
+      referenceId: receipt.id,
+      notes: receipt.notes,
+    });
+    return quant.id;
+  }
+
+  // Splits the item's provisional value over its quants by quantity, summing exactly, and pins each in the junction
+  private async allocateItemValue(
+    receipt: GoodsReceiptRow,
+    cost: GoodsReceiptItemCost,
+    quantityByQuantId: Map<string, Decimal>,
+    leCurrencyCode: string,
   ): Promise<void> {
-    const quants = [...qtyByQuant.entries()].map(([quantId, qty]) => ({ quantId, qty }));
-    if (quants.length === 0) return;
-
-    const total = BigInt(
-      new Decimal((grItem.primaryUomUnitPrice ?? 0n).toString())
-        .times(goodsReceipt.exchangeRate)
-        .times(grItem.orderedQty)
-        .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
-        .toFixed(0),
-    );
-    if (total <= 0n) return;
-
-    const allocs = allocateByWeight(
-      total,
-      quants.map((q) => q.qty),
+    const quantities = [...quantityByQuantId.entries()];
+    if (quantities.length === 0 || cost.value <= 0n) return;
+    const slices = allocateByWeight(
+      cost.value,
+      quantities.map(([, quantity]) => quantity.toNumber()),
     );
 
     const categoryId = await this.costsRepository.findItemCategoryId();
     if (categoryId) {
       const costId = await this.costsRepository.insertCost({
         categoryId,
-        totalAmount: total,
-        currencyCode: siteCurrencyCode,
+        totalAmount: cost.value,
+        currencyCode: leCurrencyCode,
         sourceType: CostSourceTypeValues.GOODS_RECEIPT,
-        sourceId: goodsReceipt.id,
+        sourceId: receipt.id,
         distributionMethod: CostDistributionMethodValues.BY_QUANTITY,
         unallocatedAmount: 0n,
       });
       await this.costsRepository.insertQuantCosts(
-        quants.map((q, i) => ({ quantId: q.quantId, costId, allocatedAmount: allocs[i] })),
+        quantities.map(([quantId], index) => ({ quantId, costId, allocatedAmount: slices[index] })),
       );
     }
 
-    // Bumps cost/value by this receipt's slice — works whether the quant is fresh or merged.
-    for (let i = 0; i < quants.length; i++) {
-      await this.quantsService.addQuantCostValue(quants[i].quantId, allocs[i], allocs[i]);
+    for (const [index, [quantId]] of quantities.entries()) {
+      await this.quantsService.addQuantCostValue(quantId, slices[index], slices[index]);
     }
-  }
-
-  // Find-or-create the inventory lot for each distinct receipt lot once → { grLotId: inventoryLotId }.
-  private async resolveLots(
-    grItem: PublishItem,
-    grLines: GoodsReceiptLineWithRefs[],
-    siteCurrencyCode: string,
-  ): Promise<Map<string, string>> {
-    const inventoryLotByGrLot = new Map<string, string>();
-    for (const grLine of grLines) {
-      const grLotId = grLine.goodsReceiptLotId;
-      if (!grLotId || inventoryLotByGrLot.has(grLotId)) continue;
-      const lotInfo = toLotInfo(grLine);
-      if (!lotInfo) continue;
-      const inventoryLot = await this.inventoryLotsService.findOrCreateLot({
-        inventoryItemId: grItem.inventoryItemId,
-        ...lotInfo,
-        mrp: grLine.lotMrp,
-        mrpCurrencyCode: grLine.lotMrp != null ? siteCurrencyCode : null,
-      });
-      inventoryLotByGrLot.set(grLotId, inventoryLot.id);
-      await this.grLotsRepository.setResolvedLotId(grLotId, inventoryLot.id);
-    }
-    return inventoryLotByGrLot;
-  }
-
-  // Creates the quant for one line (tracking-aware via optional fields) + the ledger entry.
-  private async publishLine(
-    goodsReceipt: GoodsReceiptWithRefs,
-    grItem: PublishItem,
-    grLine: GoodsReceiptLineWithRefs,
-    inventoryLotByGrLot: Map<string, string>,
-    siteCurrencyCode: string,
-  ): Promise<{ quantId: string; quantity: number }> {
-    // Snapshotted in the item's primary UOM at line add/edit — read it as-is.
-    const primaryUomQuantity = grLine.primaryUomQty;
-
-    const unitCost = BigInt(
-      new Decimal((grItem.primaryUomUnitPrice ?? 0n).toString())
-        .times(goodsReceipt.exchangeRate)
-        .times(grItem.orderedQty)
-        .div(grItem.totalQty)
-        .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
-        .toFixed(0),
-    );
-
-    const serials = SERIAL_TRACKINGS.has(grItem.tracking)
-      ? (await this.grLineItemsRepository.findByLineId(grLine.id)).map((li) => li.serialNumber)
-      : undefined;
-
-    const { quant } = await this.quantsService.createQuantScoped({
-      inventoryItemId: grItem.inventoryItemId,
-      locationId: grLine.locationId,
-      quantity: primaryUomQuantity,
-      tracking: grItem.tracking,
-      unitCost,
-      lotId: grLine.goodsReceiptLotId ? (inventoryLotByGrLot.get(grLine.goodsReceiptLotId) ?? null) : null,
-      lot: grLine.goodsReceiptLotId ? toLotInfo(grLine) : undefined,
-      serialNumbers: serials,
-      costCurrency: siteCurrencyCode,
-      sourceType: CostSourceTypeValues.GOODS_RECEIPT,
-      sourceId: goodsReceipt.id,
-      skipCostBaseline: true,
-    });
-    await this.grLinesRepository.setResolvedQuant(grLine.id, quant.id);
-
-    await this.ledgerService.createEntry({
-      inventoryItemId: grItem.inventoryItemId,
-      type: InventoryItemLedgerTypeValues.GOODS_RECEIPT,
-      quantity: primaryUomQuantity,
-      referenceType: InventoryItemLedgerReferenceTypeValues.GOODS_RECEIPT,
-      referenceId: goodsReceipt.id,
-      notes: goodsReceipt.notes ?? null,
-    });
-
-    return { quantId: quant.id, quantity: primaryUomQuantity };
-  }
-
-  // PO-linked items only: enforce the remaining-quantity cap, then bump received_quantity.
-  private async reconcilePoItem(
-    goodsReceipt: GoodsReceiptWithRefs,
-    grItem: PublishItem,
-    accepted: number,
-  ): Promise<void> {
-    if (!goodsReceipt.purchaseOrderId || !grItem.poItemId) return;
-    const ordered = Number(grItem.poOrderedQuantity ?? 0);
-    const received = Number(grItem.poReceivedQuantity ?? 0);
-    if (this.toScaled(received + accepted) > this.toScaled(ordered)) {
-      throw new BadRequestException({
-        label: 'Exceeds PO Quantity',
-        detail: `Accepted quantity ${accepted} exceeds the remaining PO quantity ${ordered - received} for item ${grItem.id}.`,
-      });
-    }
-    await this.goodsReceiptsRepository.updatePoItemReceivedQty(grItem.poItemId, accepted);
-  }
-
-  private async finalizePoStatus(purchaseOrderId: string): Promise<void> {
-    const totals = await this.goodsReceiptsRepository.getPoTotals(purchaseOrderId);
-    if (this.toScaled(totals.receivedQuantity) >= this.toScaled(totals.uomQty) && totals.uomQty > 0) {
-      await this.goodsReceiptsRepository.updatePoStatus(purchaseOrderId, PurchaseOrderStatusValues.RECEIVED);
-    } else if (totals.receivedQuantity > 0) {
-      await this.goodsReceiptsRepository.updatePoStatus(purchaseOrderId, PurchaseOrderStatusValues.PARTIALLY_RECEIVED);
-    }
-  }
-
-  private toScaled(value: number): number {
-    return Math.round(value * 1000);
   }
 }

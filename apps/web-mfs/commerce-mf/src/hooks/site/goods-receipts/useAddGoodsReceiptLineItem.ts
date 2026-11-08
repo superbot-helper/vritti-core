@@ -1,27 +1,28 @@
-import type { UseMutationOptions } from '@tanstack/react-query';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type UseMutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { CreateResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import type { GoodsReceiptLineItemData } from '@/schemas/goods-receipts';
-import { type AddGoodsReceiptLineItemPayload, addGoodsReceiptLineItem } from '@/services/site/goods-receipts.service';
-import { GOODS_RECEIPT_ITEMS_KEY, GOODS_RECEIPT_KEY, GOODS_RECEIPT_TREE_KEY } from './keys';
+import { PURCHASE_ORDERS_KEY } from '@/hooks/site/purchase-orders/keys';
+import type { AddGoodsReceiptLineItemPayload, GoodsReceiptLineItemData } from '@/schemas/goods-receipts';
+import { addGoodsReceiptLineItem } from '@/services/site/goods-receipts.service';
+import { GOODS_RECEIPT_KEY } from './keys';
 
+// Adds a serial to a line; the receipt and the purchase orders refresh
 export function useAddGoodsReceiptLineItem(
   goodsReceiptId: string,
   itemId: string,
   lineId: string,
   options?: Omit<
-    UseMutationOptions<GoodsReceiptLineItemData, AxiosError, AddGoodsReceiptLineItemPayload>,
+    UseMutationOptions<CreateResponse<GoodsReceiptLineItemData>, AxiosError, AddGoodsReceiptLineItemPayload>,
     'mutationFn'
   >,
 ) {
   const queryClient = useQueryClient();
-  return useMutation<GoodsReceiptLineItemData, AxiosError, AddGoodsReceiptLineItemPayload>({
+  return useMutation<CreateResponse<GoodsReceiptLineItemData>, AxiosError, AddGoodsReceiptLineItemPayload>({
     ...options,
     mutationFn: (data) => addGoodsReceiptLineItem(goodsReceiptId, itemId, lineId, data),
     onSuccess: (...args) => {
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId), exact: true });
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_ITEMS_KEY(goodsReceiptId) });
-      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_TREE_KEY(goodsReceiptId) });
+      queryClient.invalidateQueries({ queryKey: GOODS_RECEIPT_KEY(goodsReceiptId) });
+      queryClient.invalidateQueries({ queryKey: PURCHASE_ORDERS_KEY });
       options?.onSuccess?.(...args);
     },
   });

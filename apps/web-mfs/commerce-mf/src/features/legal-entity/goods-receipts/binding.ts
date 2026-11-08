@@ -1,0 +1,80 @@
+import { LE_GOODS_RECEIPTS } from '@vritti/commerce-permissions/goods-receipts';
+import { LE_INVENTORY_ITEMS } from '@vritti/commerce-permissions/inventory-items';
+import type { GoodsReceiptsBinding } from '@/components/goods-receipts/bindings';
+import {
+  GOODS_RECEIPT_LINE_ITEMS_TABLE_KEY,
+  GOODS_RECEIPT_LINES_TABLE_KEY,
+  GOODS_RECEIPT_LOT_LINES_TABLE_KEY,
+  GOODS_RECEIPTS_TABLE_KEY,
+  useAddGoodsReceiptItem,
+  useAddGoodsReceiptLine,
+  useAddGoodsReceiptLineItem,
+  useAddGoodsReceiptLot,
+  useCreateGoodsReceipt,
+  useDeleteGoodsReceipt,
+  useGoodsReceipt,
+  useGoodsReceiptItem,
+  useGoodsReceiptItemQuants,
+  useGoodsReceiptItemsCost,
+  useGoodsReceiptLine,
+  useGoodsReceiptLineItemsTable,
+  useGoodsReceiptLinesByLotTable,
+  useGoodsReceiptLinesTable,
+  useGoodsReceiptLots,
+  useGoodsReceiptsTable,
+  useGoodsReceiptTree,
+  usePublishGoodsReceipt,
+  useRemoveGoodsReceiptItem,
+  useRemoveGoodsReceiptLine,
+  useRemoveGoodsReceiptLineItem,
+  useRemoveGoodsReceiptLot,
+  useUpdateGoodsReceiptItem,
+  useUpdateGoodsReceiptLine,
+  useUpdateGoodsReceiptLot,
+} from '@/hooks/legal-entity/goods-receipts';
+
+// The goods receipts of the legal entity's sites
+export const binding: GoodsReceiptsBinding = {
+  permissions: LE_GOODS_RECEIPTS,
+  mrpEditPermission: LE_INVENTORY_ITEMS.mrp.edit,
+  spansSites: true,
+
+  tableKey: GOODS_RECEIPTS_TABLE_KEY,
+  tableSlug: 'commerce-le-goods-receipts',
+  linesTableKey: GOODS_RECEIPT_LINES_TABLE_KEY,
+  linesTableSlug: (id, itemId) => `commerce-le-goods-receipt-${id}-item-${itemId}-lines`,
+  lotLinesTableKey: GOODS_RECEIPT_LOT_LINES_TABLE_KEY,
+  lotLinesTableSlug: (id, itemId, lotId) => `commerce-le-goods-receipt-${id}-item-${itemId}-lot-${lotId}-lines`,
+  lineItemsTableKey: GOODS_RECEIPT_LINE_ITEMS_TABLE_KEY,
+  lineItemsTableSlug: (id, lineId) => `commerce-le-goods-receipt-${id}-line-${lineId}-items`,
+
+  useTable: useGoodsReceiptsTable,
+  useGoodsReceipt,
+  useTree: useGoodsReceiptTree,
+  useCreate: useCreateGoodsReceipt,
+  usePublish: usePublishGoodsReceipt,
+  useDelete: useDeleteGoodsReceipt,
+
+  useItemsCost: useGoodsReceiptItemsCost,
+  useItemQuants: useGoodsReceiptItemQuants,
+  useItem: useGoodsReceiptItem,
+  useAddItem: useAddGoodsReceiptItem,
+  useUpdateItem: useUpdateGoodsReceiptItem,
+  useRemoveItem: useRemoveGoodsReceiptItem,
+
+  useLots: useGoodsReceiptLots,
+  useAddLot: useAddGoodsReceiptLot,
+  useUpdateLot: useUpdateGoodsReceiptLot,
+  useRemoveLot: useRemoveGoodsReceiptLot,
+
+  useLinesTable: useGoodsReceiptLinesTable,
+  useLotLinesTable: useGoodsReceiptLinesByLotTable,
+  useLine: useGoodsReceiptLine,
+  useAddLine: useAddGoodsReceiptLine,
+  useUpdateLine: useUpdateGoodsReceiptLine,
+  useRemoveLine: useRemoveGoodsReceiptLine,
+
+  useLineItemsTable: useGoodsReceiptLineItemsTable,
+  useAddLineItem: useAddGoodsReceiptLineItem,
+  useRemoveLineItem: useRemoveGoodsReceiptLineItem,
+};

@@ -2,20 +2,36 @@ import { Injectable, Logger } from '@nestjs/common';
 import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
 import Decimal from '@vritti/api-sdk/decimal';
 import { and, desc, inArray } from '@vritti/api-sdk/drizzle-orm';
-import { BadRequestException, NotFoundException, ValidationException } from '@vritti/api-sdk/exceptions';
+import { BadRequestException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import { type SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
-import {
-  type ExchangeRateType,
-  ExchangeRateTypeValues,
-  type PurchaseOrderStatus,
-  PurchaseOrderStatusValues,
-  parties,
-  purchaseOrders,
-} from '@/db/schema';
+import { type PurchaseOrderStatus, PurchaseOrderStatusValues, parties, purchaseOrders } from '@/db/schema';
 import { PurchaseOrderDto } from '../dto/entity/purchase-order.dto';
+import type { ChangePurchaseOrderExchangeRateDto } from '../dto/request/change-purchase-order-exchange-rate.dto';
 import type { CreatePurchaseOrderDto } from '../dto/request/create-purchase-order.dto';
-import { PurchaseOrdersDomainRepository } from '../repositories/purchase-orders.repository';
+import type { UpdatePurchaseOrderNotesDto } from '../dto/request/update-purchase-order-notes.dto';
+import type { UpdatePurchaseOrderStatusDto } from '../dto/request/update-purchase-order-status.dto';
+import { type PurchaseOrderRow, PurchaseOrdersDomainRepository } from '../repositories/purchase-orders.repository';
+
+export interface PurchaseOrderCreateContext {
+  siteId: string;
+  timezone: string;
+  currencyCode: string;
+  leCurrencyCode: string;
+}
+
+export interface PurchaseOrderSupplier {
+  id: string;
+  name: string;
+  currencyCode: string;
+  currencyCodes: string[];
+}
+
+export interface PurchaseOrderReceivedLine {
+  uomQty: number;
+  freeQty: number;
+  receivedQuantity: number;
+}
 
 @Injectable()
 export class PurchaseOrdersDomainService {
@@ -28,30 +44,23 @@ export class PurchaseOrdersDomainService {
   private static readonly FILTER_FIELD_MAP: FieldMap = {
     status: { column: purchaseOrders.status, type: 'string' },
     supplierId: { column: purchaseOrders.supplierId, type: 'string' },
+    siteId: { column: purchaseOrders.siteId, type: 'string' },
+    sites: { column: purchaseOrders.siteId, type: 'string' },
+  };
+  private static readonly SORT_FIELD_MAP: FieldMap = {
+    ...PurchaseOrdersDomainService.SEARCH_FIELD_MAP,
+    ...PurchaseOrdersDomainService.FILTER_FIELD_MAP,
+    orderDate: { column: purchaseOrders.orderDate, type: 'string' },
   };
 
   private static readonly STATUS_TRANSITIONS: Record<PurchaseOrderStatus, PurchaseOrderStatus[]> = {
     [PurchaseOrderStatusValues.DRAFT]: [PurchaseOrderStatusValues.SENT, PurchaseOrderStatusValues.CANCELLED],
-    [PurchaseOrderStatusValues.SENT]: [
-      PurchaseOrderStatusValues.CONFIRMED,
-      PurchaseOrderStatusValues.PARTIALLY_RECEIVED,
-      PurchaseOrderStatusValues.RECEIVED,
-      PurchaseOrderStatusValues.CANCELLED,
-    ],
-    [PurchaseOrderStatusValues.CONFIRMED]: [
-      PurchaseOrderStatusValues.PARTIALLY_RECEIVED,
-      PurchaseOrderStatusValues.RECEIVED,
-      PurchaseOrderStatusValues.CLOSED,
-      PurchaseOrderStatusValues.CANCELLED,
-    ],
-    [PurchaseOrderStatusValues.PARTIALLY_RECEIVED]: [
-      PurchaseOrderStatusValues.RECEIVED,
-      PurchaseOrderStatusValues.CLOSED,
-    ],
+    [PurchaseOrderStatusValues.SENT]: [PurchaseOrderStatusValues.CONFIRMED, PurchaseOrderStatusValues.CANCELLED],
+    [PurchaseOrderStatusValues.CONFIRMED]: [PurchaseOrderStatusValues.CLOSED, PurchaseOrderStatusValues.CANCELLED],
+    [PurchaseOrderStatusValues.PARTIALLY_RECEIVED]: [PurchaseOrderStatusValues.CLOSED],
     [PurchaseOrderStatusValues.RECEIVED]: [],
     [PurchaseOrderStatusValues.CLOSED]: [],
     [PurchaseOrderStatusValues.CANCELLED]: [],
-    // Reserved for upcoming approval workflow — no transitions wired yet.
     [PurchaseOrderStatusValues.PENDING_APPROVAL]: [],
     [PurchaseOrderStatusValues.APPROVED]: [],
     [PurchaseOrderStatusValues.REJECTED]: [],
@@ -59,20 +68,12 @@ export class PurchaseOrdersDomainService {
 
   constructor(private readonly repository: PurchaseOrdersDomainRepository) {}
 
-  // Returns paginated purchase order options for select dropdowns
-  findForSelect(query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
-    const { status, supplierId } = query as SelectOptionsQueryDto & { status?: string; supplierId?: string };
-    const where: Record<string, string> = {};
-    if (supplierId) where.supplierId = supplierId;
-
-    const statusList = status
-      ?.split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const conditions =
-      statusList && statusList.length > 0
-        ? [inArray(purchaseOrders.status, statusList as PurchaseOrderStatus[])]
-        : undefined;
+  // Returns paginated purchase order options for select dropdowns, optionally narrowed to statuses and a supplier
+  findForSelect(query: SelectOptionsQueryDto & { status?: string; supplierId?: string }): Promise<SelectQueryResult> {
+    const statuses = (query.status ?? '')
+      .split(',')
+      .map((status) => status.trim())
+      .filter((status): status is PurchaseOrderStatus => status in PurchaseOrderStatusValues);
 
     return this.repository.findForSelect({
       value: query.valueKey || 'id',
@@ -85,186 +86,121 @@ export class PurchaseOrdersDomainService {
       offset: query.offset,
       values: query.values,
       excludeIds: query.excludeIds,
-      where: Object.keys(where).length > 0 ? where : undefined,
-      conditions,
+      where: query.supplierId ? { supplierId: query.supplierId } : undefined,
+      conditions: statuses.length > 0 ? [inArray(purchaseOrders.status, statuses)] : undefined,
       orderByKey: query.orderByKey || 'poNumber',
       orderDirection: query.orderDirection || 'desc',
     });
   }
 
-  // Returns paginated POs for the data table
+  // Returns one page of purchase orders
   async findForTable(state: TableViewState): Promise<{ result: PurchaseOrderDto[]; count: number }> {
-    const filterWhere = FilterProcessor.buildWhere(state.filters, PurchaseOrdersDomainService.FILTER_FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, PurchaseOrdersDomainService.SEARCH_FIELD_MAP);
-    const where = and(filterWhere, searchWhere);
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, {
-      ...PurchaseOrdersDomainService.SEARCH_FIELD_MAP,
-      ...PurchaseOrdersDomainService.FILTER_FIELD_MAP,
-      orderDate: { column: purchaseOrders.orderDate, type: 'string' },
-    });
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, PurchaseOrdersDomainService.SORT_FIELD_MAP);
     const { limit = 20, offset = 0 } = state.pagination;
 
-    const { result: rows, count } = await this.repository.findForTable({
-      where: where || undefined,
+    const { result, count } = await this.repository.findForTable({
+      where: and(
+        FilterProcessor.buildWhere(state.filters, PurchaseOrdersDomainService.FILTER_FIELD_MAP),
+        FilterProcessor.buildSearch(state.search, PurchaseOrdersDomainService.SEARCH_FIELD_MAP),
+      ),
       orderBy: orderBy.length > 0 ? orderBy : [desc(purchaseOrders.createdAt)],
       limit,
       offset,
     });
-
-    return {
-      result: rows.map((entity) => PurchaseOrderDto.from(entity, entity.supplierName)),
-      count,
-    };
+    return { result: result.map(PurchaseOrderDto.from), count };
   }
 
-  // Creates a new PO in one of the supplier's currencies; the app layer has resolved it and the site currency
+  // Returns one purchase order header
+  async findById(id: string): Promise<PurchaseOrderDto> {
+    return PurchaseOrderDto.from(await this.repository.findDetailOrThrow(id));
+  }
+
+  // Creates a draft PO at the given site, storing an exchange rate only when its currency is not the legal entity's
   async create(
-    data: CreatePurchaseOrderDto,
-    currencyCode: string,
-    siteCurrencyCode: string,
+    dto: CreatePurchaseOrderDto,
+    context: PurchaseOrderCreateContext,
   ): Promise<CreateResponseDto<PurchaseOrderDto>> {
-    const isSameCurrency = currencyCode === siteCurrencyCode;
-    const requestedType = data.exchangeRateType ?? ExchangeRateTypeValues.FIXED;
-    const exchangeRateType = isSameCurrency ? ExchangeRateTypeValues.FIXED : requestedType;
-
-    let exchangeRate: number | null;
-    if (isSameCurrency) {
-      exchangeRate = 1;
-    } else if (exchangeRateType === ExchangeRateTypeValues.FIXED) {
-      if (data.exchangeRate == null || data.exchangeRate <= 0) {
-        throw new ValidationException({
-          detail: `Exchange rate is required and must be greater than 0 when the PO currency (${currencyCode}) differs from site currency (${siteCurrencyCode}) and rate type is FIXED.`,
-          errors: [{ field: 'exchangeRate', message: 'Exchange rate must be greater than 0.' }],
-        });
-      }
-      exchangeRate = data.exchangeRate;
-    } else {
-      exchangeRate = null;
-    }
-
+    const exchangeRate = this.repository.resolveExchangeRateOrThrow(
+      context.currencyCode,
+      context.leCurrencyCode,
+      dto.exchangeRate,
+    );
     const poNumber = await this.repository.generatePoNumber();
-    const entity = await this.repository.create({
-      supplierId: data.supplierId,
+    const created = await this.repository.create({
+      siteId: context.siteId,
+      timezone: context.timezone,
+      supplierId: dto.supplierId,
       poNumber,
-      currencyCode,
+      currencyCode: context.currencyCode,
       exchangeRate,
-      exchangeRateType,
-      orderDate: data.orderDate,
-      expectedBy: data.expectedBy ?? null,
-      notes: data.notes ?? null,
+      orderDate: dto.orderDate,
+      expectedBy: dto.expectedBy ?? null,
+      notes: dto.notes ?? null,
     });
 
-    const detailed = await this.repository.findByIdWithSupplierName(entity.id);
-    if (!detailed) throw new NotFoundException('Purchase order not found.');
-
-    this.logger.log(`Created PO: ${entity.poNumber}`);
+    this.logger.log(`Created PO ${poNumber} at site ${context.siteId}`);
     return {
       success: true,
-      message: `Purchase order "${entity.poNumber}" created successfully.`,
-      data: PurchaseOrderDto.from(detailed, detailed.supplierName),
+      message: `Purchase order "${poNumber}" created successfully.`,
+      data: await this.findById(created.id),
     };
   }
 
-  // Returns PO header without line items
-  async findById(id: string): Promise<PurchaseOrderDto> {
-    const entity = await this.repository.findByIdWithSupplierName(id);
-    if (!entity) throw new NotFoundException('Purchase order not found.');
-    return PurchaseOrderDto.from(entity, entity.supplierName);
+  // Updates the notes on a purchase order
+  async updateNotes(dto: UpdatePurchaseOrderNotesDto): Promise<SuccessResponseDto> {
+    const po = await this.repository.findDetailOrThrow(dto.id);
+    await this.repository.update(po.id, { notes: dto.notes ?? null });
+    this.logger.log(`Updated PO ${po.poNumber} notes`);
+    return { success: true, message: `Notes updated for purchase order "${po.poNumber}".` };
   }
 
-  // Updates notes on a purchase order
-  async updateNotes(id: string, notes: string | null): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Purchase order not found.');
-    const entity = await this.repository.update(id, { notes: notes ?? null });
-    this.logger.log(`Updated PO notes: ${entity.poNumber} (${entity.id})`);
-    return { success: true, message: `Notes updated for purchase order "${entity.poNumber}".` };
-  }
-
-  // Changes supplier on a draft PO. Items-empty check is the app-layer's responsibility.
-  // Moves a draft PO to another supplier; a PO currency the new supplier does not trade in becomes its default, with the
-  // site rate reset (1 when it is the site currency, otherwise variable until a fixed rate is set)
+  // Moves a draft PO to another supplier, switching to its default currency when it does not trade in the PO's
   async changeSupplier(
-    id: string,
-    supplier: { id: string; name: string; currencyCode: string; currencyCodes: string[] },
-    siteCurrencyCode: string,
+    po: PurchaseOrderRow,
+    supplier: PurchaseOrderSupplier,
+    leCurrencyCode: string,
+    exchangeRate: number | undefined,
   ): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Purchase order not found.');
-    if (existing.status !== PurchaseOrderStatusValues.DRAFT) {
-      throw new BadRequestException({
-        label: 'Cannot Change Supplier',
-        detail: 'Supplier can only be changed while the purchase order is in draft.',
-      });
-    }
+    this.repository.assertSupplierChangeable(po);
 
-    const keepsCurrency = supplier.currencyCodes.includes(existing.currencyCode);
-    const currencyCode = keepsCurrency ? existing.currencyCode : supplier.currencyCode;
-    const isSiteCurrency = currencyCode === siteCurrencyCode;
-    const entity = await this.repository.update(id, {
+    const keepsCurrency = supplier.currencyCodes.includes(po.currencyCode);
+    const currencyCode = keepsCurrency ? po.currencyCode : supplier.currencyCode;
+    await this.repository.update(po.id, {
       supplierId: supplier.id,
       conversionRates: {},
-      ...(keepsCurrency
-        ? {}
-        : {
-            currencyCode,
-            exchangeRateType: isSiteCurrency ? ExchangeRateTypeValues.FIXED : ExchangeRateTypeValues.VARIABLE,
-            exchangeRate: isSiteCurrency ? 1 : null,
-          }),
+      currencyCode,
+      exchangeRate: keepsCurrency
+        ? po.exchangeRate
+        : this.repository.resolveExchangeRateOrThrow(currencyCode, leCurrencyCode, exchangeRate),
     });
-    const supplierName = supplier.name;
-    this.logger.log(`Changed PO supplier: ${entity.poNumber} (${entity.id})`);
-    return {
-      success: true,
-      message: `Supplier changed to "${supplierName}" for purchase order "${entity.poNumber}".`,
-    };
+
+    this.logger.log(`Changed PO ${po.poNumber} supplier to ${supplier.id}`);
+    return { success: true, message: `Supplier changed to "${supplier.name}" for purchase order "${po.poNumber}".` };
   }
 
-  // Transitions PO status
-  async updateStatus(id: string, status: PurchaseOrderStatus): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Purchase order not found.');
-    const allowedNext = PurchaseOrdersDomainService.STATUS_TRANSITIONS[existing.status] ?? [];
-    if (!allowedNext.includes(status)) {
-      throw new BadRequestException(`Cannot transition purchase order status from ${existing.status} to ${status}.`);
-    }
-    if (status === PurchaseOrderStatusValues.SENT && Number(existing.totalAmount ?? 0) <= 0) {
+  // Changes the rate into the legal entity's currency of a foreign-currency PO until a receipt of it is published
+  async changeExchangeRate(
+    dto: ChangePurchaseOrderExchangeRateDto,
+    leCurrencyCode: string,
+  ): Promise<SuccessResponseDto> {
+    const po = await this.repository.findDetailOrThrow(dto.id);
+    this.repository.assertPricingUnlocked(po, 'Cannot Change Exchange Rate');
+    if (po.currencyCode === leCurrencyCode) {
       throw new BadRequestException({
-        label: 'Cannot Mark as Sent',
-        detail: 'Purchase order total amount must be greater than 0 before marking it as sent.',
-      });
-    }
-    const entity = await this.repository.update(id, { status });
-    this.logger.log(`PO ${entity.poNumber} status → ${status}`);
-    return { success: true, message: `Purchase order "${entity.poNumber}" status updated to ${status}.` };
-  }
-
-  // Closes a PO short — no further receipts expected; quantities already received are kept.
-  async closeShort(id: string): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Purchase order not found.');
-
-    const canClose =
-      existing.status === PurchaseOrderStatusValues.CONFIRMED ||
-      existing.status === PurchaseOrderStatusValues.PARTIALLY_RECEIVED;
-    if (!canClose) {
-      throw new BadRequestException({
-        label: 'Cannot Close',
-        detail: 'Only confirmed or partially-received purchase orders can be closed.',
+        label: 'Cannot Change Exchange Rate',
+        detail: `"${po.poNumber}" is in ${leCurrencyCode}, the legal entity's currency, so its rate is always 1.`,
       });
     }
 
-    const entity = await this.repository.update(id, { status: PurchaseOrderStatusValues.CLOSED });
-    this.logger.log(`Closed PO short: ${entity.poNumber} (${entity.id})`);
-    return { success: true, message: `Purchase order "${entity.poNumber}" closed.` };
+    await this.repository.update(po.id, { exchangeRate: dto.exchangeRate });
+    this.logger.log(`Changed PO ${po.poNumber} exchange rate to ${dto.exchangeRate}`);
+    return { success: true, message: `Exchange rate updated for purchase order "${po.poNumber}".` };
   }
 
-  // Records how much 1 unit of another of the supplier's currencies is in the PO currency; the caller re-converts the
-  // lines priced in it and syncs the total
-  async setConversionRate(id: string, currencyCode: string, rate: number): Promise<string> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Purchase order not found.');
-    if (currencyCode === existing.currencyCode) {
+  // Records 1 unit of another supplier currency in the PO currency; the caller converts its lines and syncs the total
+  async setConversionRate(po: PurchaseOrderRow, currencyCode: string, rate: number): Promise<string> {
+    this.repository.assertPricingUnlocked(po, 'Cannot Change Conversion Rate');
+    if (currencyCode === po.currencyCode) {
       throw new BadRequestException({
         label: 'Same Currency',
         detail: `The purchase order is already in ${currencyCode}.`,
@@ -272,73 +208,73 @@ export class PurchaseOrdersDomainService {
       });
     }
     const stored = new Decimal(rate).toFixed(6);
-    await this.repository.update(id, { conversionRates: { ...existing.conversionRates, [currencyCode]: stored } });
-    this.logger.log(`Set PO ${existing.poNumber} rate 1 ${currencyCode} = ${stored} ${existing.currencyCode}`);
+    await this.repository.update(po.id, { conversionRates: { ...po.conversionRates, [currencyCode]: stored } });
+    this.logger.log(`Set PO ${po.poNumber} rate 1 ${currencyCode} = ${stored} ${po.currencyCode}`);
     return stored;
   }
 
-  // Changes the exchange rate type and/or rate on a pre-receipt PO
-  async changeExchangeRate(
-    id: string,
-    data: { exchangeRateType: ExchangeRateType; exchangeRate?: number | null },
-    siteCurrencyCode: string,
-  ): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Purchase order not found.');
-
-    const isPreReceipt =
-      existing.status === PurchaseOrderStatusValues.DRAFT ||
-      existing.status === PurchaseOrderStatusValues.SENT ||
-      existing.status === PurchaseOrderStatusValues.CONFIRMED;
-    if (!isPreReceipt) {
+  // Moves a PO along its manual workflow (send, confirm, close, cancel)
+  async updateStatus(dto: UpdatePurchaseOrderStatusDto): Promise<SuccessResponseDto> {
+    const po = await this.repository.findDetailOrThrow(dto.id);
+    const allowedNext = PurchaseOrdersDomainService.STATUS_TRANSITIONS[po.status];
+    if (!allowedNext.includes(dto.status)) {
       throw new BadRequestException({
-        label: 'Cannot Change Exchange Rate',
-        detail: 'Exchange rate is locked once a goods receipt has been posted.',
+        label: 'Cannot Change Status',
+        detail: `A ${po.status} purchase order cannot move to ${dto.status}.`,
       });
     }
-
-    if (existing.currencyCode === siteCurrencyCode) {
+    if (dto.status === PurchaseOrderStatusValues.SENT && po.totalAmount <= 0n) {
       throw new BadRequestException({
-        label: 'Cannot Change Exchange Rate',
-        detail: 'Rate is fixed at 1 when the PO currency matches the site currency.',
+        label: 'Cannot Mark as Sent',
+        detail: 'Add priced line items before marking the purchase order as sent.',
       });
     }
-
-    let exchangeRate: number | null;
-    if (data.exchangeRateType === ExchangeRateTypeValues.FIXED) {
-      if (data.exchangeRate == null || data.exchangeRate <= 0) {
-        throw new ValidationException({
-          detail: 'Exchange rate must be greater than 0 for FIXED policy.',
-          errors: [{ field: 'exchangeRate', message: 'Exchange rate must be greater than 0.' }],
-        });
-      }
-      exchangeRate = data.exchangeRate;
-    } else {
-      exchangeRate = null;
-    }
-
-    const entity = await this.repository.update(id, {
-      exchangeRateType: data.exchangeRateType,
-      exchangeRate,
-    });
-    this.logger.log(
-      `Changed PO exchange rate: ${entity.poNumber} (${entity.id}) → type=${data.exchangeRateType}, rate=${exchangeRate ?? 'null'}`,
-    );
-    return {
-      success: true,
-      message: `Exchange rate updated for purchase order "${entity.poNumber}".`,
-    };
+    await this.repository.update(po.id, { status: dto.status });
+    this.logger.log(`PO ${po.poNumber} status → ${dto.status}`);
+    return { success: true, message: `Purchase order "${po.poNumber}" status updated to ${dto.status}.` };
   }
 
-  // Deletes a PO (only if DRAFT)
+  // Closes a PO short — no further receipts expected; quantities already received are kept
+  async closeShort(id: string): Promise<SuccessResponseDto> {
+    const po = await this.repository.findDetailOrThrow(id);
+    if (!this.repository.isReceivable(po)) {
+      throw new BadRequestException({
+        label: 'Cannot Close',
+        detail: 'Only confirmed or partially received purchase orders can be closed.',
+      });
+    }
+    await this.repository.update(po.id, { status: PurchaseOrderStatusValues.CLOSED });
+    this.logger.log(`Closed PO ${po.poNumber} short`);
+    return { success: true, message: `Purchase order "${po.poNumber}" closed.` };
+  }
+
+  // Moves a receivable PO to received once all lines cover ordered plus free, else to partially received
+  async syncReceiptStatus(po: PurchaseOrderRow, lines: PurchaseOrderReceivedLine[]): Promise<void> {
+    if (!this.repository.isReceivable(po)) return;
+
+    const isEveryLineReceived =
+      lines.length > 0 &&
+      lines.every((line) => new Decimal(line.receivedQuantity).gte(new Decimal(line.uomQty).plus(line.freeQty)));
+    const isAnythingReceived = lines.some((line) => line.receivedQuantity > 0);
+    const status = isEveryLineReceived
+      ? PurchaseOrderStatusValues.RECEIVED
+      : isAnythingReceived
+        ? PurchaseOrderStatusValues.PARTIALLY_RECEIVED
+        : po.status;
+    if (status === po.status) return;
+
+    await this.repository.update(po.id, { status });
+    this.logger.log(`PO ${po.poNumber} status → ${status} from its published receipts`);
+  }
+
+  // Deletes a draft purchase order
   async delete(id: string): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Purchase order not found.');
-    if (existing.status !== PurchaseOrderStatusValues.DRAFT) {
+    const po = await this.repository.findDetailOrThrow(id);
+    if (po.status !== PurchaseOrderStatusValues.DRAFT) {
       throw new BadRequestException({ label: 'Cannot Delete', detail: 'Only draft purchase orders can be deleted.' });
     }
-    await this.repository.delete(id);
-    this.logger.log(`Deleted PO: ${existing.poNumber} (${id})`);
-    return { success: true, message: `Purchase order "${existing.poNumber}" deleted successfully.` };
+    await this.repository.delete(po.id);
+    this.logger.log(`Deleted PO ${po.poNumber} (${po.id})`);
+    return { success: true, message: `Purchase order "${po.poNumber}" deleted successfully.` };
   }
 }

@@ -1,12 +1,8 @@
-import {
-  AddGoodsReceiptItemFromPurchaseOrderItemDto,
-  AddGoodsReceiptItemFromSupplierItemDto,
-} from '@commerce/goods-receipts/dto/request/add-goods-receipt-item.dto';
+import { AddGoodsReceiptItemDto } from '@commerce/goods-receipts/dto/request/add-goods-receipt-item.dto';
 import { AddGoodsReceiptLineDto } from '@commerce/goods-receipts/dto/request/add-goods-receipt-line.dto';
 import { AddGoodsReceiptLineItemDto } from '@commerce/goods-receipts/dto/request/add-goods-receipt-line-item.dto';
 import { AddGoodsReceiptLotDto } from '@commerce/goods-receipts/dto/request/add-goods-receipt-lot.dto';
 import { CreateGoodsReceiptDto } from '@commerce/goods-receipts/dto/request/create-goods-receipt.dto';
-import { LinkGoodsReceiptPurchaseOrderDto } from '@commerce/goods-receipts/dto/request/link-goods-receipt-purchase-order.dto';
 import { UpdateGoodsReceiptItemDto } from '@commerce/goods-receipts/dto/request/update-goods-receipt-item.dto';
 import { UpdateGoodsReceiptLineDto } from '@commerce/goods-receipts/dto/request/update-goods-receipt-line.dto';
 import { UpdateGoodsReceiptLotDto } from '@commerce/goods-receipts/dto/request/update-goods-receipt-lot.dto';
@@ -26,93 +22,136 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Logger, Param, Pat
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthType, Require, UserId } from '@vritti/api-sdk/auth';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { SITE_GOODS_RECEIPTS } from '@vritti/commerce-permissions/goods-receipts';
 import { SessionTypeValues } from '@/db/schema';
+import { RequireFeature, RequirePermission } from '@/rbac/decorators';
+import {
+  ApiAddItemFromPurchaseOrderItem,
+  ApiAddLine,
+  ApiAddLineItem,
+  ApiAddLot,
+  ApiCreate,
+  ApiDelete,
+  ApiFindById,
+  ApiFindForTable,
+  ApiInventoryItemIds,
+  ApiItemDetail,
+  ApiItemQuants,
+  ApiItemsCost,
+  ApiItemsTable,
+  ApiLineById,
+  ApiLineItemsTable,
+  ApiLinesByLotTable,
+  ApiLinesTable,
+  ApiLots,
+  ApiPublish,
+  ApiRemoveItem,
+  ApiRemoveLine,
+  ApiRemoveLineItem,
+  ApiRemoveLot,
+  ApiTree,
+  ApiUpdateItem,
+  ApiUpdateLine,
+  ApiUpdateLot,
+} from './docs/goods-receipts-gateway.docs';
 import { GoodsReceiptsGatewayService } from './services/goods-receipts-gateway.service';
 
 @ApiTags('Commerce - Goods Receipts')
 @ApiBearerAuth()
 @Require(AuthType.Session, SessionTypeValues.WEB)
+@RequireFeature(SITE_GOODS_RECEIPTS.featureCode)
 @Controller('goods-receipts')
 export class GoodsReceiptsGatewayController {
   private readonly logger = new Logger(GoodsReceiptsGatewayController.name);
 
   constructor(private readonly service: GoodsReceiptsGatewayService) {}
 
-  // Header
-
+  // Creates a goods receipt against one of the site's confirmed purchase orders
   @Post()
+  @RequirePermission(SITE_GOODS_RECEIPTS.add)
   @HttpCode(HttpStatus.CREATED)
+  @ApiCreate()
   create(@Body() dto: CreateGoodsReceiptDto): Promise<CreateResponseDto<GoodsReceiptResponseDto>> {
     this.logger.log('POST /commerce-api/goods-receipts');
     return this.service.create(dto);
   }
 
+  // Returns the site's goods receipts for the data table
   @Get('table')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiFindForTable()
   findForTable(@UserId() userId: string): Promise<GoodsReceiptTableResponseDto> {
     this.logger.log('GET /commerce-api/goods-receipts/table');
     return this.service.findForTable(userId);
   }
 
+  // Returns one goods receipt
   @Get(':id')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiFindById()
   findById(@Param('id') id: string): Promise<GoodsReceiptResponseDto> {
     this.logger.log(`GET /commerce-api/goods-receipts/${id}`);
     return this.service.findById(id);
   }
 
+  // Returns a goods receipt's items with their lots and lines as a tree
   @Get(':id/tree')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiTree()
   tree(@Param('id') id: string): Promise<GoodsReceiptTreeNodeResponseDto[]> {
     this.logger.log(`GET /commerce-api/goods-receipts/${id}/tree`);
     return this.service.findTree(id);
   }
 
+  // Publishes a goods receipt, landing its stock at the site
   @Post(':id/publish')
+  @RequirePermission(SITE_GOODS_RECEIPTS.publish)
+  @ApiPublish()
   publish(@Param('id') id: string): Promise<GoodsReceiptResponseDto> {
     this.logger.log(`POST /commerce-api/goods-receipts/${id}/publish`);
     return this.service.publish(id);
   }
 
-  @Post(':id/link-po')
-  linkPurchaseOrder(
-    @Param('id') id: string,
-    @Body() dto: LinkGoodsReceiptPurchaseOrderDto,
-  ): Promise<SuccessResponseDto> {
-    this.logger.log(`POST /commerce-api/goods-receipts/${id}/link-po`);
-    return this.service.linkPurchaseOrder(id, dto.purchaseOrderId);
-  }
-
-  @Post(':id/unlink-po')
-  unlinkPurchaseOrder(@Param('id') id: string): Promise<SuccessResponseDto> {
-    this.logger.log(`POST /commerce-api/goods-receipts/${id}/unlink-po`);
-    return this.service.unlinkPurchaseOrder(id);
-  }
-
+  // Deletes a draft goods receipt
   @Delete(':id')
+  @RequirePermission(SITE_GOODS_RECEIPTS.delete)
+  @ApiDelete()
   delete(@Param('id') id: string): Promise<SuccessResponseDto> {
     this.logger.log(`DELETE /commerce-api/goods-receipts/${id}`);
     return this.service.delete(id);
   }
 
-  // Items
-
+  // Returns the inventory items counted on a goods receipt
   @Get(':id/items/inventory-item-ids')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiInventoryItemIds()
   inventoryItemIds(@Param('id') goodsReceiptId: string): Promise<string[]> {
     this.logger.log(`GET /commerce-api/goods-receipts/${goodsReceiptId}/items/inventory-item-ids`);
     return this.service.findInventoryItemIds(goodsReceiptId);
   }
 
+  // Returns a goods receipt's items for the data table
   @Get(':id/items/table')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiItemsTable()
   itemsTable(@Param('id') goodsReceiptId: string, @UserId() userId: string): Promise<GoodsReceiptItemTableResponseDto> {
     this.logger.log(`GET /commerce-api/goods-receipts/${goodsReceiptId}/items/table`);
     return this.service.findItemsTable(goodsReceiptId, userId);
   }
 
+  // Returns the provisional cost of a goods receipt's items
   @Get(':id/items/cost')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiItemsCost()
   itemsCost(@Param('id') goodsReceiptId: string): Promise<GoodsReceiptItemsCostResponseDto> {
     this.logger.log(`GET /commerce-api/goods-receipts/${goodsReceiptId}/items/cost`);
     return this.service.findItemsCost(goodsReceiptId);
   }
 
+  // Returns the quants a published goods receipt item landed in
   @Get(':id/items/:itemId/quants')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiItemQuants()
   itemQuants(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -121,27 +160,23 @@ export class GoodsReceiptsGatewayController {
     return this.service.findItemQuants(goodsReceiptId, itemId);
   }
 
-  @Post(':id/items/from-supplier-item')
-  @HttpCode(HttpStatus.CREATED)
-  addItemFromSupplierItem(
-    @Param('id') goodsReceiptId: string,
-    @Body() dto: AddGoodsReceiptItemFromSupplierItemDto,
-  ): Promise<CreateResponseDto<GoodsReceiptItemResponseDto>> {
-    this.logger.log(`POST /commerce-api/goods-receipts/${goodsReceiptId}/items/from-supplier-item`);
-    return this.service.addItemFromSupplierItem(goodsReceiptId, dto);
-  }
-
+  // Counts a purchase order line on a goods receipt
   @Post(':id/items/from-purchase-order-item')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
   @HttpCode(HttpStatus.CREATED)
+  @ApiAddItemFromPurchaseOrderItem()
   addItemFromPurchaseOrderItem(
     @Param('id') goodsReceiptId: string,
-    @Body() dto: AddGoodsReceiptItemFromPurchaseOrderItemDto,
+    @Body() dto: AddGoodsReceiptItemDto,
   ): Promise<CreateResponseDto<GoodsReceiptItemResponseDto>> {
     this.logger.log(`POST /commerce-api/goods-receipts/${goodsReceiptId}/items/from-purchase-order-item`);
     return this.service.addItemFromPurchaseOrderItem(goodsReceiptId, dto);
   }
 
+  // Returns one item of a goods receipt with its purchase order context and flags
   @Get(':id/items/:itemId/detail')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiItemDetail()
   itemDetail(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -150,7 +185,10 @@ export class GoodsReceiptsGatewayController {
     return this.service.findItemById(goodsReceiptId, itemId);
   }
 
+  // Changes the received or rejected quantity of a goods receipt item
   @Patch(':id/items/:itemId')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
+  @ApiUpdateItem()
   updateItem(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -160,22 +198,29 @@ export class GoodsReceiptsGatewayController {
     return this.service.updateItem(goodsReceiptId, itemId, dto);
   }
 
+  // Removes an item from a goods receipt
   @Delete(':id/items/:itemId')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
+  @ApiRemoveItem()
   removeItem(@Param('id') goodsReceiptId: string, @Param('itemId') itemId: string): Promise<SuccessResponseDto> {
     this.logger.log(`DELETE /commerce-api/goods-receipts/${goodsReceiptId}/items/${itemId}`);
     return this.service.removeItem(goodsReceiptId, itemId);
   }
 
-  // Lots
-
+  // Returns the lots of a goods receipt item
   @Get(':id/items/:itemId/lots')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiLots()
   lots(@Param('id') goodsReceiptId: string, @Param('itemId') itemId: string): Promise<GoodsReceiptLotResponseDto[]> {
     this.logger.log(`GET /commerce-api/goods-receipts/${goodsReceiptId}/items/${itemId}/lots`);
     return this.service.findLots(goodsReceiptId, itemId);
   }
 
+  // Adds a lot to a goods receipt item
   @Post(':id/items/:itemId/lots')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
   @HttpCode(HttpStatus.CREATED)
+  @ApiAddLot()
   addLot(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -185,18 +230,24 @@ export class GoodsReceiptsGatewayController {
     return this.service.addLot(goodsReceiptId, itemId, dto);
   }
 
+  // Changes a lot of a goods receipt item
   @Patch(':id/items/:itemId/lots/:lotId')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
+  @ApiUpdateLot()
   updateLot(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
     @Param('lotId') lotId: string,
     @Body() dto: UpdateGoodsReceiptLotDto,
-  ): Promise<GoodsReceiptLotResponseDto> {
+  ): Promise<SuccessResponseDto> {
     this.logger.log(`PATCH /commerce-api/goods-receipts/${goodsReceiptId}/items/${itemId}/lots/${lotId}`);
     return this.service.updateLot(goodsReceiptId, itemId, lotId, dto);
   }
 
+  // Removes a lot from a goods receipt item
   @Delete(':id/items/:itemId/lots/:lotId')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
+  @ApiRemoveLot()
   removeLot(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -206,9 +257,10 @@ export class GoodsReceiptsGatewayController {
     return this.service.removeLot(goodsReceiptId, itemId, lotId);
   }
 
-  // Lines
-
+  // Returns a goods receipt item's lines for the data table
   @Get(':id/items/:itemId/lines/table')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiLinesTable()
   linesTable(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -218,7 +270,10 @@ export class GoodsReceiptsGatewayController {
     return this.service.findLinesTable(goodsReceiptId, itemId, userId);
   }
 
+  // Returns the lines one lot of a goods receipt item is distributed to, for the data table
   @Get(':id/items/:itemId/lots/:lotId/lines/table')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiLinesByLotTable()
   linesByLotTable(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -229,7 +284,10 @@ export class GoodsReceiptsGatewayController {
     return this.service.findLinesByLotTable(goodsReceiptId, itemId, lotId, userId);
   }
 
+  // Returns one line of a goods receipt item
   @Get(':id/items/:itemId/lines/:lineId')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiLineById()
   lineById(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -239,8 +297,11 @@ export class GoodsReceiptsGatewayController {
     return this.service.findLineById(goodsReceiptId, itemId, lineId);
   }
 
+  // Adds a line to a goods receipt item
   @Post(':id/items/:itemId/lines')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
   @HttpCode(HttpStatus.CREATED)
+  @ApiAddLine()
   addLine(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -250,18 +311,24 @@ export class GoodsReceiptsGatewayController {
     return this.service.addLine(goodsReceiptId, itemId, dto);
   }
 
+  // Changes a line of a goods receipt item
   @Patch(':id/items/:itemId/lines/:lineId')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
+  @ApiUpdateLine()
   updateLine(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
     @Param('lineId') lineId: string,
     @Body() dto: UpdateGoodsReceiptLineDto,
-  ): Promise<GoodsReceiptLineResponseDto> {
+  ): Promise<SuccessResponseDto> {
     this.logger.log(`PATCH /commerce-api/goods-receipts/${goodsReceiptId}/items/${itemId}/lines/${lineId}`);
     return this.service.updateLine(goodsReceiptId, itemId, lineId, dto);
   }
 
+  // Removes a line from a goods receipt item
   @Delete(':id/items/:itemId/lines/:lineId')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
+  @ApiRemoveLine()
   removeLine(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -271,9 +338,10 @@ export class GoodsReceiptsGatewayController {
     return this.service.removeLine(goodsReceiptId, itemId, lineId);
   }
 
-  // Line items (serials)
-
+  // Returns the serials registered on a goods receipt line, for the data table
   @Get(':id/items/:itemId/lines/:lineId/items/table')
+  @RequirePermission(SITE_GOODS_RECEIPTS.view)
+  @ApiLineItemsTable()
   lineItemsTable(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
@@ -284,19 +352,25 @@ export class GoodsReceiptsGatewayController {
     return this.service.findLineItemsTable(goodsReceiptId, itemId, lineId, userId);
   }
 
+  // Registers a serial on a goods receipt line
   @Post(':id/items/:itemId/lines/:lineId/items')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
   @HttpCode(HttpStatus.CREATED)
+  @ApiAddLineItem()
   addLineItem(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,
     @Param('lineId') lineId: string,
     @Body() dto: AddGoodsReceiptLineItemDto,
-  ): Promise<GoodsReceiptLineItemResponseDto> {
+  ): Promise<CreateResponseDto<GoodsReceiptLineItemResponseDto>> {
     this.logger.log(`POST /commerce-api/goods-receipts/${goodsReceiptId}/items/${itemId}/lines/${lineId}/items`);
     return this.service.addLineItem(goodsReceiptId, itemId, lineId, dto);
   }
 
+  // Removes a serial from a goods receipt line
   @Delete(':id/items/:itemId/lines/:lineId/items/:subItemId')
+  @RequirePermission(SITE_GOODS_RECEIPTS.edit)
+  @ApiRemoveLineItem()
   removeLineItem(
     @Param('id') goodsReceiptId: string,
     @Param('itemId') itemId: string,

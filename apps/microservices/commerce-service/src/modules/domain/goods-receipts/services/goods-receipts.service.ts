@@ -1,4 +1,3 @@
-import { PurchaseOrdersDomainRepository } from '@domain/purchase-orders/repositories/purchase-orders.repository';
 import { Injectable, Logger } from '@nestjs/common';
 import {
   CursorCodec,
@@ -10,19 +9,42 @@ import {
   type SearchState,
   type TableViewState,
 } from '@vritti/api-sdk/data-table';
-import { and, asc, desc } from '@vritti/api-sdk/drizzle-orm';
-import { BadRequestException, NotFoundException, ValidationException } from '@vritti/api-sdk/exceptions';
+import { and, asc, desc, eq } from '@vritti/api-sdk/drizzle-orm';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
-import type { PurchaseOrder } from '@/db/schema';
-import { ExchangeRateTypeValues, GoodsReceiptStatusValues, goodsReceipts, parties, purchaseOrders } from '@/db/schema';
+import { type GoodsReceipt, GoodsReceiptStatusValues, goodsReceipts, parties, purchaseOrders } from '@/db/schema';
 import { GoodsReceiptDto } from '../dto/entity/goods-receipt.dto';
 import type { CreateGoodsReceiptDto } from '../dto/request/create-goods-receipt.dto';
-import { GoodsReceiptItemsDomainRepository } from '../repositories/goods-receipt-items.repository';
 import { GoodsReceiptsDomainRepository } from '../repositories/goods-receipts.repository';
+
+export const MIN_SHELF_LIFE_DAYS = 180;
+
+export interface GoodsReceiptPurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  siteId: string;
+  legalEntityId: string;
+}
+
+export interface GoodsReceiptTableScope {
+  purchaseOrderId?: string;
+}
+
+export interface GoodsReceiptFeedQuery {
+  search?: SearchState | null;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface GoodsReceiptFeed {
+  edges: { cursor: string; node: GoodsReceiptDto }[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}
 
 @Injectable()
 export class GoodsReceiptsDomainService {
   private readonly logger = new Logger(GoodsReceiptsDomainService.name);
+
   private static readonly SEARCH_FIELD_MAP: FieldMap = {
     grNumber: { column: goodsReceipts.grNumber, type: 'string' },
     supplierName: { column: parties.displayName, type: 'string' },
@@ -30,330 +52,106 @@ export class GoodsReceiptsDomainService {
   };
   private static readonly FILTER_FIELD_MAP: FieldMap = {
     status: { column: goodsReceipts.status, type: 'string' },
+    supplierId: { column: goodsReceipts.supplierId, type: 'string' },
+    siteId: { column: goodsReceipts.siteId, type: 'string' },
+    sites: { column: goodsReceipts.siteId, type: 'string' },
   };
+  private static readonly SORT_FIELD_MAP: FieldMap = {
+    ...GoodsReceiptsDomainService.SEARCH_FIELD_MAP,
+    ...GoodsReceiptsDomainService.FILTER_FIELD_MAP,
+    receivedDate: { column: goodsReceipts.receivedDate, type: 'string' },
+  };
+  private static readonly FEED_ORDER: (KeysetOrderBy & { key: keyof GoodsReceipt })[] = [
+    { column: goodsReceipts.createdAt, direction: 'desc', key: 'createdAt' },
+    { column: goodsReceipts.id, direction: 'asc', key: 'id' },
+  ];
 
-  constructor(
-    private readonly repository: GoodsReceiptsDomainRepository,
-    private readonly itemsRepository: GoodsReceiptItemsDomainRepository,
-    private readonly poRepository: PurchaseOrdersDomainRepository,
-  ) {}
+  constructor(private readonly repository: GoodsReceiptsDomainRepository) {}
 
-  async create(data: CreateGoodsReceiptDto, siteCurrencyCode: string): Promise<CreateResponseDto<GoodsReceiptDto>> {
-    const supplier = await this.repository.findSupplierById(data.supplierId);
-    if (!supplier) throw new NotFoundException('Supplier not found.');
-
-    const po = data.purchaseOrderId ? await this.poRepository.findById(data.purchaseOrderId) : null;
-    if (data.purchaseOrderId && !po) throw new NotFoundException('Purchase order not found.');
-    if (po && po.supplierId !== data.supplierId) {
-      throw new BadRequestException('Purchase order does not belong to the provided supplier.');
-    }
-
-    // Received against a PO, the goods are in the PO's currency; otherwise in the supplier's default
-    const exchangeRate = this.resolveExchangeRate(
-      po?.currencyCode ?? supplier.currencyCode,
-      po,
-      data.exchangeRate,
-      siteCurrencyCode,
-    );
-
-    const entity = await this.repository.create({
-      supplierId: data.supplierId,
-      status: GoodsReceiptStatusValues.DRAFT,
-      purchaseOrderId: data.purchaseOrderId ?? null,
-      exchangeRate,
-      receivedDate: data.receivedDate ?? new Date().toISOString().split('T')[0],
-      notes: data.notes ?? null,
-      publishedAt: null,
-    });
-
-    return {
-      success: true,
-      message: `Goods receipt "${entity.grNumber}" created.`,
-      data: GoodsReceiptDto.from(entity, {
-        supplierName: supplier.supplierName ?? '',
-        poId: po?.id ?? null,
-        poNumber: po?.poNumber ?? null,
-        poOrderDate: po?.orderDate ?? null,
-        poExpectedBy: po?.expectedBy ?? null,
-        poTotalAmount: po?.totalAmount ?? null,
-        poCurrencyCode: po?.currencyCode ?? null,
-      }),
-    };
-  }
-
-  async findForTableByPoId(poId: string, state: TableViewState): Promise<{ result: GoodsReceiptDto[]; count: number }> {
-    const filterWhere = FilterProcessor.buildWhere(state.filters, GoodsReceiptsDomainService.FILTER_FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, GoodsReceiptsDomainService.SEARCH_FIELD_MAP);
-    const where = and(filterWhere, searchWhere);
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, {
-      ...GoodsReceiptsDomainService.SEARCH_FIELD_MAP,
-      ...GoodsReceiptsDomainService.FILTER_FIELD_MAP,
-      receivedDate: { column: goodsReceipts.receivedDate, type: 'string' },
-    });
+  // Returns one page of goods receipts, narrowed to a purchase order when one is named
+  async findForTable(
+    state: TableViewState,
+    scope: GoodsReceiptTableScope = {},
+  ): Promise<{ result: GoodsReceiptDto[]; count: number }> {
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, GoodsReceiptsDomainService.SORT_FIELD_MAP);
     const { limit = 20, offset = 0 } = state.pagination;
 
-    const { result: rows, count } = await this.repository.findForTableByPoId(poId, {
-      where: where || undefined,
+    const { result, count } = await this.repository.findForTable({
+      where: and(
+        FilterProcessor.buildWhere(state.filters, GoodsReceiptsDomainService.FILTER_FIELD_MAP),
+        FilterProcessor.buildSearch(state.search, GoodsReceiptsDomainService.SEARCH_FIELD_MAP),
+        scope.purchaseOrderId ? eq(goodsReceipts.purchaseOrderId, scope.purchaseOrderId) : undefined,
+      ),
       orderBy: orderBy.length > 0 ? orderBy : [desc(goodsReceipts.createdAt)],
       limit,
       offset,
     });
-
-    const result = rows.map((row) =>
-      GoodsReceiptDto.from(row, {
-        supplierName: row.supplierName,
-        poId: row.purchaseOrderId ?? null,
-        poNumber: row.poNumber,
-        poOrderDate: row.poOrderDate ?? null,
-        poExpectedBy: row.poExpectedBy ?? null,
-        poTotalAmount: row.poTotalAmount ?? null,
-        poCurrencyCode: row.poCurrencyCode ?? null,
-      }),
-    );
-
-    return { result, count };
+    return { result: result.map(GoodsReceiptDto.from), count };
   }
 
-  hasGoodsReceiptForPo(poId: string): Promise<boolean> {
-    return this.repository.existsByPoId(poId);
-  }
-
-  // Returns a keyset/cursor Relay connection of goods receipts for the mobile infinite feed.
-  async findForFeed(query: { search?: SearchState | null; limit?: number; cursor?: string }): Promise<{
-    edges: { cursor: string; node: GoodsReceiptDto }[];
-    pageInfo: { hasNextPage: boolean; endCursor: string | null };
-  }> {
-    const searchWhere = FilterProcessor.buildSearch(query.search, GoodsReceiptsDomainService.SEARCH_FIELD_MAP);
-
-    const orderByEntries: (KeysetOrderBy & { key: string })[] = [
-      { column: goodsReceipts.createdAt, direction: 'desc', key: 'createdAt' },
-      { column: goodsReceipts.id, direction: 'asc', key: 'id' },
-    ];
-    const orderBy = orderByEntries.map((e) => (e.direction === 'asc' ? asc(e.column) : desc(e.column)));
-    const signature = keysetSignature(orderByEntries);
-    const cursorWhere = query.cursor
-      ? KeysetProcessor.buildAfter(orderByEntries, CursorCodec.decode(query.cursor, signature))
-      : undefined;
-    const where = and(searchWhere, cursorWhere);
-
-    const limit = query.limit ?? 20;
-    const { rows, hasMore } = await this.repository.findKeysetForFeed({ where: where || undefined, orderBy, limit });
+  // Returns a keyset page of goods receipts for the mobile infinite feed, newest first
+  async findForFeed(query: GoodsReceiptFeedQuery): Promise<GoodsReceiptFeed> {
+    const order = GoodsReceiptsDomainService.FEED_ORDER;
+    const signature = keysetSignature(order);
+    const { rows, hasMore } = await this.repository.findKeysetForFeed({
+      where: and(
+        FilterProcessor.buildSearch(query.search, GoodsReceiptsDomainService.SEARCH_FIELD_MAP),
+        query.cursor ? KeysetProcessor.buildAfter(order, CursorCodec.decode(query.cursor, signature)) : undefined,
+      ),
+      orderBy: order.map((entry) => (entry.direction === 'asc' ? asc(entry.column) : desc(entry.column))),
+      limit: query.limit ?? 20,
+    });
 
     const edges = rows.map((row) => ({
       cursor: CursorCodec.encode(
-        orderByEntries.map((e) => (row as Record<string, unknown>)[e.key]),
+        order.map((entry) => row[entry.key]),
         signature,
       ),
-      node: GoodsReceiptDto.from(row, {
-        supplierName: row.supplierName,
-        supplierCurrencyCode: row.supplierCurrencyCode,
-        poId: row.purchaseOrderId ?? null,
-        poNumber: row.poNumber,
-        poOrderDate: row.poOrderDate ?? null,
-        poExpectedBy: row.poExpectedBy ?? null,
-        poTotalAmount: row.poTotalAmount ?? null,
-        poCurrencyCode: row.poCurrencyCode ?? null,
-      }),
+      node: GoodsReceiptDto.from(row),
     }));
+    return { edges, pageInfo: { hasNextPage: hasMore, endCursor: edges.at(-1)?.cursor ?? null } };
+  }
 
+  // Returns one goods receipt header with its purchase order and publish readiness
+  async findById(id: string): Promise<GoodsReceiptDto> {
+    return GoodsReceiptDto.from(await this.repository.findDetailOrThrow(id));
+  }
+
+  // Creates a draft receipt against a receivable PO; its supplier, site and legal entity are the PO's
+  async create(
+    dto: CreateGoodsReceiptDto,
+    purchaseOrder: GoodsReceiptPurchaseOrder,
+  ): Promise<CreateResponseDto<GoodsReceiptDto>> {
+    const grNumber = await this.repository.generateGrNumber();
+    const created = await this.repository.create({
+      grNumber,
+      purchaseOrderId: purchaseOrder.id,
+      supplierId: purchaseOrder.supplierId,
+      siteId: purchaseOrder.siteId,
+      legalEntityId: purchaseOrder.legalEntityId,
+      receivedDate: dto.receivedDate,
+      notes: dto.notes ?? null,
+    });
+
+    this.logger.log(`Created goods receipt ${grNumber} against PO ${purchaseOrder.poNumber}`);
     return {
-      edges,
-      pageInfo: { hasNextPage: hasMore, endCursor: edges.length > 0 ? edges[edges.length - 1].cursor : null },
+      success: true,
+      message: `Goods receipt "${grNumber}" created against purchase order "${purchaseOrder.poNumber}".`,
+      data: await this.findById(created.id),
     };
   }
 
-  async findForTable(state: TableViewState): Promise<{ result: GoodsReceiptDto[]; count: number }> {
-    const filterWhere = FilterProcessor.buildWhere(state.filters, GoodsReceiptsDomainService.FILTER_FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, GoodsReceiptsDomainService.SEARCH_FIELD_MAP);
-    const where = and(filterWhere, searchWhere);
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, {
-      ...GoodsReceiptsDomainService.SEARCH_FIELD_MAP,
-      ...GoodsReceiptsDomainService.FILTER_FIELD_MAP,
-      receivedDate: { column: goodsReceipts.receivedDate, type: 'string' },
-    });
-    const { limit = 20, offset = 0 } = state.pagination;
-
-    const { result: rows, count } = await this.repository.findForTable({
-      where: where || undefined,
-      orderBy: orderBy.length > 0 ? orderBy : [desc(goodsReceipts.createdAt)],
-      limit,
-      offset,
-    });
-
-    const result = rows.map((row) =>
-      GoodsReceiptDto.from(row, {
-        supplierName: row.supplierName,
-        poId: row.purchaseOrderId ?? null,
-        poNumber: row.poNumber,
-        poOrderDate: row.poOrderDate ?? null,
-        poExpectedBy: row.poExpectedBy ?? null,
-        poTotalAmount: row.poTotalAmount ?? null,
-        poCurrencyCode: row.poCurrencyCode ?? null,
-      }),
-    );
-
-    return { result, count };
+  // Marks a draft receipt published once its stock has landed
+  async markPublished(id: string): Promise<void> {
+    await this.repository.update(id, { status: GoodsReceiptStatusValues.PUBLISHED, publishedAt: new Date() });
+    this.logger.log(`Published goods receipt ${id}`);
   }
 
-  async findById(id: string): Promise<GoodsReceiptDto> {
-    const gr = await this.repository.findByIdWithRefs(id);
-    if (!gr) throw new NotFoundException('Goods receipt not found.');
-    const { isPublishable, canLinkPurchaseOrder, canUnlinkPurchaseOrder } = await this.computeDraftSignals(
-      id,
-      gr.status,
-      gr.purchaseOrderId,
-    );
-    return GoodsReceiptDto.from(
-      { ...gr, isPublishable, canLinkPurchaseOrder, canUnlinkPurchaseOrder },
-      {
-        supplierName: gr.supplierName,
-        supplierCurrencyCode: gr.supplierCurrencyCode,
-        poId: gr.purchaseOrderId ?? null,
-        poNumber: gr.poNumber,
-        poOrderDate: gr.poOrderDate ?? null,
-        poExpectedBy: gr.poExpectedBy ?? null,
-        poTotalAmount: gr.poTotalAmount ?? null,
-        poCurrencyCode: gr.poCurrencyCode ?? null,
-      },
-    );
-  }
-
-  // Links a PO to a draft GR that has no items, requiring a matching supplier
-  async linkPurchaseOrder(id: string, purchaseOrderId: string): Promise<SuccessResponseDto> {
-    const gr = await this.repository.findById(id);
-    if (!gr) throw new NotFoundException('Goods receipt not found.');
-    if (gr.status !== GoodsReceiptStatusValues.DRAFT) {
-      throw new BadRequestException({
-        label: 'Cannot Link Purchase Order',
-        detail: 'Only draft goods receipts can be linked to a purchase order.',
-      });
-    }
-    if (gr.purchaseOrderId) {
-      throw new BadRequestException({
-        label: 'Already Linked',
-        detail: 'This goods receipt is already linked to a purchase order.',
-      });
-    }
-    const itemsCount = await this.itemsRepository.countByReceiptId(id);
-    if (itemsCount > 0) {
-      throw new BadRequestException({
-        label: 'Cannot Link Purchase Order',
-        detail: 'Remove all items before linking a purchase order.',
-      });
-    }
-
-    const po = await this.poRepository.findById(purchaseOrderId);
-    if (!po) throw new NotFoundException('Purchase order not found.');
-    if (po.supplierId !== gr.supplierId) {
-      throw new BadRequestException({
-        label: 'Supplier Mismatch',
-        detail: "Purchase order's supplier does not match the goods receipt's supplier.",
-      });
-    }
-
-    await this.repository.update(id, { purchaseOrderId: po.id });
-    this.logger.log(`Linked PO ${po.poNumber} to goods receipt ${gr.grNumber} (${id})`);
-    return { success: true, message: `Purchase order "${po.poNumber}" linked to goods receipt "${gr.grNumber}".` };
-  }
-
-  // Unlinks the PO from a draft GR that has no items
-  async unlinkPurchaseOrder(id: string): Promise<SuccessResponseDto> {
-    const gr = await this.repository.findById(id);
-    if (!gr) throw new NotFoundException('Goods receipt not found.');
-    if (gr.status !== GoodsReceiptStatusValues.DRAFT) {
-      throw new BadRequestException({
-        label: 'Cannot Unlink Purchase Order',
-        detail: 'Only draft goods receipts can be unlinked from a purchase order.',
-      });
-    }
-    if (!gr.purchaseOrderId) {
-      throw new BadRequestException({
-        label: 'Not Linked',
-        detail: 'This goods receipt is not linked to a purchase order.',
-      });
-    }
-    const itemsCount = await this.itemsRepository.countByReceiptId(id);
-    if (itemsCount > 0) {
-      throw new BadRequestException({
-        label: 'Cannot Unlink Purchase Order',
-        detail: 'Remove all items before unlinking the purchase order.',
-      });
-    }
-
-    await this.repository.update(id, { purchaseOrderId: null });
-    this.logger.log(`Unlinked PO from goods receipt ${gr.grNumber} (${id})`);
-    return { success: true, message: `Purchase order unlinked from goods receipt "${gr.grNumber}".` };
-  }
-
+  // Deletes a draft goods receipt with everything counted on it
   async delete(id: string): Promise<SuccessResponseDto> {
-    const gr = await this.repository.findById(id);
-    if (!gr) throw new NotFoundException('Goods receipt not found.');
-    if (gr.status !== GoodsReceiptStatusValues.DRAFT) {
-      throw new BadRequestException('Only DRAFT goods receipts can be deleted.');
-    }
-    await this.repository.delete(id);
-    this.logger.log(`Deleted DRAFT goods receipt ${gr.grNumber} (${id})`);
-    return { success: true, message: `Goods receipt "${gr.grNumber}" deleted successfully.` };
-  }
-
-  // Resolves the receipt-currency→site exchange rate to snapshot on the new GR
-  private resolveExchangeRate(
-    supplierCurrencyCode: string,
-    po: PurchaseOrder | null | undefined,
-    userExchangeRate: number | undefined,
-    siteCurrencyCode: string,
-  ): number {
-    if (supplierCurrencyCode === siteCurrencyCode) return 1;
-
-    if (po && po.exchangeRateType === ExchangeRateTypeValues.FIXED) {
-      if (po.exchangeRate == null) {
-        throw new BadRequestException('Linked purchase order is FIXED-rate but has no exchange rate set.');
-      }
-      return Number(po.exchangeRate);
-    }
-
-    // VARIABLE PO or un-linked GR — caller must supply the rate.
-    if (userExchangeRate == null || userExchangeRate <= 0) {
-      throw new ValidationException({
-        detail: `Exchange rate is required (receipt currency ${supplierCurrencyCode} differs from site currency ${siteCurrencyCode}).`,
-        errors: [{ field: 'exchangeRate', message: 'Required when supplier currency differs from site currency.' }],
-      });
-    }
-    return userExchangeRate;
-  }
-
-  // Throws unless the draft is publishable — reuses the same signal the UI's Publish button reads, so publish and the
-  // button stay in lock-step.
-  async assertPublishable(id: string, status: string, purchaseOrderId: string | null): Promise<void> {
-    const { isPublishable } = await this.computeDraftSignals(id, status, purchaseOrderId);
-    if (!isPublishable) {
-      throw new BadRequestException({
-        label: 'Not Ready to Publish',
-        detail: 'Every item must be fully distributed and all serial lines balanced before publishing.',
-      });
-    }
-  }
-
-  // Computes the publishable, link, and unlink draft signals from a single items fetch
-  private async computeDraftSignals(
-    goodsReceiptId: string,
-    status: string,
-    purchaseOrderId: string | null,
-  ): Promise<{ isPublishable: boolean; canLinkPurchaseOrder: boolean; canUnlinkPurchaseOrder: boolean }> {
-    if (status !== GoodsReceiptStatusValues.DRAFT) {
-      return { isPublishable: false, canLinkPurchaseOrder: false, canUnlinkPurchaseOrder: false };
-    }
-    const items = await this.itemsRepository.findByReceiptId(goodsReceiptId);
-    const canLinkPurchaseOrder = !purchaseOrderId && items.length === 0;
-    const canUnlinkPurchaseOrder = !!purchaseOrderId && items.length === 0;
-    if (items.length === 0) return { isPublishable: false, canLinkPurchaseOrder, canUnlinkPurchaseOrder };
-    const isPublishable = items.every((item) => {
-      if (item.unbalancedLinesCount > 0) return false;
-      if (item.acceptedQuantity <= 0) return false;
-      // Balanced ⇔ the lines distribute exactly the total received quantity (ordered + free).
-      if (Math.abs(item.acceptedQuantity - Number(item.totalQty)) > 1e-9) return false;
-      return true;
-    });
-    return { isPublishable, canLinkPurchaseOrder, canUnlinkPurchaseOrder };
+    const receipt = await this.repository.findDraftOrThrow(id, 'Cannot Delete');
+    await this.repository.delete(receipt.id);
+    this.logger.log(`Deleted goods receipt ${receipt.grNumber} (${receipt.id})`);
+    return { success: true, message: `Goods receipt "${receipt.grNumber}" deleted successfully.` };
   }
 }

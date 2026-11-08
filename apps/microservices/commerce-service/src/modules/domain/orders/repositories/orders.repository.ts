@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { eq, sql } from '@vritti/api-sdk/drizzle-orm';
+import { eq } from '@vritti/api-sdk/drizzle-orm';
 import {
   type NewOrderItem,
   type OrderItem,
@@ -9,7 +9,6 @@ import {
   orderItems,
   orderNumberSeq,
   orders,
-  taxRates,
   type VariantFacet,
 } from '@/db/schema';
 
@@ -42,7 +41,6 @@ export class OrdersDomainRepository extends PrimaryBaseRepository<typeof orders>
         offeringId: string;
         offeringName: string;
         dimensions: VariantFacet[];
-        taxClassId: string;
       }
     | undefined
   > {
@@ -51,21 +49,10 @@ export class OrdersDomainRepository extends PrimaryBaseRepository<typeof orders>
         offeringId: offerings.id,
         offeringName: offerings.name,
         dimensions: offeringVariants.dimensions,
-        taxClassId: offeringVariants.taxClassId,
       })
       .from(offeringVariants)
       .innerJoin(offerings, eq(offeringVariants.offeringId, offerings.id))
       .where(eq(offeringVariants.id, variantId));
     return row;
-  }
-
-  // Returns the effective tax rate for a tax group (sum of all component rates)
-  async getEffectiveTaxRate(taxGroupId: string | null): Promise<number> {
-    if (!taxGroupId) return 0;
-    const result = await this.db
-      .select({ total: sql<number>`coalesce(sum(${taxRates.rate}), 0)` })
-      .from(taxRates)
-      .where(eq(taxRates.taxGroupId, taxGroupId));
-    return Number(result[0]?.total ?? 0);
   }
 }

@@ -4,6 +4,7 @@ import type { GoodsReceiptData } from '@/schemas/goods-receipts';
 import { getGoodsReceipt } from '@/services/site/goods-receipts.service';
 import { GOODS_RECEIPT_KEY } from './keys';
 
+// Fetches one goods receipt
 export function useGoodsReceipt(id: string) {
   return useSuspenseQuery<GoodsReceiptData, AxiosError>({
     queryKey: GOODS_RECEIPT_KEY(id),

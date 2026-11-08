@@ -1,0 +1,1 @@
+ALTER TYPE "commerce"."cost_source_type" ADD VALUE 'SUPPLIER_INVOICE';

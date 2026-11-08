@@ -16,7 +16,7 @@ const DEFAULT_FIELD_KEYS = {
   labelKey: 'name',
   descriptionKey: 'tracking',
   groupIdKey: 'categoryId',
-  additionalKeys: 'symbol,inventoryItemId,uomId,unitPrice,currencyCode,allowDecimal,orderedQuantity,receivedQuantity',
+  additionalKeys: 'symbol,inventoryItemId,uomId,unitPrice,currencyCode',
 } as const;
 
 function defaultTransformLabel(label: string, option: SelectOption): string {

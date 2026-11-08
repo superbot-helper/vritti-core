@@ -1,15 +1,10 @@
-import { IsIn, IsNumber, IsOptional, IsUUID, Min } from 'class-validator';
-import { ExchangeRateTypeValues } from '@/db/schema';
+import { IsNumber, IsPositive, IsUUID } from 'class-validator';
 
 export class ChangePurchaseOrderExchangeRateDto {
   @IsUUID('7')
   id: string;
 
-  @IsIn([ExchangeRateTypeValues.FIXED, ExchangeRateTypeValues.VARIABLE])
-  exchangeRateType: 'FIXED' | 'VARIABLE';
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  exchangeRate?: number | null;
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @IsPositive()
+  exchangeRate: number;
 }
