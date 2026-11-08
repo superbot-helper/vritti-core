@@ -41,6 +41,18 @@
       "types": "./dist/inventory-items.d.ts",
       "default": "./dist/inventory-items.js"
     },
+    "./goods-receipts": {
+      "types": "./dist/goods-receipts.d.ts",
+      "default": "./dist/goods-receipts.js"
+    },
+    "./purchase-orders": {
+      "types": "./dist/purchase-orders.d.ts",
+      "default": "./dist/purchase-orders.js"
+    },
+    "./supplier-invoices": {
+      "types": "./dist/supplier-invoices.d.ts",
+      "default": "./dist/supplier-invoices.js"
+    },
     "./suppliers": {
       "types": "./dist/suppliers.d.ts",
       "default": "./dist/suppliers.js"
