@@ -7,6 +7,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { AuthType, Require, SkipCsrf } from '@vritti/api-sdk/auth';
 import { SuccessResponseDto } from '@vritti/api-sdk/responses';
 import { SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 import { SessionTypeValues } from '@/db/schema';
 import { OrgId } from '@/security/decorators/org-id.decorator';
 import { MobileLookupDto } from '../../auth/root/dto/request/mobile-lookup.dto';
@@ -19,7 +20,6 @@ import {
   ApiResendInvite,
   ApiUpdateUser,
 } from '../docs/user.docs';
-import { GetUsersInternalDto } from '../dto/request/get-users-internal.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -55,16 +55,14 @@ export class UserController {
     return this.userService.createFromCloud(orgId, dto);
   }
 
-  // Returns paginated, filtered, and sorted portal users for the data table
-  @Get('internal')
+  // Returns one page of the organization's portal users from the page request cloud sends for its data table
+  @Post('internal/table')
   @Require(AuthType.Cloud)
+  @HttpCode(HttpStatus.OK)
   @ApiGetUsers()
-  async getUsersByOrg(@OrgId() orgId: string, @Query() dto: GetUsersInternalDto): Promise<UsersTableResponseDto> {
-    this.logger.log(`GET /users/internal — org ${orgId}`);
-    const filters = dto.filters ? JSON.parse(dto.filters) : [];
-    const search = dto.search ? JSON.parse(dto.search) : null;
-    const sort = dto.sort ? JSON.parse(dto.sort) : [];
-    return this.userService.getUsersForTable(orgId, filters, search, sort, dto.limit ?? 20, dto.offset ?? 0);
+  async getUsersByOrg(@OrgId() orgId: string, @Body() page: InternalTablePageDto): Promise<UsersTableResponseDto> {
+    this.logger.log(`POST /users/internal/table — org ${orgId}`);
+    return this.userService.getUsersForTable(orgId, page);
   }
 
   // Updates a portal user's details

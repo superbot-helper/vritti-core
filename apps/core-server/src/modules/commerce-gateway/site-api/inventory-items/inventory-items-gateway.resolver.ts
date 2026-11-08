@@ -27,7 +27,8 @@ export class InventoryItemsResolver {
   ): Promise<InventoryItemConnection> {
     this.logger.log('QUERY inventoryItems');
     return this.inventoryItemsGatewayService.findForFeed({
-      filters,
+      // A feed has no context bar: the app's filters are its panel
+      filters: { panel: filters ?? [], context: [] },
       search,
       sort,
       limit: first ?? undefined,

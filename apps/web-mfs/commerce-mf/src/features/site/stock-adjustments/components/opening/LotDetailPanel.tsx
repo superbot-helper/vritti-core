@@ -262,9 +262,8 @@ const LotDetailContent = ({
     slug: `stock-adjustment-${adjustmentId}-lot-${lot.id}-lines`,
     label: 'line',
     enableRowSelection: false,
-    onStatePush: () => {
-      queryClient.invalidateQueries({ queryKey: STOCK_ADJUSTMENT_LINES_BY_LOT_TABLE_KEY(adjustmentId, lot.id) });
-    },
+    onStatePush: () =>
+      queryClient.invalidateQueries({ queryKey: STOCK_ADJUSTMENT_LINES_BY_LOT_TABLE_KEY(adjustmentId, lot.id) }),
   });
 
   const handleDeleteLot = async () => {

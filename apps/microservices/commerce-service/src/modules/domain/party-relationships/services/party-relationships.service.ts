@@ -38,20 +38,20 @@ export class PartyRelationshipsDomainService {
     personId: string,
     state: TableViewState,
   ): Promise<{ result: PersonCompanyDto[]; count: number }> {
-    const filterWhere = FilterProcessor.buildWhere(state.filters, PartyRelationshipsDomainService.COMPANY_FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, PartyRelationshipsDomainService.COMPANY_FIELD_MAP);
-    const where = and(eq(partyRelationships.childPartyId, personId), filterWhere, searchWhere) || undefined;
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, PartyRelationshipsDomainService.COMPANY_FIELD_MAP);
+    const fieldMap = PartyRelationshipsDomainService.COMPANY_FIELD_MAP;
     const { limit = 20, offset = 0 } = state.pagination;
-
-    const { result: rows, count } = await this.repository.findCompaniesForTable({
-      where,
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, fieldMap);
+    const { result, count } = await this.repository.findCompaniesForTable({
+      where: and(
+        eq(partyRelationships.childPartyId, personId),
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, fieldMap),
+      ),
       orderBy: orderBy.length > 0 ? orderBy : [asc(partyRelationships.createdAt)],
       limit,
       offset,
     });
-
-    return { result: rows.map((row) => PersonCompanyDto.from(row, row.companyName)), count };
+    return { result: result.map((row) => PersonCompanyDto.from(row, row.companyName)), count };
   }
 
   // Returns paginated people linked to a company party for the data table
@@ -59,30 +59,23 @@ export class PartyRelationshipsDomainService {
     companyPartyId: string,
     state: TableViewState,
   ): Promise<{ result: PartyRelationshipDto[]; count: number }> {
-    const filterWhere = FilterProcessor.buildWhere(
-      state.filters,
-      PartyRelationshipsDomainService.RELATIONSHIP_FIELD_MAP,
-    );
-    const searchWhere = FilterProcessor.buildSearch(
-      state.search,
-      PartyRelationshipsDomainService.RELATIONSHIP_FIELD_MAP,
-    );
-    const where = and(eq(partyRelationships.parentPartyId, companyPartyId), filterWhere, searchWhere) || undefined;
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, PartyRelationshipsDomainService.RELATIONSHIP_FIELD_MAP);
+    const fieldMap = PartyRelationshipsDomainService.RELATIONSHIP_FIELD_MAP;
     const { limit = 20, offset = 0 } = state.pagination;
-
-    const { result: rows, count } = await this.repository.findRelationshipsForTable({
-      where,
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, fieldMap);
+    const { result, count } = await this.repository.findRelationshipsForTable({
+      where: and(
+        eq(partyRelationships.parentPartyId, companyPartyId),
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, fieldMap),
+      ),
       orderBy: orderBy.length > 0 ? orderBy : [asc(partyRelationships.createdAt)],
       limit,
       offset,
     });
-
-    return { result: rows.map((row) => PartyRelationshipDto.from(row)), count };
+    return { result: result.map((row) => PartyRelationshipDto.from(row)), count };
   }
 
-  // Returns paginated relationship (person) options of a company party for select dropdowns — optionally filtered to
-  // holders of a function (e.g.
+  // Returns paginated relationship (person) options of a company party for select dropdowns, optionally holders of a function
   findForSelect(
     query: SelectOptionsQueryDto,
     partyId: string,

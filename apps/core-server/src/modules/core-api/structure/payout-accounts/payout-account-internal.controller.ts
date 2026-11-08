@@ -19,6 +19,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { AuthType, Require } from '@vritti/api-sdk/auth';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 import { OrgId } from '@/security/decorators';
 import {
   ApiCreatePayoutAccountInternal,
@@ -27,7 +28,6 @@ import {
   ApiListPayoutAccountsInternal,
   ApiUpdatePayoutAccountInternal,
 } from './docs/payout-account-internal.docs';
-import { GetPayoutAccountsInternalDto } from './dto/request/get-payout-accounts-internal.dto';
 import { ListPayoutAccountsInternalQueryDto } from './dto/request/list-payout-accounts-internal-query.dto';
 import { PayoutAccountService } from './services/payout-account-api.service';
 
@@ -39,12 +39,13 @@ export class PayoutAccountInternalController {
 
   constructor(private readonly payoutAccountService: PayoutAccountService) {}
 
-  // Resolves one table page from the view state cloud holds and sends serialized
-  @Get('table')
+  // Resolves one table page from the page request cloud sends for the view state it holds
+  @Post('table')
+  @HttpCode(HttpStatus.OK)
   @ApiFindForTablePayoutAccountsInternal()
-  findForTable(@Query() query: GetPayoutAccountsInternalDto): Promise<PayoutAccountsPageResponseDto> {
-    this.logger.log('GET /payout-accounts/internal/table');
-    return this.payoutAccountService.findForTableWithQuery(query);
+  findForTable(@Body() page: InternalTablePageDto): Promise<PayoutAccountsPageResponseDto> {
+    this.logger.log('POST /payout-accounts/internal/table');
+    return this.payoutAccountService.findForTablePage(page);
   }
 
   // Every payout account of a legal entity, for the payout channel picker

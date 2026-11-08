@@ -8,13 +8,11 @@ import type { UpdatePayoutAccountDto } from '@domain/payout-account/dto/request/
 import type { PayoutAccountsPageResponseDto } from '@domain/payout-account/dto/response/payout-accounts-page-response.dto';
 import { PayoutAccountDomainService } from '@domain/payout-account/services/payout-account.service';
 import { Injectable } from '@nestjs/common';
-import type { TableViewState } from '@vritti/api-sdk/data-table';
+import type { TablePageRequest } from '@vritti/api-sdk/data-table';
 import { BadRequestException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import { PaymentGatewayConfigKindValues } from '@/db/schema';
 import { PaymentGatewaysGatewayService } from '@/modules/payments-gateway/gateways/services/payment-gateways-gateway.service';
-import { parseTableQueryParam } from '@/utils/parse-table-query';
-import type { GetPayoutAccountsInternalDto } from '../dto/request/get-payout-accounts-internal.dto';
 
 @Injectable()
 export class PayoutAccountService {
@@ -30,14 +28,9 @@ export class PayoutAccountService {
     return this.payoutAccountService.listForLegalEntity(legalEntityId);
   }
 
-  // Resolves a table page from the view state cloud serializes, with the bank account pinned as a filter
-  async findForTableWithQuery(query: GetPayoutAccountsInternalDto): Promise<PayoutAccountsPageResponseDto> {
-    return this.payoutAccountService.findForTable({
-      filters: parseTableQueryParam<TableViewState['filters']>(query.filters, 'filters', []),
-      search: parseTableQueryParam<TableViewState['search'] | null>(query.search, 'search', null),
-      sort: parseTableQueryParam<TableViewState['sort']>(query.sort, 'sort', []),
-      pagination: { limit: query.limit ?? 20, offset: query.offset ?? 0 },
-    } as TableViewState);
+  // Resolves a table page from the page request cloud sends
+  async findForTablePage(page: TablePageRequest): Promise<PayoutAccountsPageResponseDto> {
+    return this.payoutAccountService.findForTable(page);
   }
 
   // Adds a payout account to a bank account after checking the bank and gateway and classifying the account. A gateway

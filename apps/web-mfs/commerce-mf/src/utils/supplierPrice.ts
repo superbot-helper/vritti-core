@@ -1,10 +1,24 @@
 import { addMonths, format, parseISO, subMonths } from '@vritti/quantum-ui/date-fns';
+import { filter } from '@vritti/quantum-ui/filter';
 import type { LineChartEmptyState } from '@vritti/quantum-ui/LineChart';
+import { EMPTY_TABLE_STATE, type FilterCondition, type TableViewState } from '@vritti/quantum-ui/types/table-filter';
 import type { PriceGraphSelection, PriceWindow, SupplierItemPriceRow } from '@/schemas/suppliers';
 
 // Mirrors the backend frozen-row rule: a price whose start date has arrived only accepts a new end date
 export function isPriceInForce(price: Pick<SupplierItemPriceRow, 'validFrom'>, today: string): boolean {
   return price.validFrom <= today;
+}
+
+// The site a prices table's context is on, when one is picked
+export function contextSiteId(context: FilterCondition[]): string | undefined {
+  const value = context.find((condition) => condition.field === 'site')?.value;
+  return typeof value === 'string' ? value : undefined;
+}
+
+// The sites a prices table's site picker offers: the priced ones, and the picked one when it has no prices left, so the
+// picker still names the site the rows are at
+export function pickerSiteIds(siteIds: string[], picked: string | undefined): string[] {
+  return picked && !siteIds.includes(picked) ? [...siteIds, picked] : siteIds;
 }
 
 export interface PricePoint {
@@ -31,31 +45,16 @@ export interface PriceRange {
 
 // The live table state a price graph saves its selection as — the same store DataTables use, read back by the graph's
 // endpoint
-export function priceGraphState(selection: PriceGraphSelection) {
-  const filters = [
-    ...(selection.siteId ? [{ field: 'siteId', operator: 'equals', value: selection.siteId }] : []),
-    { field: 'from', operator: 'gte', value: selection.from },
-    { field: 'to', operator: 'lte', value: selection.to },
-    ...(selection.supplierIds.length
-      ? [{ field: 'supplierIds', operator: 'isAnyOf', value: selection.supplierIds }]
-      : []),
-    ...(selection.mrpIds.length ? [{ field: 'mrpIds', operator: 'isAnyOf', value: selection.mrpIds }] : []),
-    ...(selection.currency ? [{ field: 'currency', operator: 'equals', value: selection.currency }] : []),
+export function priceGraphState(selection: PriceGraphSelection): TableViewState {
+  const panel = [
+    ...(selection.siteId ? [filter('siteId').equals(selection.siteId)] : []),
+    filter('from').gte(selection.from),
+    filter('to').lte(selection.to),
+    ...(selection.supplierIds.length ? [filter('supplierIds').isAnyOf(selection.supplierIds)] : []),
+    ...(selection.mrpIds.length ? [filter('mrpIds').isAnyOf(selection.mrpIds)] : []),
+    ...(selection.currency ? [filter('currency').equals(selection.currency)] : []),
   ];
-  return {
-    filters,
-    sort: [],
-    columnVisibility: {},
-    columnOrder: [],
-    columnSizing: {},
-    columnPinning: { left: [], right: [] },
-    lockedColumnSizing: false,
-    density: 'normal',
-    filterOrder: [],
-    filterVisibility: {},
-    search: null,
-    pagination: { limit: 20, offset: 0 },
-  };
+  return { ...EMPTY_TABLE_STATE, filters: { panel, context: [] } };
 }
 
 // What a price chart says inside its frame when no price falls in its window

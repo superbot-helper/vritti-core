@@ -19,17 +19,17 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { AuthType, Require } from '@vritti/api-sdk/auth';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 import { OrgId } from '@/security/decorators';
 import {
   ApiCreateBankAccountInternal,
   ApiDeleteBankAccountInternal,
-  ApiFindForTableBankAccountsInternal,
+  ApiFindForTableByLegalEntityBankAccountsInternal,
   ApiGetBankAccountInternal,
   ApiListBankAccountsInternal,
   ApiUpdateBankAccountInternal,
 } from './docs/bank-account-internal.docs';
 import { BankAccountScopeQueryDto } from './dto/request/bank-account-scope-query.dto';
-import { GetBankAccountsInternalDto } from './dto/request/get-bank-accounts-internal.dto';
 import { BankAccountService } from './services/bank-account-api.service';
 
 // The cloud-facing surface.
@@ -41,15 +41,17 @@ export class BankAccountInternalController {
 
   constructor(private readonly bankAccountService: BankAccountService) {}
 
-  // Resolves one table page from the view state cloud holds and sends serialized
-  @Get('table')
-  @ApiFindForTableBankAccountsInternal()
-  findForTable(
+  // Resolves one table page of a legal entity's bank accounts from the page request cloud sends
+  @Post('legal-entity/:legalEntityId/table')
+  @HttpCode(HttpStatus.OK)
+  @ApiFindForTableByLegalEntityBankAccountsInternal()
+  findForTableByLegalEntity(
     @OrgId() orgId: string,
-    @Query() query: GetBankAccountsInternalDto,
+    @Param('legalEntityId', ParseUUIDPipe) legalEntityId: string,
+    @Body() page: InternalTablePageDto,
   ): Promise<BankAccountsPageResponseDto> {
-    this.logger.log(`GET /bank-accounts/internal/table — org ${orgId}`);
-    return this.bankAccountService.findForTableWithQuery(orgId, query);
+    this.logger.log(`POST /bank-accounts/internal/legal-entity/${legalEntityId}/table — org ${orgId}`);
+    return this.bankAccountService.findForTablePage(orgId, legalEntityId, page);
   }
 
   // Lists a legal entity's bank accounts

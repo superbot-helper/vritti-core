@@ -7,12 +7,10 @@ import type { BankAccountsTableResponseDto } from '@domain/bank-account/dto/resp
 import { BankAccountDomainService } from '@domain/bank-account/services/bank-account.service';
 import { LegalEntityDomainRepository } from '@domain/legal-entity/repositories/legal-entity.repository';
 import { Injectable } from '@nestjs/common';
-import { DataTableStateService, type TableViewState } from '@vritti/api-sdk/data-table';
+import { DataTableStateService, type TablePageRequest } from '@vritti/api-sdk/data-table';
 import { BadRequestException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
-import { parseTableQueryParam } from '@/utils/parse-table-query';
 import type { CreateLeBankAccountDto } from '../dto/request/create-le-bank-account.dto';
-import type { GetBankAccountsInternalDto } from '../dto/request/get-bank-accounts-internal.dto';
 
 // Must equal the frontend useDataTable({ slug }) exactly, or the user's saved view is lost
 const TABLE_SLUG = 'le-bank-accounts';
@@ -25,22 +23,16 @@ export class BankAccountService {
     private readonly dataTableStateService: DataTableStateService,
   ) {}
 
-  // Cloud's data table: it holds the view state and sends it serialized, core resolves the page
-  async findForTableWithQuery(orgId: string, query: GetBankAccountsInternalDto): Promise<BankAccountsPageResponseDto> {
-    return this.findForTableWithState(orgId, {
-      filters: parseTableQueryParam<TableViewState['filters']>(query.filters, 'filters', []),
-      search: parseTableQueryParam<TableViewState['search'] | null>(query.search, 'search', null),
-      sort: parseTableQueryParam<TableViewState['sort']>(query.sort, 'sort', []),
-      pagination: { limit: query.limit ?? 20, offset: query.offset ?? 0 },
-    } as TableViewState);
+  // Cloud's data table: it holds the view state and sends the page request; core resolves one legal entity's page
+  async findForTablePage(
+    orgId: string,
+    legalEntityId: string,
+    page: TablePageRequest,
+  ): Promise<BankAccountsPageResponseDto> {
+    return this.bankAccountService.findForTable(orgId, page, legalEntityId);
   }
 
-  // Resolves a page for a caller that owns its own view state
-  async findForTableWithState(orgId: string, state: TableViewState): Promise<BankAccountsPageResponseDto> {
-    return this.bankAccountService.findForTable(orgId, state);
-  }
-
-  // The workspace table: the user's saved view, pinned to the legal entity in context
+  // The workspace table: the user's saved view, limited to the legal entity in context
   async findForTable(
     userId: string,
     orgId: string,
@@ -48,13 +40,7 @@ export class BankAccountService {
   ): Promise<BankAccountsTableResponseDto> {
     const contextLegalEntityId = this.requireLegalEntity(legalEntityId);
     const { state, activeViewId } = await this.dataTableStateService.getCurrentState(userId, TABLE_SLUG);
-
-    // The pin stays out of the returned state so it never shows up as a user-removable filter chip
-    const scoped: TableViewState = {
-      ...state,
-      filters: [...state.filters, { field: 'legalEntityId', operator: 'equals', value: contextLegalEntityId }],
-    };
-    const { result, count } = await this.bankAccountService.findForTable(orgId, scoped);
+    const { result, count } = await this.bankAccountService.findForTable(orgId, state, contextLegalEntityId);
     return { result, count, state, activeViewId };
   }
 

@@ -80,19 +80,4 @@ export class ItemSupplierPriceComparisonTableResponseDto extends TableResponseDt
 
   @ApiPropertyOptional()
   declare activeViewId: string | null;
-
-  @ApiProperty({ type: [String], description: 'Sites the item has supplier prices at — the sites the table can show' })
-  siteIds: string[];
-
-  @ApiPropertyOptional({
-    description: 'Site the table shows when none is picked: the first priced site in site order',
-    nullable: true,
-  })
-  defaultSiteId: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Site the rows are at: the one asked for when priced there, else the default',
-    nullable: true,
-  })
-  siteId: string | null;
 }

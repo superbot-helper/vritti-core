@@ -5,6 +5,7 @@ import { PayoutAccountsPageResponseDto } from '@domain/payout-account/dto/respon
 import { applyDecorators } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 
 const ID = ApiParam({ name: 'id', description: 'Payout account ID' });
 const ORG_HEADERS = [
@@ -24,10 +25,12 @@ export function ApiFindForTablePayoutAccountsInternal() {
     ApiOperation({
       summary: 'Payout accounts table',
       description:
-        "Resolves one page of the organization's payout accounts from a serialized view state (filters, search, sort, pagination) that cloud holds; cloud pins the bank account as a filter. Only the last four digits of an account number are returned.",
+        "Resolves one page of the organization's payout accounts from the page request (filters, search, sort, pagination) cloud sends for the view state it holds. Only the last four digits of an account number are returned.",
     }),
     ...ORG_HEADERS,
+    ApiBody({ type: InternalTablePageDto }),
     ApiResponse({ status: 200, description: 'Payout accounts page retrieved.', type: PayoutAccountsPageResponseDto }),
+    ApiResponse({ status: 400, description: 'Invalid table page request.' }),
     UNAUTHORIZED,
   );
 }

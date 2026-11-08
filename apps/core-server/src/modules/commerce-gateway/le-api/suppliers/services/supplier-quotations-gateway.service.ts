@@ -28,7 +28,7 @@ export class SupplierQuotationsGatewayService {
     this.logger.log(`le.suppliers.quotations.table — supplierId: ${supplierId}`);
     const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
       userId,
-      `commerce-supplier-${supplierId}-quotations`,
+      `commerce-le-supplier-${supplierId}-quotations`,
     );
     const { result, count } = await this.nats.send<{ result: SupplierQuotationResponseDto[]; count: number }>(
       'commerce',

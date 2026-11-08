@@ -3,6 +3,7 @@ import type { AddInventoryItemMrpDto } from '@domain/inventory-item-mrps/dto/req
 import type { UpdateInventoryItemMrpDto } from '@domain/inventory-item-mrps/dto/request/update-inventory-item-mrp.dto';
 import { InventoryItemMrpsDomainService } from '@domain/inventory-item-mrps/services/inventory-item-mrps.service';
 import { Injectable, Logger } from '@nestjs/common';
+import type { TableViewState } from '@vritti/api-sdk/data-table';
 import { NotFoundException, ValidationException } from '@vritti/api-sdk/exceptions';
 import type { SuccessResponseDto } from '@vritti/api-sdk/responses';
 
@@ -14,11 +15,13 @@ export class InventoryItemsMrpService {
 
   constructor(private readonly mrpsService: InventoryItemMrpsDomainService) {}
 
-  // Returns the suggested MRPs for an inventory item (one per currency)
-  async findByItem(inventoryItemId: string): Promise<InventoryItemMrpDto[]> {
-    this.logger.log(`findByItem — inventoryItemId=${inventoryItemId}`);
-    const rows = await this.mrpsService.findByItem(inventoryItemId);
-    return rows.map((row) => InventoryItemMrpDto.from(row));
+  // Returns one item's MRPs for the data table
+  findForTable(
+    inventoryItemId: string,
+    state: TableViewState,
+  ): Promise<{ result: InventoryItemMrpDto[]; count: number }> {
+    this.logger.log(`findForTable — inventoryItemId=${inventoryItemId}`);
+    return this.mrpsService.findForTable(inventoryItemId, state);
   }
 
   // Adds a new suggested MRP for an (item, uom, currency); rejects duplicates and out-of-family units

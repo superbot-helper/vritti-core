@@ -1,23 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  getColumns,
-  ilike,
-  inArray,
-  isNotNull,
-  isNull,
-  notInArray,
-  or,
-  type SQL,
-  sql,
-} from '@vritti/api-sdk/drizzle-orm';
-import { type AnyPgColumn, alias } from '@vritti/api-sdk/drizzle-pg-core';
+import { and, asc, desc, eq, getColumns, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { alias } from '@vritti/api-sdk/drizzle-pg-core';
 import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
-import type { SelectQueryResult } from '@vritti/api-sdk/select';
 import {
   type PartyCommunicationChannel,
   PartyCommunicationChannelValues,
@@ -28,7 +13,6 @@ import {
   partyBankAccounts,
   partyCommunications,
   partyFunctions,
-  partyIdentifiers,
   partyRelationships,
   partyTaxRegistrations,
   paymentTerms,
@@ -36,19 +20,17 @@ import {
   type SupplierEnrollment,
   supplierEnrollments,
   suppliers,
-  TaxIdIdentifierTypes,
   type TaxRegistrationType,
   TaxRegistrationTypeValues,
+  taxJurisdictions,
 } from '@/db/schema';
-import { SupplierEnrollmentStatusValues } from '../dto/entity/supplier-enrollment-row.dto';
-import type { SupplierEnrollmentSelectQueryDto } from '../dto/request/supplier-enrollment-select-query.dto';
 
-const orderRel = alias(partyRelationships, 'order_rel');
-const orderParty = alias(parties, 'order_party');
+export const orderRel = alias(partyRelationships, 'order_rel');
+export const orderParty = alias(parties, 'order_party');
 const orderContactEmail = alias(partyCommunications, 'order_contact_email');
 const orderContactPhone = alias(partyCommunications, 'order_contact_phone');
-const orderEmail = alias(partyCommunications, 'order_email');
-const orderPhone = alias(partyCommunications, 'order_phone');
+export const orderEmail = alias(partyCommunications, 'order_email');
+export const orderPhone = alias(partyCommunications, 'order_phone');
 
 const orderContactJoins = [
   { table: orderRel, on: eq(orderRel.id, supplierEnrollments.orderRelationshipId) },
@@ -104,28 +86,6 @@ const ENROLLMENT_REGISTRATION_TYPES: TaxRegistrationType[] = [
   TaxRegistrationTypeValues.VAT,
 ];
 
-// One field of the party's tax ID — the primary active identifier of a tax-ID type — or null when it has none on record
-const partyTaxIdField = <T>(column: AnyPgColumn) =>
-  sql<T | null>`(
-    SELECT ${column} FROM ${partyIdentifiers}
-    WHERE ${partyIdentifiers.partyId} = ${suppliers.partyId}
-      AND ${inArray(partyIdentifiers.idType, TaxIdIdentifierTypes)}
-      AND ${partyIdentifiers.isActive} = true
-    ORDER BY ${partyIdentifiers.isPrimary} DESC, ${partyIdentifiers.createdAt} ASC
-    LIMIT 1
-  )`;
-
-// Matches the site's enrollment row of the supplier in the current select
-const enrollmentAtSite = (siteId: string) =>
-  and(eq(supplierEnrollments.supplierId, suppliers.id), eq(supplierEnrollments.siteId, siteId));
-
-// Splits a comma-separated id list from a select query
-const parseIds = (input?: string): string[] =>
-  (input ?? '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-
 export type SupplierEnrollmentRowRecord = {
   id: string | null;
   supplierId: string;
@@ -143,6 +103,8 @@ export type SupplierEnrollmentRowRecord = {
   paymentTermName: string | null;
   partyTaxRegistrationId: string | null;
   registrationNumber: string | null;
+  registrationCountryCode: string | null;
+  registrationJurisdictionName: string | null;
   partyBankAccountId: string | null;
   bankAccountName: string | null;
   orderRelationshipId: string | null;
@@ -164,6 +126,8 @@ export type SupplierEnrollmentWithPicks = SupplierEnrollment & {
   paymentTermName: string;
   registrationNumber: string | null;
   registrationType: TaxRegistrationType | null;
+  registrationCountryCode: string | null;
+  registrationJurisdictionName: string | null;
   bankAccountName: string | null;
   bankName: string | null;
   orderContactLabel: string | null;
@@ -202,6 +166,8 @@ export class SupplierEnrollmentsDomainRepository extends PrimaryBaseRepository<t
         paymentTermName: paymentTerms.name,
         registrationNumber: partyTaxRegistrations.registrationNumber,
         registrationType: partyTaxRegistrations.registrationType,
+        registrationCountryCode: partyTaxRegistrations.countryCode,
+        registrationJurisdictionName: taxJurisdictions.name,
         bankAccountName: partyBankAccounts.accountName,
         bankName: partyBankAccounts.bankName,
         ...orderContactSelect,
@@ -215,6 +181,7 @@ export class SupplierEnrollmentsDomainRepository extends PrimaryBaseRepository<t
           table: partyTaxRegistrations,
           on: eq(partyTaxRegistrations.id, supplierEnrollments.partyTaxRegistrationId),
         },
+        { table: taxJurisdictions, on: eq(taxJurisdictions.id, partyTaxRegistrations.jurisdictionId) },
         { table: partyBankAccounts, on: eq(partyBankAccounts.id, supplierEnrollments.partyBankAccountId) },
         ...orderContactJoins,
       ],
@@ -222,38 +189,6 @@ export class SupplierEnrollmentsDomainRepository extends PrimaryBaseRepository<t
       orderBy: [desc(supplierEnrollments.createdAt)],
       limit,
     });
-  }
-
-  // Selects the shared enrollment row columns of a supplier at a site, enrolled or not
-  private rowSelection() {
-    return {
-      id: supplierEnrollments.id,
-      supplierId: suppliers.id,
-      supplierCode: suppliers.code,
-      partyId: suppliers.partyId,
-      partyName: parties.displayName,
-      partyType: parties.partyType,
-      currencyCode: suppliers.currencyCode,
-      defaultPaymentTermId: suppliers.defaultPaymentTermId,
-      isActive: supplierEnrollments.isActive,
-      isSupplierActive: suppliers.isActive,
-      purchasingBlocked: suppliers.purchasingBlocked,
-      paymentBlocked: suppliers.paymentBlocked,
-      paymentTermId: supplierEnrollments.paymentTermId,
-      paymentTermName: paymentTerms.name,
-      partyTaxRegistrationId: supplierEnrollments.partyTaxRegistrationId,
-      registrationNumber: partyTaxRegistrations.registrationNumber,
-      partyBankAccountId: supplierEnrollments.partyBankAccountId,
-      bankAccountName: partyBankAccounts.accountName,
-      orderRelationshipId: supplierEnrollments.orderRelationshipId,
-      orderContactLabel: orderRel.jobTitle,
-      orderContactName: orderParty.displayName,
-      orderEmailCommunicationId: supplierEnrollments.orderEmailCommunicationId,
-      orderEmail: orderEmail.value,
-      orderPhoneCommunicationId: supplierEnrollments.orderPhoneCommunicationId,
-      orderPhone: orderPhone.value,
-      enrolledAt: supplierEnrollments.createdAt,
-    };
   }
 
   // Returns every enrollment of a supplier joined with its picks
@@ -499,154 +434,6 @@ export class SupplierEnrollmentsDomainRepository extends PrimaryBaseRepository<t
     return this.exists(
       and(eq(supplierEnrollments.supplierId, supplierId), eq(supplierEnrollments.siteId, siteId)) as SQL,
     );
-  }
-
-  // Every supplier of the legal entity with the site's enrollment when there is one — the site's suppliers list
-  async findForSiteList(
-    legalEntityId: string,
-    siteId: string,
-    options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
-  ): Promise<{ result: SupplierEnrollmentRowRecord[]; count: number }> {
-    const where = and(eq(suppliers.legalEntityId, legalEntityId), options.where);
-    const [rows, [total]] = await Promise.all([
-      this.db
-        .select(this.rowSelection())
-        .from(suppliers)
-        .innerJoin(parties, eq(parties.id, suppliers.partyId))
-        .leftJoin(supplierEnrollments, enrollmentAtSite(siteId))
-        .leftJoin(paymentTerms, eq(paymentTerms.id, supplierEnrollments.paymentTermId))
-        .leftJoin(partyTaxRegistrations, eq(partyTaxRegistrations.id, supplierEnrollments.partyTaxRegistrationId))
-        .leftJoin(partyBankAccounts, eq(partyBankAccounts.id, supplierEnrollments.partyBankAccountId))
-        .leftJoin(orderRel, eq(orderRel.id, supplierEnrollments.orderRelationshipId))
-        .leftJoin(orderParty, eq(orderParty.id, orderRel.childPartyId))
-        .leftJoin(orderEmail, eq(orderEmail.id, supplierEnrollments.orderEmailCommunicationId))
-        .leftJoin(orderPhone, eq(orderPhone.id, supplierEnrollments.orderPhoneCommunicationId))
-        .where(where)
-        .orderBy(
-          ...(options.orderBy?.length
-            ? options.orderBy
-            : [sql`${supplierEnrollments.id} IS NULL`, asc(parties.displayName)]),
-        )
-        .limit(options.limit)
-        .offset(options.offset),
-      this.db
-        .select({ count: sql<number>`count(*)::int`.mapWith(Number) })
-        .from(suppliers)
-        .innerJoin(parties, eq(parties.id, suppliers.partyId))
-        .leftJoin(supplierEnrollments, enrollmentAtSite(siteId))
-        .leftJoin(paymentTerms, eq(paymentTerms.id, supplierEnrollments.paymentTermId))
-        .where(where),
-    ]);
-    return { result: rows as SupplierEnrollmentRowRecord[], count: total?.count ?? 0 };
-  }
-
-  // Loads a supplier of the legal entity as one site sees it, enrolled or not, throwing when it does not exist
-  async findDetailOrThrow(
-    legalEntityId: string,
-    siteId: string,
-    supplierId: string,
-  ): Promise<SupplierEnrollmentDetailRecord> {
-    const [row] = await this.db
-      .select({
-        ...this.rowSelection(),
-        partyTaxId: partyTaxIdField<string>(partyIdentifiers.idValue),
-        partyTaxIdType: partyTaxIdField<PartyIdentifierType>(partyIdentifiers.idType),
-      })
-      .from(suppliers)
-      .innerJoin(parties, eq(parties.id, suppliers.partyId))
-      .leftJoin(supplierEnrollments, enrollmentAtSite(siteId))
-      .leftJoin(paymentTerms, eq(paymentTerms.id, supplierEnrollments.paymentTermId))
-      .leftJoin(partyTaxRegistrations, eq(partyTaxRegistrations.id, supplierEnrollments.partyTaxRegistrationId))
-      .leftJoin(partyBankAccounts, eq(partyBankAccounts.id, supplierEnrollments.partyBankAccountId))
-      .leftJoin(orderRel, eq(orderRel.id, supplierEnrollments.orderRelationshipId))
-      .leftJoin(orderParty, eq(orderParty.id, orderRel.childPartyId))
-      .leftJoin(orderEmail, eq(orderEmail.id, supplierEnrollments.orderEmailCommunicationId))
-      .leftJoin(orderPhone, eq(orderPhone.id, supplierEnrollments.orderPhoneCommunicationId))
-      .where(and(eq(suppliers.legalEntityId, legalEntityId), eq(suppliers.id, supplierId)))
-      .limit(1);
-    if (!row) throw new NotFoundException('Supplier not found.');
-    return row as SupplierEnrollmentDetailRecord;
-  }
-
-  // Paginated supplier options of the legal entity with each one's enrollment at the site; requested values bypass filters
-  async findSuppliersForSiteSelect(
-    legalEntityId: string,
-    siteId: string,
-    query: SupplierEnrollmentSelectQueryDto,
-  ): Promise<SelectQueryResult> {
-    const limit = Number(query.limit) || 20;
-    const offset = Number(query.offset) || 0;
-    const values = parseIds(query.values);
-    const excludeIds = parseIds(query.excludeIds);
-    const search = query.search?.trim();
-
-    const conditions: (SQL | undefined)[] = [eq(suppliers.legalEntityId, legalEntityId)];
-    if (values.length > 0) {
-      conditions.push(inArray(suppliers.id, values));
-    } else {
-      if (query.enrollmentStatus) {
-        conditions.push(
-          query.enrollmentStatus === SupplierEnrollmentStatusValues.ENROLLED
-            ? isNotNull(supplierEnrollments.id)
-            : isNull(supplierEnrollments.id),
-        );
-      }
-      if (query.activeOnly) {
-        conditions.push(
-          eq(suppliers.isActive, true),
-          or(isNull(supplierEnrollments.id), eq(supplierEnrollments.isActive, true)),
-        );
-      }
-      if (search) {
-        conditions.push(or(ilike(parties.displayName, `%${search}%`), ilike(suppliers.code, `%${search}%`)));
-      }
-      if (excludeIds.length > 0) conditions.push(notInArray(suppliers.id, excludeIds));
-    }
-
-    const rows = await this.db
-      .select({
-        value: suppliers.id,
-        label: parties.displayName,
-        code: suppliers.code,
-        currencyCode: suppliers.currencyCode,
-        currencyCodes: suppliers.currencyCodes,
-        defaultPaymentTermId: suppliers.defaultPaymentTermId,
-        enrollmentId: supplierEnrollments.id,
-        paymentTermId: supplierEnrollments.paymentTermId,
-        isActive: sql<boolean>`${suppliers.isActive} AND coalesce(${supplierEnrollments.isActive}, true)`,
-        purchasingBlocked: suppliers.purchasingBlocked,
-        totalCount: sql<number>`count(*) over()`.mapWith(Number),
-      })
-      .from(suppliers)
-      .innerJoin(parties, eq(parties.id, suppliers.partyId))
-      .leftJoin(supplierEnrollments, enrollmentAtSite(siteId))
-      .where(and(...conditions))
-      .orderBy(asc(parties.displayName))
-      .limit(values.length > 0 ? values.length : limit)
-      .offset(values.length > 0 ? 0 : offset);
-
-    const totalCount = rows[0]?.totalCount ?? 0;
-    return {
-      options: rows.map((row) => ({
-        value: row.value,
-        label: row.label,
-        description: row.code,
-        additionals: {
-          code: row.code,
-          currencyCode: row.currencyCode,
-          currencyCodes: row.currencyCodes,
-          defaultPaymentTermId: row.defaultPaymentTermId,
-          paymentTermId: row.paymentTermId,
-          enrollmentStatus: row.enrollmentId
-            ? SupplierEnrollmentStatusValues.ENROLLED
-            : SupplierEnrollmentStatusValues.NOT_ENROLLED,
-          isActive: row.isActive,
-          purchasingBlocked: row.purchasingBlocked,
-        },
-      })),
-      hasMore: values.length === 0 && offset + limit < totalCount,
-      totalCount,
-    };
   }
 
   // Returns every site a supplier is enrolled at with whether it is effectively active there

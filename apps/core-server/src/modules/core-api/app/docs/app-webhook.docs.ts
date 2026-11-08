@@ -4,6 +4,7 @@ import { WebhookDeliveriesPageResponseDto } from '@domain/app-webhook/dto/respon
 import { applyDecorators } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 import { WebhookDeliveryRefResponseDto } from '../dto/response/webhook-delivery-ref-response.dto';
 import { WebhookPublicKeyResponseDto } from '../dto/response/webhook-public-key-response.dto';
 
@@ -85,15 +86,17 @@ export function ApiFindForTableWebhookDeliveries() {
     ApiOperation({
       summary: 'Webhook deliveries table',
       description:
-        "Resolves one page of the app's deliveries from a serialized view state (filters, search, sort, pagination) that cloud holds. Payloads are never included.",
+        "Resolves one page of the app's deliveries from the page request (filters, search, sort, pagination) cloud sends for the view state it holds. Payloads are never included.",
     }),
     APP_ID,
     ...SIGNATURE_HEADERS,
+    ApiBody({ type: InternalTablePageDto }),
     ApiResponse({
       status: 200,
       description: 'Deliveries page retrieved successfully.',
       type: WebhookDeliveriesPageResponseDto,
     }),
+    ApiResponse({ status: 400, description: 'Invalid table page request.' }),
     UNAUTHORIZED,
     APP_NOT_FOUND,
   );

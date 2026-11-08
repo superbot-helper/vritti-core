@@ -52,6 +52,11 @@ export class PartyCommunicationsDomainService {
     isActive: { column: partyCommunications.isActive, type: 'boolean' },
   };
 
+  // Search runs ILIKE, which Postgres enums (channel) don't support — so it only covers the text columns
+  private static readonly SEARCH_FIELD_MAP: FieldMap = {
+    value: PartyCommunicationsDomainService.FIELD_MAP.value,
+  };
+
   constructor(
     private readonly database: PrimaryDatabaseService,
     private readonly repository: PartyCommunicationsDomainRepository,
@@ -73,14 +78,15 @@ export class PartyCommunicationsDomainService {
     partyId: string,
     state: TableViewState,
   ): Promise<{ result: PartyCommunicationDto[]; count: number }> {
-    const filterWhere = FilterProcessor.buildWhere(state.filters, PartyCommunicationsDomainService.FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, PartyCommunicationsDomainService.FIELD_MAP);
-    const where = and(eq(partyCommunications.partyId, partyId), filterWhere, searchWhere) || undefined;
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, PartyCommunicationsDomainService.FIELD_MAP);
+    const fieldMap = PartyCommunicationsDomainService.FIELD_MAP;
     const { limit = 20, offset = 0 } = state.pagination;
-
-    const { result: rows, count } = await this.repository.findForTable({
-      where,
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, fieldMap);
+    const { result, count } = await this.repository.findForTable({
+      where: and(
+        eq(partyCommunications.partyId, partyId),
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, PartyCommunicationsDomainService.SEARCH_FIELD_MAP),
+      ),
       orderBy:
         orderBy.length > 0
           ? orderBy
@@ -88,8 +94,7 @@ export class PartyCommunicationsDomainService {
       limit,
       offset,
     });
-
-    return { result: rows.map((row) => PartyCommunicationDto.from(row, row.apps, row.functions)), count };
+    return { result: result.map((row) => PartyCommunicationDto.from(row, row.apps, row.functions)), count };
   }
 
   // Returns a party's active communications on one channel as select options, optionally only holders of a function

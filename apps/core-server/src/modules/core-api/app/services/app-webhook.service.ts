@@ -4,13 +4,11 @@ import type { WebhookDeliveriesPageResponseDto } from '@domain/app-webhook/dto/r
 import { AppWebhookEndpointDomainService } from '@domain/app-webhook/services/app-webhook-endpoint.service';
 import { WebhookDeliveryDomainService } from '@domain/app-webhook/services/webhook-delivery.service';
 import { Injectable } from '@nestjs/common';
-import type { TableViewState } from '@vritti/api-sdk/data-table';
+import type { TablePageRequest } from '@vritti/api-sdk/data-table';
 import { NotFoundException } from '@vritti/api-sdk/exceptions';
 import type { SuccessResponseDto } from '@vritti/api-sdk/responses';
 import type { App } from '@/db/schema';
 import { AppDomainService } from '@/modules/domain/app/services/app.service';
-import { parseTableQueryParam } from '@/utils/parse-table-query';
-import type { GetWebhookDeliveriesInternalDto } from '../dto/request/get-webhook-deliveries-internal.dto';
 import type { WebhookDeliveryRefResponseDto } from '../dto/response/webhook-delivery-ref-response.dto';
 import type { WebhookPublicKeyResponseDto } from '../dto/response/webhook-public-key-response.dto';
 
@@ -51,20 +49,14 @@ export class AppWebhookService {
     return this.deliveryService.enqueueTest(orgId, appId);
   }
 
-  // Resolves one page of the app's deliveries from the view state cloud holds
+  // Resolves one page of the app's deliveries from the page request cloud sends
   async findDeliveriesForTable(
     orgId: string,
     appId: string,
-    query: GetWebhookDeliveriesInternalDto,
+    page: TablePageRequest,
   ): Promise<WebhookDeliveriesPageResponseDto> {
     await this.requireApp(orgId, appId);
-    const state = {
-      filters: parseTableQueryParam<TableViewState['filters']>(query.filters, 'filters', []),
-      search: parseTableQueryParam<TableViewState['search'] | null>(query.search, 'search', null),
-      sort: parseTableQueryParam<TableViewState['sort']>(query.sort, 'sort', []),
-      pagination: { limit: query.limit ?? 20, offset: query.offset ?? 0 },
-    } as unknown as TableViewState;
-    return this.deliveryService.findForTable(orgId, appId, state);
+    return this.deliveryService.findForTable(orgId, appId, page);
   }
 
   // Requeues one delivery for an immediate attempt

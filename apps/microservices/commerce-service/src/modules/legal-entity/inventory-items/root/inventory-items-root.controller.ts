@@ -1,4 +1,4 @@
-import { InventoryItemMrpDto } from '@domain/inventory-item-mrps/dto/entity/inventory-item-mrp.dto';
+import type { InventoryItemMrpDto } from '@domain/inventory-item-mrps/dto/entity/inventory-item-mrp.dto';
 import { InventoryItemMrpsDomainService } from '@domain/inventory-item-mrps/services/inventory-item-mrps.service';
 import type { InventoryItemDto } from '@domain/inventory-items/dto/entity/inventory-item.dto';
 import { InventoryItemsDomainService } from '@domain/inventory-items/services/inventory-items.service';
@@ -42,11 +42,13 @@ export class LeInventoryItemsController {
     return this.supplierItemsService.findSuppliersForItem(inventoryItemId, null, state);
   }
 
-  // The item's MRPs, read-only from a legal entity
+  // The item's MRPs for the data table, read-only from a legal entity
   @MessagePattern({ cmd: 'le.inventoryItems.mrp.table' })
-  async mrpTable(@Payload() data: { inventoryItemId: string }): Promise<InventoryItemMrpDto[]> {
-    this.logger.log(`inventoryItems.mrp.table — inventoryItemId: ${data.inventoryItemId}`);
-    const rows = await this.mrpsService.findByItem(data.inventoryItemId);
-    return rows.map((row) => InventoryItemMrpDto.from(row));
+  async mrpTable(
+    @Payload() data: { inventoryItemId: string } & TableViewState,
+  ): Promise<{ result: InventoryItemMrpDto[]; count: number }> {
+    const { inventoryItemId, ...state } = data;
+    this.logger.log(`inventoryItems.mrp.table — inventoryItemId: ${inventoryItemId}`);
+    return this.mrpsService.findForTable(inventoryItemId, state);
   }
 }

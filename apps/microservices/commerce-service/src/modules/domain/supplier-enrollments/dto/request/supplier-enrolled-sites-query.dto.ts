@@ -1,7 +1,7 @@
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
 
-export class SupplierEnrollmentSitesSelectQueryDto {
+export class SupplierEnrolledSitesQueryDto {
   @IsUUID('7')
   supplierId: string;
 

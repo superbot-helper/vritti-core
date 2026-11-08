@@ -1,6 +1,7 @@
 import { InventoryItemPriceOptionsQueryDto } from '@commerce/inventory-items/dto/request/inventory-item-price-options-query.dto';
 import { InventoryItemPricesTableQueryDto } from '@commerce/inventory-items/dto/request/inventory-item-prices-table-query.dto';
 import type { InventoryItemPriceGraphResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-price-history-response.dto';
+import type { InventoryItemPricedSitesResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-priced-sites-response.dto';
 import type { ItemSupplierPriceComparisonTableResponseDto } from '@commerce/inventory-items/dto/response/item-supplier-price-comparison-response.dto';
 import { Controller, Get, Logger, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -10,6 +11,7 @@ import { LE_INVENTORY_ITEMS } from '@vritti/commerce-permissions/inventory-items
 import { SessionTypeValues } from '@/db/schema';
 import { RequireFeature, RequirePermission } from '@/rbac/decorators';
 import { LegalEntityId } from '@/security/decorators';
+import { ApiInventoryItemPricedSiteIds, ApiInventoryItemPricesTable } from './docs/inventory-item-prices-gateway.docs';
 import { LeInventoryItemPricesGatewayService } from './services/inventory-item-prices-gateway.service';
 
 @ApiTags('Commerce - LE Inventory Item Prices')
@@ -22,17 +24,30 @@ export class LeInventoryItemPricesGatewayController {
 
   constructor(private readonly service: LeInventoryItemPricesGatewayService) {}
 
-  // Returns every supplier's standing for the item at the table's site: price in force, per primary unit, after scheme
+  // Returns every supplier's standing for the item at the table's context site: price in force, per primary unit, after
+  // scheme
   @Get('table')
   @RequirePermission(LE_INVENTORY_ITEMS.prices.view)
+  @ApiInventoryItemPricesTable()
   findTable(
     @Param('id') id: string,
-    @LegalEntityId() legalEntityId: string | undefined,
     @UserId() userId: string,
     @Query() query: InventoryItemPricesTableQueryDto,
   ): Promise<ItemSupplierPriceComparisonTableResponseDto> {
     this.logger.log(`GET /commerce-api/le/inventory-items/${id}/prices/table`);
-    return this.service.findTable(id, legalEntityId, userId, query);
+    return this.service.findTable(id, userId, query);
+  }
+
+  // Returns the sites where any supplier has priced the item, in the site picker's order
+  @Get('site-ids')
+  @RequirePermission(LE_INVENTORY_ITEMS.prices.view)
+  @ApiInventoryItemPricedSiteIds()
+  findPricedSiteIds(
+    @Param('id') id: string,
+    @LegalEntityId() legalEntityId: string | undefined,
+  ): Promise<InventoryItemPricedSitesResponseDto> {
+    this.logger.log(`GET /commerce-api/le/inventory-items/${id}/prices/site-ids`);
+    return this.service.findPricedSiteIds(id, legalEntityId);
   }
 
   // Returns the suppliers' prices the graph shows, per its saved selection of site, window, suppliers and MRPs

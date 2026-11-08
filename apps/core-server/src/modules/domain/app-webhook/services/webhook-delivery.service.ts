@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
+import { type FieldMap, FilterProcessor, type TablePageRequest } from '@vritti/api-sdk/data-table';
 import { and, eq } from '@vritti/api-sdk/drizzle-orm';
 import { ConflictException, InternalServerErrorException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import { type WebhookDelivery, WebhookDeliveryStatusValues, webhookDeliveries } from '@/db/schema';
@@ -113,9 +113,9 @@ export class WebhookDeliveryDomainService {
   async findForTable(
     organizationId: string,
     appId: string,
-    state: TableViewState,
+    page: TablePageRequest,
   ): Promise<WebhookDeliveriesPageResponseDto> {
-    const { filters, search, sort, pagination } = state;
+    const { filters, search, sort, pagination } = page;
     const where = and(
       eq(webhookDeliveries.organizationId, organizationId),
       eq(webhookDeliveries.appId, appId),

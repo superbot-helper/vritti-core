@@ -133,9 +133,7 @@ const LocationDetailContent: React.FC<LocationDetailContentProps> = ({ location,
     slug: `location-${location.id}-children`,
     label: 'child location',
     enableRowSelection: false,
-    onStatePush: () => {
-      queryClient.invalidateQueries({ queryKey: LOCATION_CHILDREN_TABLE_KEY(location.id) });
-    },
+    onStatePush: () => queryClient.invalidateQueries({ queryKey: LOCATION_CHILDREN_TABLE_KEY(location.id) }),
   });
 
   const handleDelete = async () => {
@@ -355,9 +353,7 @@ const LocationItemsSection: React.FC<LocationItemsSectionProps> = ({ locationId 
     slug: `location-${locationId}-items`,
     label: 'item',
     enableRowSelection: false,
-    onStatePush: () => {
-      queryClient.invalidateQueries({ queryKey: LOCATION_ITEMS_TABLE_KEY(locationId) });
-    },
+    onStatePush: () => queryClient.invalidateQueries({ queryKey: LOCATION_ITEMS_TABLE_KEY(locationId) }),
   });
 
   return (

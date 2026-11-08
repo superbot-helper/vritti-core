@@ -4,6 +4,14 @@ import type { SupplierEnrollmentDetailResponseDto } from '@commerce/supplier-enr
 import type { SupplierEnrollmentResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-response.dto';
 import type { SupplierEnrollmentRowResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-row-response.dto';
 import type { SupplierEnrollmentTableResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-table-response.dto';
+import type { CreateSupplierInvoiceDto } from '@commerce/supplier-invoices/dto/request/create-supplier-invoice.dto';
+import type { SupplierInvoiceLineDto } from '@commerce/supplier-invoices/dto/request/supplier-invoice-line.dto';
+import type { UpdateSupplierInvoiceDto } from '@commerce/supplier-invoices/dto/request/update-supplier-invoice.dto';
+import type {
+  SupplierInvoiceDetailResponseDto,
+  SupplierInvoiceResponseDto,
+} from '@commerce/supplier-invoices/dto/response/supplier-invoice-response.dto';
+import type { SupplierInvoiceTableResponseDto } from '@commerce/supplier-invoices/dto/response/supplier-invoice-table-response.dto';
 import type { UpdateSupplierSiteItemDto } from '@commerce/supplier-items/dto/request/update-supplier-site-item.dto';
 import type { SupplierSiteItemRowResponseDto } from '@commerce/supplier-items/dto/response/supplier-site-item-row-response.dto';
 import type { SupplierSiteItemRowTableResponseDto } from '@commerce/supplier-items/dto/response/supplier-site-item-row-table-response.dto';
@@ -105,5 +113,69 @@ export class SiteSuppliersGatewayService {
   async updateSiteItem(supplierSiteItemId: string, dto: UpdateSupplierSiteItemDto): Promise<SuccessResponseDto> {
     this.logger.log(`site.suppliers.siteItems.update — id: ${supplierSiteItemId}`);
     return this.nats.send('commerce', 'site.suppliers.siteItems.update', { id: supplierSiteItemId, ...dto });
+  }
+
+  // Returns the supplier's invoices at this site for the data table
+  async findInvoicesTable(supplierId: string, userId: string, orgId: string): Promise<SupplierInvoiceTableResponseDto> {
+    this.logger.log(`site.suppliers.invoices.table — supplierId: ${supplierId}`);
+    const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
+      userId,
+      `commerce-site-supplier-${supplierId}-invoices`,
+    );
+    const { result, count } = await this.nats.send<{
+      result: Omit<SupplierInvoiceResponseDto, 'siteName' | 'siteCode'>[];
+      count: number;
+    }>('commerce', 'site.suppliers.invoices.table', { supplierId, ...state });
+    return { result: await this.ownerNames.withSiteNames(orgId, result), count, state, activeViewId };
+  }
+
+  // Returns one of the supplier's invoices with its lines, flags and linked receipts
+  async findInvoiceById(supplierId: string, id: string, orgId: string): Promise<SupplierInvoiceDetailResponseDto> {
+    this.logger.log(`site.suppliers.invoices.findById — supplierId: ${supplierId}, id: ${id}`);
+    const invoice = await this.nats.send<Omit<SupplierInvoiceDetailResponseDto, 'siteName' | 'siteCode'>>(
+      'commerce',
+      'site.suppliers.invoices.findById',
+      { supplierId, id },
+    );
+    const [named] = await this.ownerNames.withSiteNames(orgId, [invoice]);
+    return named;
+  }
+
+  // Records a draft invoice billing one of this site's purchase orders
+  createInvoice(dto: CreateSupplierInvoiceDto): Promise<CreateResponseDto<SupplierInvoiceResponseDto>> {
+    this.logger.log(
+      `site.suppliers.invoices.create — purchaseOrderId: ${dto.purchaseOrderId}, number: ${dto.invoiceNumber}`,
+    );
+    return this.nats.send('commerce', 'site.suppliers.invoices.create', dto);
+  }
+
+  // Updates an invoice's header
+  updateInvoice(id: string, dto: UpdateSupplierInvoiceDto): Promise<SuccessResponseDto> {
+    this.logger.log(`site.suppliers.invoices.update — id: ${id}`);
+    return this.nats.send('commerce', 'site.suppliers.invoices.update', { ...dto, id });
+  }
+
+  // Posts a draft invoice, setting the final cost of the stock it bills
+  postInvoice(id: string): Promise<SuccessResponseDto> {
+    this.logger.log(`site.suppliers.invoices.post — id: ${id}`);
+    return this.nats.send('commerce', 'site.suppliers.invoices.post', { id });
+  }
+
+  // Adds a billed line to an invoice
+  createInvoiceLine(supplierInvoiceId: string, dto: SupplierInvoiceLineDto): Promise<SuccessResponseDto> {
+    this.logger.log(`site.suppliers.invoices.lines.create — invoiceId: ${supplierInvoiceId}`);
+    return this.nats.send('commerce', 'site.suppliers.invoices.lines.create', { ...dto, supplierInvoiceId });
+  }
+
+  // Updates a line of an invoice
+  updateInvoiceLine(supplierInvoiceId: string, id: string, dto: SupplierInvoiceLineDto): Promise<SuccessResponseDto> {
+    this.logger.log(`site.suppliers.invoices.lines.update — id: ${id}`);
+    return this.nats.send('commerce', 'site.suppliers.invoices.lines.update', { ...dto, id, supplierInvoiceId });
+  }
+
+  // Removes a line from an invoice
+  deleteInvoiceLine(supplierInvoiceId: string, id: string): Promise<SuccessResponseDto> {
+    this.logger.log(`site.suppliers.invoices.lines.delete — id: ${id}`);
+    return this.nats.send('commerce', 'site.suppliers.invoices.lines.delete', { supplierInvoiceId, id });
   }
 }

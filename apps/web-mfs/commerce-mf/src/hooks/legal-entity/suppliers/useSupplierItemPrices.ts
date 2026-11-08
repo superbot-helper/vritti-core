@@ -34,21 +34,23 @@ import {
   SUPPLIER_KEY,
 } from './keys';
 
-// Fetches a supplier item's price timeline at the picked site; idle until a site is picked, and self-gates on the prices
-// view permission
+const ITEM_ID_INDEX = SUPPLIER_ITEM_KEY('', '').length - 1;
+
+// Fetches a supplier item's price timeline at the site in the table's context; keeps the rows on screen while filters
+// or context change, never another item's, and self-gates on the prices view permission
 export function useSupplierItemPricesTable(
   supplierId: string,
   itemId: string,
-  site: string | undefined,
   options?: Omit<UseQueryOptions<SupplierItemPricesTableResponse, AxiosError>, 'queryKey' | 'queryFn'>,
 ) {
   const { available } = usePermission(LE_SUPPLIERS.items.prices.view);
   return useQuery<SupplierItemPricesTableResponse, AxiosError>({
-    queryKey: [...SUPPLIER_ITEM_PRICES_TABLE_KEY(supplierId, itemId), site],
-    queryFn: () => getSupplierItemPricesTable({ supplierId, itemId, site: site ?? '' }),
-    placeholderData: keepPreviousData,
+    queryKey: SUPPLIER_ITEM_PRICES_TABLE_KEY(supplierId, itemId),
+    queryFn: () => getSupplierItemPricesTable(supplierId, itemId),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[ITEM_ID_INDEX] === itemId ? previous : undefined,
     ...options,
-    enabled: !!supplierId && !!itemId && !!site && available && (options?.enabled ?? true),
+    enabled: !!supplierId && !!itemId && available && (options?.enabled ?? true),
   });
 }
 

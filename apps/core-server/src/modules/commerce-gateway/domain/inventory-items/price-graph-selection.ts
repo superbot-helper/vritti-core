@@ -23,7 +23,7 @@ function defaultWindow(): { from: string; to: string } {
 
 // Reads a price graph's selection from its saved state, filling the window when none is saved
 export function readPriceGraphSelection(state: TableViewState): PriceGraphSelection {
-  const value = (field: string) => state.filters?.find((filter) => filter.field === field)?.value;
+  const value = (field: string) => state.filters.panel.find((condition) => condition.field === field)?.value;
   const text = (field: string) => {
     const raw = value(field);
     return typeof raw === 'string' && raw ? raw : null;

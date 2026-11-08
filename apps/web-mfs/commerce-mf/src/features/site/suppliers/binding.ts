@@ -42,6 +42,7 @@ import { useSiteId } from '@/hooks/site/useSiteId';
 import type { SupplierEnrollmentKey, SupplierParty } from '@/schemas/supplier-enrollments';
 import type { SupplierQuotationData } from '@/schemas/supplier-quotations';
 import type { PriceRange } from '@/utils/supplierPrice';
+import { InvoicesTab } from './invoices/InvoicesTab';
 
 // The site item route is `…/<supplier>/site-items/<itemSlug>`
 function useSiteItemId(): string {
@@ -168,4 +169,5 @@ export const binding: SupplierEnrollmentBinding = {
   // The supplier route is `<supplier>`, so a site item's page is `site-items/<itemSlug>` below it
   siteItemPath: (itemSlug) => `site-items/${itemSlug}`,
   siteItemPage,
+  invoices: { permission: SITE_SUPPLIERS.invoices.view, Tab: InvoicesTab },
 };

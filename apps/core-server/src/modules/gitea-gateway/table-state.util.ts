@@ -17,7 +17,7 @@ export function toGiteaPaging(state: TableViewState): { page: number; limit: num
 export function toGiteaFilters(state: TableViewState, allowedFields: readonly string[]): Record<string, string> {
   const params: Record<string, string> = {};
 
-  for (const condition of state.filters ?? []) {
+  for (const condition of state.filters.panel) {
     if (condition.operator !== 'equals') continue;
     if (!allowedFields.includes(condition.field)) continue;
     if (Array.isArray(condition.value)) continue;

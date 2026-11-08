@@ -229,21 +229,6 @@ type CostCategory {
   canDelete: Boolean!
 }
 
-type TaxRate {
-  id: ID!
-  name: String!
-  rate: Float!
-  sortOrder: Int!
-}
-
-type TaxGroup {
-  id: ID!
-  name: String!
-  isActive: Boolean!
-  canDelete: Boolean!
-  taxRates: [TaxRate!]!
-}
-
 type Uom {
   id: ID!
   dimensionId: ID!
@@ -323,14 +308,17 @@ type GoodsReceiptPo {
 type GoodsReceipt {
   id: ID!
   grNumber: String!
+  legalEntityId: ID!
+  siteId: ID!
   supplierId: String!
   supplierName: String!
-  supplierCurrencyCode: String!
   status: String!
-  po: GoodsReceiptPo
+  isPublishable: Boolean!
+  itemCount: Int!
+  purchaseOrderId: ID!
+  po: GoodsReceiptPo!
   receivedDate: String!
   notes: String
-  exchangeRate: Float!
   publishedAt: String
   createdAt: String!
 }
@@ -518,7 +506,6 @@ type InventoryItem {
   description: String
   uomId: String!
   uomSymbol: String
-  purchaseTaxGroupId: String @deprecated(reason: "Replaced by taxClassId; always null.")
   taxClassId: String!
   taxClassName: String
   hsnCode: String
@@ -727,7 +714,6 @@ type Query {
   uom(id: ID!): Uom!
   uomDimensions(search: String): [UomDimension!]!
   uomDimension(id: ID!): UomDimension!
-  taxGroups(search: String): [TaxGroup!]!
   costCategories(search: String): [CostCategory!]!
   categoriesOptions(input: SelectOptionsInput): SelectOptions!
   customersOptions(input: SelectOptionsInput): SelectOptions!
@@ -798,9 +784,6 @@ type Mutation {
   createUomDimension(input: CreateUomDimensionInput!): UomDimension!
   updateUomDimension(id: ID!, input: UpdateUomDimensionInput!): UomDimension!
   deleteUomDimension(id: ID!): MutationResult!
-  createTaxGroup(input: CreateTaxGroupInput!): TaxGroup!
-  updateTaxGroup(id: ID!, input: UpdateTaxGroupInput!): TaxGroup!
-  deleteTaxGroup(id: ID!): MutationResult!
   createCostCategory(input: CreateCostCategoryInput!): CostCategory!
   updateCostCategory(id: ID!, input: UpdateCostCategoryInput!): CostCategory!
   deleteCostCategory(id: ID!): MutationResult!
@@ -887,22 +870,6 @@ input UpdateUomDimensionInput {
   code: String
   name: String
   description: String
-}
-
-input CreateTaxGroupInput {
-  name: String!
-  taxRates: [TaxRateInput!]!
-}
-
-input TaxRateInput {
-  name: String!
-  rate: Float!
-}
-
-input UpdateTaxGroupInput {
-  name: String
-  taxRates: [TaxRateInput!]
-  isActive: Boolean
 }
 
 input CreateCostCategoryInput {

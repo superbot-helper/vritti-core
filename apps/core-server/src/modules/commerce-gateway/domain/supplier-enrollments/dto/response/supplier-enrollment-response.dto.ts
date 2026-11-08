@@ -28,6 +28,15 @@ export class SupplierEnrollmentResponseDto {
   @ApiPropertyOptional({ description: 'Type of the picked tax registration', nullable: true })
   registrationType: string | null;
 
+  @ApiPropertyOptional({ description: 'Country of the picked tax registration', nullable: true })
+  registrationCountryCode: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Jurisdiction (state) of the picked tax registration; null when it is national',
+    nullable: true,
+  })
+  registrationJurisdictionName: string | null;
+
   @ApiPropertyOptional({ description: 'Account name of the picked bank account', nullable: true })
   bankAccountName: string | null;
 

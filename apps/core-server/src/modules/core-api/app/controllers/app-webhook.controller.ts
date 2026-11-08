@@ -13,11 +13,11 @@ import {
   ParseUUIDPipe,
   Post,
   Put,
-  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthType, Require, SkipCsrf } from '@vritti/api-sdk/auth';
 import type { SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 import { OrgId } from '@/security/decorators/org-id.decorator';
 import {
   ApiDeleteAppWebhookEndpoint,
@@ -28,7 +28,6 @@ import {
   ApiSendAppWebhookTest,
   ApiUpsertAppWebhookEndpoint,
 } from '../docs/app-webhook.docs';
-import { GetWebhookDeliveriesInternalDto } from '../dto/request/get-webhook-deliveries-internal.dto';
 import type { WebhookDeliveryRefResponseDto } from '../dto/response/webhook-delivery-ref-response.dto';
 import type { WebhookPublicKeyResponseDto } from '../dto/response/webhook-public-key-response.dto';
 import { AppWebhookService } from '../services/app-webhook.service';
@@ -83,15 +82,16 @@ export class AppWebhookController {
     return this.appWebhookService.sendTest(orgId, appId);
   }
 
-  @Get('webhook-deliveries/table')
+  @Post('webhook-deliveries/table')
+  @HttpCode(HttpStatus.OK)
   @ApiFindForTableWebhookDeliveries()
   findDeliveriesForTable(
     @OrgId() orgId: string,
     @Param('appId', ParseUUIDPipe) appId: string,
-    @Query() query: GetWebhookDeliveriesInternalDto,
+    @Body() page: InternalTablePageDto,
   ): Promise<WebhookDeliveriesPageResponseDto> {
-    this.logger.log(`GET /apps/internal/${appId}/webhook-deliveries/table`);
-    return this.appWebhookService.findDeliveriesForTable(orgId, appId, query);
+    this.logger.log(`POST /apps/internal/${appId}/webhook-deliveries/table`);
+    return this.appWebhookService.findDeliveriesForTable(orgId, appId, page);
   }
 
   @Post('webhook-deliveries/:deliveryId/redeliver')

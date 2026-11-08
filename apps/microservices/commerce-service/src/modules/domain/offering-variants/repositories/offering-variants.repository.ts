@@ -7,11 +7,9 @@ import {
   eq,
   exists,
   getColumns,
-  ilike,
   inArray,
   isNull,
   notExists,
-  notInArray,
   or,
   type SQL,
   sql,
@@ -465,36 +463,26 @@ export class OfferingVariantsDomainRepository extends PrimaryBaseRepository<type
     return rows.map((row) => row.id);
   }
 
-  // Variant options for a picker, across every offering this workspace can reach
-  async findOptions(options: {
+  // Variant options for a picker, across every offering this workspace can reach; codes carry every value code, so
+  // "masala" still finds hf-kichidi-250g-classic-masala
+  findOptions(options: {
     search?: string;
     excludeIds?: string[];
     limit: number;
     offset: number;
-  }): Promise<{ items: VariantOptionRow[]; total: number }> {
-    const search = options.search?.trim();
-    // Codes carry every value code, so "masala" still finds hf-kichidi-250g-classic-masala
-    const where = and(
-      search ? or(ilike(offeringVariants.code, `%${search}%`), ilike(offerings.name, `%${search}%`)) : undefined,
-      options.excludeIds?.length ? notInArray(offeringVariants.id, options.excludeIds) : undefined,
-    );
-
-    const items = this.db
-      .select({
-        id: offeringVariants.id,
-        code: offeringVariants.code,
-      })
-      .from(offeringVariants)
-      .innerJoin(offerings, eq(offerings.id, offeringVariants.offeringId))
-      .where(where)
-      .orderBy(asc(offeringVariants.code))
-      .limit(options.limit)
-      .offset(options.offset);
-
-    const count = this.db.select({ count: sql<number>`count(*)::int` }).from(offeringVariants).where(where);
-
-    const [rows, [{ count: total }]] = await Promise.all([items, count]);
-    return { items: rows, total };
+  }): Promise<SelectQueryResult> {
+    return this.findForSelect({
+      value: 'id',
+      label: 'code',
+      search: options.search?.trim(),
+      searchKeys: ['code', 'name'],
+      limit: options.limit,
+      offset: options.offset,
+      excludeIds: options.excludeIds,
+      orderByKey: 'code',
+      orderDirection: 'asc',
+      joins: [{ table: offerings, on: eq(offerings.id, offeringVariants.offeringId), type: 'inner' }],
+    });
   }
 
   // Which of these SKUs are already taken. Org-wide, matching the constraint — RLS scopes it.

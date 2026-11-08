@@ -3,14 +3,8 @@ import { SessionDomainService } from '@domain/session/services/session.service';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import {
-  type FieldMap,
-  type FilterCondition,
-  FilterProcessor,
-  type SearchState,
-  type SortCondition,
-} from '@vritti/api-sdk/data-table';
-import { and, desc, eq } from '@vritti/api-sdk/drizzle-orm';
+import { type FieldMap, FilterProcessor, type TablePageRequest } from '@vritti/api-sdk/data-table';
+import { and, eq } from '@vritti/api-sdk/drizzle-orm';
 import { EmailService } from '@vritti/api-sdk/email';
 import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import { SuccessResponseDto } from '@vritti/api-sdk/responses';
@@ -183,28 +177,24 @@ export class UserDomainService {
   }
 
   // Returns paginated, filtered, and sorted portal users for the data table
-  async getUsersForTable(
-    orgId: string,
-    filters: FilterCondition[],
-    search: SearchState | null,
-    sort: SortCondition[],
-    limit: number,
-    offset: number,
-  ): Promise<UsersTableResponseDto> {
-    const filterWhere = FilterProcessor.buildWhere(filters, UserDomainService.FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(search, UserDomainService.FIELD_MAP);
-    const where = and(eq(users.organizationId, orgId), filterWhere, searchWhere);
+  async getUsersForTable(orgId: string, page: TablePageRequest): Promise<UsersTableResponseDto> {
+    const { filters, search, sort, pagination } = page;
+    const where = and(
+      eq(users.organizationId, orgId),
+      FilterProcessor.buildWhere(filters, UserDomainService.FIELD_MAP),
+      FilterProcessor.buildSearch(search, UserDomainService.FIELD_MAP),
+    );
     const orderBy = FilterProcessor.buildOrderBy(sort, UserDomainService.FIELD_MAP);
 
-    const { rows, total } = await this.userRepository.findForTable({
+    const { result, count } = await this.userRepository.findForTable({
       where,
-      orderBy: orderBy[0] ?? desc(users.createdAt),
-      limit,
-      offset,
+      orderBy,
+      limit: pagination.limit,
+      offset: pagination.offset,
     });
 
-    this.logger.log(`Fetched users table for org ${orgId} (${total} results)`);
-    return { result: rows.map(UserDto.from), count: total };
+    this.logger.log(`Fetched users table for org ${orgId} (${count} results)`);
+    return { result: result.map(UserDto.from), count };
   }
 
   // Updates a portal user's details from a cloud-server internal request

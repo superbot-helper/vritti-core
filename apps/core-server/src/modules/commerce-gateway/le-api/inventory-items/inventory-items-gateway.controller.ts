@@ -1,4 +1,4 @@
-import type { InventoryItemMrpResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-mrp-response.dto';
+import type { InventoryItemMrpTableResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-mrp-table-response.dto';
 import type { InventoryItemResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-response.dto';
 import type { InventoryItemSupplierTableResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-supplier-response.dto';
 import type { InventoryItemTableResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-table-response.dto';
@@ -28,12 +28,12 @@ export class LeInventoryItemsGatewayController {
     return this.service.findForTable(userId);
   }
 
-  // Returns the MRPs of an item
-  @Get(':id/mrp')
+  // Returns the MRPs of an item, table-shaped
+  @Get(':id/mrp/table')
   @RequirePermission(LE_INVENTORY_ITEMS.mrp.view)
-  getMrp(@Param('id') id: string): Promise<InventoryItemMrpResponseDto[]> {
-    this.logger.log(`GET /commerce-api/le/inventory-items/${id}/mrp`);
-    return this.service.findMrp(id);
+  getMrpTable(@Param('id') id: string, @UserId() userId: string): Promise<InventoryItemMrpTableResponseDto> {
+    this.logger.log(`GET /commerce-api/le/inventory-items/${id}/mrp/table`);
+    return this.service.findMrpTable(id, userId);
   }
 
   // Returns the legal entity's suppliers carrying an item, table-shaped

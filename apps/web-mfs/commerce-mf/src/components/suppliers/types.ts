@@ -96,8 +96,7 @@ export type UseUpdateSiteItem = (
 export type UsePricesTable = (
   supplierId: string,
   itemId: string,
-  site: string | undefined,
-) => { data: TableResponse<SupplierItemPriceRow> | undefined; isLoading: boolean };
+) => { data: TableResponse<SupplierItemPriceRow> | undefined; isLoading: boolean; isFetching: boolean };
 export type UsePricedSiteIds = (
   supplierId: string,
   itemId: string,

@@ -39,20 +39,14 @@ export class LeInventoryItemPricesService {
     return this.suppliersService.findForSelect(query, { pricedItem: { inventoryItemId, siteId, ...range } });
   }
 
-  // Every supplier's standing for the item at a site on a date — the price in force, per primary unit and after its scheme
+  // Every supplier's standing for the item at the table's context site on a date — the price in force, per primary unit
+  // and after its scheme
   findTable(
     inventoryItemId: string,
-    siteId: string,
     state: TableViewState,
     asOf?: string,
   ): Promise<{ result: ItemSupplierPriceComparisonDto[]; count: number }> {
-    return this.supplierItemPricesService.findItemPriceComparisonTable(
-      inventoryItemId,
-      siteId,
-      state,
-      (uomId) => this.uomConversionsService.toPrimaryUomQuantity(inventoryItemId, uomId, 1),
-      asOf,
-    );
+    return this.supplierItemPricesService.findItemPriceComparisonTable(inventoryItemId, state, asOf);
   }
 
   // The sites where any supplier has priced the item

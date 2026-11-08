@@ -77,9 +77,18 @@ export class SiteDomainService {
     return this.siteRepository.findForOrgSelectOptions(orgId, query);
   }
 
+  // Returns a legal entity's active sites as select options, optionally only the given ones; none without an entity
+  findForLegalEntitySelect(
+    legalEntityId: string | undefined,
+    query: SelectOptionsQueryDto & { ids?: string[] },
+  ): Promise<SelectQueryResult> {
+    if (!legalEntityId) return Promise.resolve({ options: [], hasMore: false, totalCount: 0 });
+    return this.siteRepository.findForSelectOptions(legalEntityId, query, query.ids);
+  }
+
   // The site types this organization actually has — the options behind a type filter
-  findTypesForOrg(orgId: string): Promise<SiteType[]> {
-    return this.siteRepository.findTypesForOrg(orgId);
+  findTypesForSelect(orgId: string, query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+    return this.siteRepository.findTypesForSelect(orgId, query);
   }
 
   // Returns a single site by ID

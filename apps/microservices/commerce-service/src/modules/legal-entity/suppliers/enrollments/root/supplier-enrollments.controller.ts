@@ -2,14 +2,14 @@ import type { SupplierEnrollmentDto } from '@domain/supplier-enrollments/dto/ent
 import type { SupplierEnrollmentDetailDto } from '@domain/supplier-enrollments/dto/entity/supplier-enrollment-detail.dto';
 import { CreateSupplierEnrollmentDto } from '@domain/supplier-enrollments/dto/request/create-supplier-enrollment.dto';
 import { SetSupplierEnrollmentActiveDto } from '@domain/supplier-enrollments/dto/request/set-supplier-enrollment-active.dto';
-import { SupplierEnrollmentSitesSelectQueryDto } from '@domain/supplier-enrollments/dto/request/supplier-enrollment-sites-select-query.dto';
+import { SupplierEnrolledSitesQueryDto } from '@domain/supplier-enrollments/dto/request/supplier-enrolled-sites-query.dto';
 import { UpdateSupplierEnrollmentDto } from '@domain/supplier-enrollments/dto/request/update-supplier-enrollment.dto';
+import type { EnrolledSite } from '@domain/supplier-enrollments/repositories/supplier-enrollments.repository';
 import { SupplierEnrollmentsDomainService } from '@domain/supplier-enrollments/services/supplier-enrollments.service';
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { type NatsHeaders, RpcNatsHeaders } from '@vritti/api-sdk/nats';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
-import type { SelectQueryResult } from '@vritti/api-sdk/select';
 
 @Controller()
 export class SupplierEnrollmentsController {
@@ -62,10 +62,10 @@ export class SupplierEnrollmentsController {
     return this.service.delete(data.supplierId, data.siteId);
   }
 
-  // Returns the sites a supplier is enrolled at as select options keyed by site id
-  @MessagePattern({ cmd: 'le.suppliers.enrollments.select' })
-  select(@Payload() query: SupplierEnrollmentSitesSelectQueryDto): Promise<SelectQueryResult> {
-    this.logger.log(`le.suppliers.enrollments.select — supplierId: ${query.supplierId}`);
-    return this.service.findSitesForSelect(query);
+  // Returns the sites a supplier is enrolled at, each with whether the enrollment is effectively active
+  @MessagePattern({ cmd: 'le.suppliers.enrollments.siteIds' })
+  findEnrolledSites(@Payload() query: SupplierEnrolledSitesQueryDto): Promise<EnrolledSite[]> {
+    this.logger.log(`le.suppliers.enrollments.siteIds — supplierId: ${query.supplierId}`);
+    return this.service.findEnrolledSites(query);
   }
 }

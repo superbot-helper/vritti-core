@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, desc, eq, exists, inArray, ne, or, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, desc, eq, exists, getColumns, inArray, ne, or, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
 import type { SelectOptionsQueryDto, SelectQueryResult } from '@vritti/api-sdk/select';
 import {
   CONTACTABLE_CHANNELS,
@@ -25,9 +25,10 @@ export type PartyCommunicationRow = PartyCommunication & {
 // Restricts a read to channels that are an actual way to reach someone
 const contactableOnly = () => inArray(partyCommunications.channel, [...CONTACTABLE_CHANNELS]);
 
-const appsAgg = sql<PartyCommunicationAppDto[]>`COALESCE(
-  json_agg(json_build_object('app', ${partyCommunicationApps.app}, 'handle', ${partyCommunicationApps.handle}))
-    FILTER (WHERE ${partyCommunicationApps.id} IS NOT NULL),
+const appsSubquery = sql<PartyCommunicationAppDto[]>`COALESCE(
+  (SELECT json_agg(json_build_object('app', ${partyCommunicationApps.app}, 'handle', ${partyCommunicationApps.handle}))
+    FROM ${partyCommunicationApps}
+    WHERE ${partyCommunicationApps.communicationId} = ${partyCommunications.id}),
   '[]'::json
 )`;
 
@@ -43,30 +44,20 @@ export class PartyCommunicationsDomainRepository extends PrimaryBaseRepository<t
     super(database, partyCommunications);
   }
 
-  // Returns paginated communications with their messaging apps aggregated
-  async findForTable(options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number }): Promise<{
-    result: PartyCommunicationRow[];
-    count: number;
-  }> {
-    const where = options.where ? and(options.where, contactableOnly()) : contactableOnly();
-
-    const rowsPromise = this.db
-      .select({ communication: partyCommunications, apps: appsAgg, functions: functionsSubquery })
-      .from(partyCommunications)
-      .leftJoin(partyCommunicationApps, eq(partyCommunicationApps.communicationId, partyCommunications.id))
-      .where(where)
-      .groupBy(partyCommunications.id)
-      .orderBy(...(options.orderBy ?? []))
-      .limit(options.limit)
-      .offset(options.offset);
-
-    const countPromise = this.db.select({ count: sql<number>`count(*)::int` }).from(partyCommunications).where(where);
-
-    const [rows, countResult] = await Promise.all([rowsPromise, countPromise]);
-    return {
-      result: rows.map((row) => ({ ...row.communication, apps: row.apps ?? [], functions: row.functions ?? [] })),
-      count: countResult[0]?.count ?? 0,
-    };
+  // Returns paginated contactable communications with their messaging apps and functions, filtered by an
+  // already-built where clause
+  findForTable(options: {
+    where?: SQL;
+    orderBy: SQL[];
+    limit: number;
+    offset: number;
+  }): Promise<{ result: PartyCommunicationRow[]; count: number }> {
+    const { where, ...page } = options;
+    return this.findAllAndCount<PartyCommunicationRow>({
+      select: { ...getColumns(partyCommunications), apps: appsSubquery, functions: functionsSubquery },
+      where: and(where, contactableOnly()),
+      ...page,
+    });
   }
 
   // Replaces the full set of messaging apps for a communication (delete-all then re-insert). Runs in the caller's

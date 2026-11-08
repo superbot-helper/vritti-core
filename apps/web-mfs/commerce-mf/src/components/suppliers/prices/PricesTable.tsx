@@ -1,16 +1,24 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { type ColumnDef, DataTable, RowActions, useDataTable } from '@vritti/quantum-ui/DataTable';
+import {
+  type ColumnDef,
+  DataTable,
+  type DataTableMeta,
+  RowActions,
+  useDataTable,
+  useDataTableStore,
+} from '@vritti/quantum-ui/DataTable';
+import { filter } from '@vritti/quantum-ui/filter';
 import { useConfirm, useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { CalendarClock, Pencil, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ContextFilterSkeleton } from '@/components/ContextFilterSkeleton';
 import type { SupplierItemPriceRow } from '@/schemas/suppliers';
 import { SiteFilter } from '@/selectors/site';
-import { isPriceInForce } from '@/utils/supplierPrice';
+import { contextSiteId, isPriceInForce, pickerSiteIds } from '@/utils/supplierPrice';
 import type { SupplierItemPricesBinding } from '../bindings';
 import { EditSitePriceDialog } from '../forms/EditSitePriceDialog';
 import { supplierPriceColumns } from '../priceColumns';
@@ -34,49 +42,22 @@ export const PricesTable: React.FC<PricesTableProps> = (props) =>
   props.prices.sites ? (
     <PickedSitePricesTable {...props} usePricedSiteIds={props.prices.sites.usePricedSiteIds} />
   ) : (
-    <PricesTableView {...props} site={props.siteId} />
+    <PricesTableView {...props} />
   );
 
-// The table at one of the sites the item has prices at — the one picked, seeded from `?site=` when opened from an
-// enrollment and not saved, else the first in the site picker's order
+// The table at the site in its context — saved with the table, defaulting to the first site the item is priced at in
+// the picker's order
 const PickedSitePricesTable: React.FC<PricesTableProps & { usePricedSiteIds: UsePricedSiteIds }> = ({
   usePricedSiteIds,
   ...props
 }) => {
-  const [searchParams] = useSearchParams();
-  const [picked, setPicked] = useState(() => searchParams.get('site') ?? undefined);
   const { data: siteIds, isLoading } = usePricedSiteIds(props.supplierId, props.itemId);
-  const site = picked && siteIds?.includes(picked) ? picked : siteIds?.[0];
-
-  return (
-    <PricesTableView
-      {...props}
-      site={site}
-      isSitesLoading={isLoading}
-      contextBar={
-        isLoading ? (
-          <ContextFilterSkeleton labelWidth="w-8" valueWidth="w-24" />
-        ) : (
-          site && (
-            <SiteFilter
-              value={site}
-              siteIds={siteIds}
-              mode="context"
-              clearable={false}
-              onChange={(result) => setPicked(String(result.value))}
-            />
-          )
-        )
-      }
-    />
-  );
+  return <PricesTableView {...props} pricedSites={{ siteIds, isLoading }} />;
 };
 
 interface PricesTableViewProps extends PricesTableProps {
-  // The site the rows are at; absent while the item has no prices to pick a site from
-  site: string | undefined;
-  isSitesLoading?: boolean;
-  contextBar?: React.ReactNode;
+  // Where the table picks its site: the sites the item is priced at, in the picker's order
+  pricedSites?: { siteIds: string[] | undefined; isLoading: boolean };
 }
 
 const PricesTableView: React.FC<PricesTableViewProps> = ({
@@ -87,16 +68,21 @@ const PricesTableView: React.FC<PricesTableViewProps> = ({
   uomId,
   currencyCodes,
   addAction,
-  site,
-  isSitesLoading = false,
-  contextBar,
+  siteId,
+  pricedSites,
 }) => {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
-  const { data: response, isLoading } = prices.usePricesTable(supplierId, itemId, site);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // A site an enrollment link opened the table at; written into the context once, then dropped from the URL
+  const siteParam = pricedSites ? (searchParams.get('site') ?? undefined) : undefined;
+  const defaultSite = siteParam ?? pricedSites?.siteIds?.[0];
+  const { data: response, isLoading, isFetching } = prices.usePricesTable(supplierId, itemId);
   const deleteMutation = prices.useDeletePrice(supplierId, itemId);
   const showMrp = usePermission(prices.permissions.mrp.view).available;
-  const today = isoTodayDate(useWorkspaceTimeZone(site));
+  const slug = prices.tableSlug(supplierId, itemId);
+  const pickedSite = useDataTableStore((state) => contextSiteId(state.tables[slug]?.activeState.filters.context ?? []));
+  const today = isoTodayDate(useWorkspaceTimeZone(siteId ?? pickedSite));
 
   const handleDelete = useCallback(
     async (row: SupplierItemPriceRow) => {
@@ -174,25 +160,49 @@ const PricesTableView: React.FC<PricesTableViewProps> = ({
     [prices, showMrp, today, supplierId, itemId, inventoryItemId, uomId, currencyCodes, handleDelete],
   );
 
-  const { table } = useDataTable({
+  const { table, isLoaded } = useDataTable({
     columns,
     serverState: response,
-    slug: prices.tableSlug(supplierId, itemId),
+    slug,
     label: 'price record',
     enableRowSelection: false,
     enableSorting: true,
     enableMultiSort: false,
     onStatePush: () => queryClient.invalidateQueries({ queryKey: prices.tableKey(supplierId, itemId) }),
+    defaultContext: pricedSites && defaultSite ? [filter('site').equals(defaultSite)] : [],
   });
+
+  // A URL site wins over the stored one: written into the context once the stored state has loaded, then dropped
+  useEffect(() => {
+    if (!siteParam || !isLoaded) return;
+    (table.options.meta as DataTableMeta).setContext('site', filter('site').equals(siteParam));
+    setSearchParams(
+      (params) => {
+        params.delete('site');
+        return params;
+      },
+      { replace: true },
+    );
+  }, [siteParam, isLoaded, table, setSearchParams]);
+
+  const siteOptions = pickerSiteIds(pricedSites?.siteIds ?? [], pickedSite);
 
   return (
     <DataTable
       table={table}
       mode="tab"
-      isLoading={isSitesLoading || isLoading}
+      isLoading={!!pricedSites?.isLoading || isLoading}
+      isFetching={isFetching}
       permission={prices.permissions.view}
       toolbarActions={{ actions: addAction }}
-      contextBar={contextBar}
+      contextBar={
+        pricedSites &&
+        (pricedSites.isLoading ? (
+          <ContextFilterSkeleton labelWidth="w-8" valueWidth="w-24" />
+        ) : (
+          siteOptions.length > 0 && <SiteFilter name="site" mode="context" siteIds={siteOptions} />
+        ))
+      }
       emptyStateConfig={{
         icon: CalendarClock,
         title: 'No prices',

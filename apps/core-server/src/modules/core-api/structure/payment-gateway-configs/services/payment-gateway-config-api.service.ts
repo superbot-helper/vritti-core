@@ -11,7 +11,7 @@ import {
 } from '@domain/payment-gateway-config/services/payment-gateway-config.service';
 import { PayoutAccountDomainRepository } from '@domain/payout-account/repositories/payout-account.repository';
 import { Injectable } from '@nestjs/common';
-import type { TableViewState } from '@vritti/api-sdk/data-table';
+import type { TablePageRequest } from '@vritti/api-sdk/data-table';
 import { BadRequestException, ConflictException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import type { PaymentGatewayOptionDto } from '@/modules/payments-gateway/gateways/dto/response/payment-gateway-option.dto';
@@ -19,8 +19,6 @@ import {
   PaymentGatewaysGatewayService,
   type VerificationPaymentOptions,
 } from '@/modules/payments-gateway/gateways/services/payment-gateways-gateway.service';
-import { parseTableQueryParam } from '@/utils/parse-table-query';
-import type { GetPaymentGatewayConfigsInternalDto } from '../dto/request/get-payment-gateway-configs-internal.dto';
 import type {
   WebhookCheckStartedResponseDto,
   WebhookCheckStatusResponseDto,
@@ -43,17 +41,12 @@ export class PaymentGatewayConfigService {
     return this.paymentGatewaysGatewayService.listGateways();
   }
 
-  // Resolves a table page from the view state cloud serializes; RLS decides which rows the viewer sees
-  async findForTableWithQuery(
+  // Resolves a table page from the page request cloud sends; RLS decides which rows the viewer sees
+  async findForTablePage(
     viewer: PaymentGatewayConfigViewer,
-    query: GetPaymentGatewayConfigsInternalDto,
+    page: TablePageRequest,
   ): Promise<PaymentGatewayConfigsPageResponseDto> {
-    return this.gatewayConfigService.findForTable(viewer, {
-      filters: parseTableQueryParam<TableViewState['filters']>(query.filters, 'filters', []),
-      search: parseTableQueryParam<TableViewState['search'] | null>(query.search, 'search', null),
-      sort: parseTableQueryParam<TableViewState['sort']>(query.sort, 'sort', []),
-      pagination: { limit: query.limit ?? 20, offset: query.offset ?? 0 },
-    } as TableViewState);
+    return this.gatewayConfigService.findForTable(viewer, page);
   }
 
   // ---- The organization's own gateways ----

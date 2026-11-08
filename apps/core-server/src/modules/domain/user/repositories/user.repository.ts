@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { desc, type SQL } from '@vritti/api-sdk/drizzle-orm';
 import { type User, users } from '@/db/schema';
 
 @Injectable()
@@ -61,27 +61,18 @@ export class UserDomainRepository extends PrimaryBaseRepository<typeof users> {
     return this.update(id, { passwordHash, status: 'ACTIVE', updatedAt: new Date() });
   }
 
-  // Finds paginated users with filtering, sorting, and search for table display
+  // Finds a page of users with its total, newest first unless the caller sorts
   async findForTable(params: {
     where: SQL | undefined;
-    orderBy: SQL;
+    orderBy: SQL[];
     limit: number;
     offset: number;
-  }): Promise<{ rows: User[]; total: number }> {
-    const [countResult, rows] = await Promise.all([
-      this.db.select({ count: sql<number>`count(*)` }).from(users).where(params.where),
-      this.db
-        .select()
-        .from(users)
-        .where(params.where)
-        .orderBy(params.orderBy)
-        .limit(params.limit)
-        .offset(params.offset),
-    ]);
-
-    return {
-      rows: rows as User[],
-      total: Number(countResult[0]?.count ?? 0),
-    };
+  }): Promise<{ result: User[]; count: number }> {
+    return this.findAllAndCount({
+      where: params.where,
+      orderBy: params.orderBy.length > 0 ? params.orderBy : [desc(users.createdAt)],
+      limit: params.limit,
+      offset: params.offset,
+    });
   }
 }

@@ -1,6 +1,5 @@
 import { AddSupplierItemPriceDto } from '@commerce/supplier-item-prices/dto/request/add-supplier-item-price.dto';
 import { SupplierItemPriceHistoryQueryDto } from '@commerce/supplier-item-prices/dto/request/supplier-item-price-history-query.dto';
-import { SupplierItemPricesTableQueryDto } from '@commerce/supplier-item-prices/dto/request/supplier-item-prices-table-query.dto';
 import { UpdateSupplierItemPriceDto } from '@commerce/supplier-item-prices/dto/request/update-supplier-item-price.dto';
 import type { SupplierItemPriceHistoryResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-history-response.dto';
 import type { SupplierItemPriceResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-response.dto';
@@ -14,6 +13,7 @@ import { LE_SUPPLIERS } from '@vritti/commerce-permissions/suppliers';
 import { SessionTypeValues } from '@/db/schema';
 import { RequireFeature, RequirePermission } from '@/rbac/decorators';
 import { LegalEntityId, OrgId } from '@/security/decorators';
+import { ApiSupplierItemPricesTable } from './docs/supplier-item-prices-gateway.docs';
 import { SupplierItemPricesGatewayService } from './services/supplier-item-prices-gateway.service';
 
 // A supplier item's validity-dated prices across the legal entity's sites: the table, the price history, and their records
@@ -27,17 +27,17 @@ export class SupplierItemPricesGatewayController {
 
   constructor(private readonly service: SupplierItemPricesGatewayService) {}
 
-  // Returns the price timeline of a supplier item at one site
+  // Returns the price timeline of a supplier item at the site in the table's context
   @Get(':id/items/:itemId/prices/table')
   @RequirePermission(LE_SUPPLIERS.items.prices.view)
+  @ApiSupplierItemPricesTable()
   getItemPricesTable(
     @Param('id') supplierId: string,
     @Param('itemId') itemId: string,
-    @Query() query: SupplierItemPricesTableQueryDto,
     @UserId() userId: string,
   ): Promise<SupplierItemPriceTableResponseDto> {
     this.logger.log(`GET /commerce-api/le/suppliers/${supplierId}/items/${itemId}/prices/table`);
-    return this.service.findItemPricesTable(itemId, userId, query);
+    return this.service.findItemPricesTable(itemId, userId);
   }
 
   // Returns the sites a supplier item has prices at, in the site picker's order

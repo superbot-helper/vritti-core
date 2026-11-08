@@ -1,12 +1,11 @@
 import axios from '@vritti/quantum-ui/axios';
-import type { InventoryItemMrpData } from '@/schemas/inventory-item-mrp';
+import type { InventoryItemMrpTableResponse } from '@/schemas/inventory-item-mrp';
 import type { InventoryItemData, InventoryItemTableResponse } from '@/schemas/inventory-items';
 import type {
   InventoryItemPriceGraph,
   InventoryItemSuppliersTableResponse,
   ItemSupplierPriceComparisonTableResponse,
   PriceGraphSelection,
-  PricesTableContext,
 } from '@/schemas/suppliers';
 import { priceGraphState } from '@/utils/supplierPrice';
 
@@ -26,8 +25,8 @@ export function getLeInventoryItemSuppliersTable(id: string): Promise<InventoryI
     .then((r) => r.data);
 }
 
-export function getLeInventoryItemMrp(id: string): Promise<InventoryItemMrpData[]> {
-  return axios.get<InventoryItemMrpData[]>(`${BASE}/${id}/mrp`, { showSuccessToast: false }).then((r) => r.data);
+export function getLeInventoryItemMrpTable(id: string): Promise<InventoryItemMrpTableResponse> {
+  return axios.get<InventoryItemMrpTableResponse>(`${BASE}/${id}/mrp/table`).then((r) => r.data);
 }
 
 export function getLeInventoryItemPriceGraph(id: string): Promise<InventoryItemPriceGraph> {
@@ -36,16 +35,24 @@ export function getLeInventoryItemPriceGraph(id: string): Promise<InventoryItemP
     .then((r) => r.data);
 }
 
+// Fetches every supplier's standing for the item at the site in the table's context, on a YYYY-MM-DD day
 export function getLeInventoryItemPricesTable(
   id: string,
-  context: PricesTableContext,
+  asOf: string,
 ): Promise<ItemSupplierPriceComparisonTableResponse> {
   return axios
     .get<ItemSupplierPriceComparisonTableResponse>(`${BASE}/${id}/prices/table`, {
-      params: { asOf: context.asOf, ...(context.site ? { site: context.site } : {}) },
+      params: { asOf },
       showSuccessToast: false,
     })
     .then((r) => r.data);
+}
+
+// Fetches the sites where any supplier has priced the item, in the site picker's order
+export function getLeInventoryItemPricedSiteIds(id: string): Promise<string[]> {
+  return axios
+    .get<{ siteIds: string[] }>(`${BASE}/${id}/prices/site-ids`, { showSuccessToast: false })
+    .then((r) => r.data.siteIds);
 }
 
 // Saves what the price graph shows to its live table state, which the graph endpoint reads back

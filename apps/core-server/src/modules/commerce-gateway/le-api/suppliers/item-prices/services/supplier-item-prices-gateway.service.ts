@@ -1,6 +1,5 @@
 import type { AddSupplierItemPriceDto } from '@commerce/supplier-item-prices/dto/request/add-supplier-item-price.dto';
 import type { SupplierItemPriceHistoryQueryDto } from '@commerce/supplier-item-prices/dto/request/supplier-item-price-history-query.dto';
-import type { SupplierItemPricesTableQueryDto } from '@commerce/supplier-item-prices/dto/request/supplier-item-prices-table-query.dto';
 import type { UpdateSupplierItemPriceDto } from '@commerce/supplier-item-prices/dto/request/update-supplier-item-price.dto';
 import type { SupplierItemPriceHistoryResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-history-response.dto';
 import type { SupplierItemPriceResponseDto } from '@commerce/supplier-item-prices/dto/response/supplier-item-price-response.dto';
@@ -25,23 +24,17 @@ export class SupplierItemPricesGatewayService {
     private readonly siteRepository: SiteDomainRepository,
   ) {}
 
-  // A supplier item's price timeline at the site picked in the table's context bar — not saved
-  async findItemPricesTable(
-    supplierItemId: string,
-    userId: string,
-    query: SupplierItemPricesTableQueryDto,
-  ): Promise<SupplierItemPriceTableResponseDto> {
-    this.logger.log(`le.suppliers.siteItems.prices.table — supplierItemId: ${supplierItemId}, site: ${query.site}`);
-    const { state: savedState, activeViewId } = await this.dataTableStateService.getCurrentState(
+  // A supplier item's price timeline at the site in the table's context
+  async findItemPricesTable(supplierItemId: string, userId: string): Promise<SupplierItemPriceTableResponseDto> {
+    this.logger.log(`le.suppliers.siteItems.prices.table — supplierItemId: ${supplierItemId}`);
+    const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
       userId,
       `commerce-le-supplier-item-${supplierItemId}-prices`,
     );
-    // The site is context, not a filter; drop any an older saved state still holds
-    const state = { ...savedState, filters: (savedState.filters ?? []).filter((filter) => filter.field !== 'siteId') };
     const { result, count } = await this.nats.send<{ result: SupplierItemPriceResponseDto[]; count: number }>(
       'commerce',
       'le.suppliers.siteItems.prices.table',
-      { supplierItemId, siteId: query.site, ...state },
+      { supplierItemId, ...state },
     );
     return { result, count, state, activeViewId };
   }

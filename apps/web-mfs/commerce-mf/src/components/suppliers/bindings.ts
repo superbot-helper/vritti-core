@@ -96,6 +96,12 @@ export interface SupplierEnrollmentBinding {
   siteItemPath: (itemSlug: string, ref: SupplierEnrollmentRef) => string;
   // Present only where the workspace has its own supplier site item page
   siteItemPage?: SupplierSiteItemPageBinding;
+  invoices?: SupplierEnrollmentInvoicesBinding;
+}
+
+export interface SupplierEnrollmentInvoicesBinding {
+  permission: string;
+  Tab: ComponentType<{ supplierId: string }>;
 }
 
 // A supplier's quotations — the list, a supplier's or those posted to one site, and a quotation's page. A site workspace

@@ -62,7 +62,7 @@ export const quotationsBinding: SupplierQuotationsBinding = {
   tableSlug: (supplierId, siteId) =>
     siteId
       ? `commerce-le-supplier-${supplierId}-site-${siteId}-quotations`
-      : `commerce-supplier-${supplierId}-quotations`,
+      : `commerce-le-supplier-${supplierId}-quotations`,
   useQuotationPath,
   emptyState: (siteId) =>
     siteId

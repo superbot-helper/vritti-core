@@ -14,11 +14,11 @@ export class LeInventoryItemPricesController {
 
   @MessagePattern({ cmd: 'le.inventoryItems.prices.table' })
   table(
-    @Payload() data: { inventoryItemId: string; siteId: string; asOf?: string } & TableViewState,
+    @Payload() data: { inventoryItemId: string; asOf?: string } & TableViewState,
   ): Promise<{ result: ItemSupplierPriceComparisonDto[]; count: number }> {
-    const { inventoryItemId, siteId, asOf, ...state } = data;
-    this.logger.log(`inventoryItems.prices.table — inventoryItemId: ${inventoryItemId}, siteId: ${siteId}`);
-    return this.service.findTable(inventoryItemId, siteId, state, asOf);
+    const { inventoryItemId, asOf, ...state } = data;
+    this.logger.log(`inventoryItems.prices.table — inventoryItemId: ${inventoryItemId}`);
+    return this.service.findTable(inventoryItemId, state, asOf);
   }
 
   @MessagePattern({ cmd: 'le.inventoryItems.prices.siteIds' })

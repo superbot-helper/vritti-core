@@ -1,4 +1,5 @@
 import type { InventoryItemMrpResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-mrp-response.dto';
+import type { InventoryItemMrpTableResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-mrp-table-response.dto';
 import type { InventoryItemResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-response.dto';
 import type {
   InventoryItemSupplierResponseDto,
@@ -40,9 +41,19 @@ export class LeInventoryItemsGatewayService {
     return this.nats.send('commerce', 'le.inventoryItems.findById', { id });
   }
 
-  findMrp(inventoryItemId: string): Promise<InventoryItemMrpResponseDto[]> {
+  // Returns the MRPs of an item, table-shaped
+  async findMrpTable(inventoryItemId: string, userId: string): Promise<InventoryItemMrpTableResponseDto> {
     this.logger.log(`le.inventoryItems.mrp.table — inventoryItemId: ${inventoryItemId}`);
-    return this.nats.send('commerce', 'le.inventoryItems.mrp.table', { inventoryItemId });
+    const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
+      userId,
+      `commerce-le-inventory-item-${inventoryItemId}-mrp`,
+    );
+    const { result, count } = await this.nats.send<{ result: InventoryItemMrpResponseDto[]; count: number }>(
+      'commerce',
+      'le.inventoryItems.mrp.table',
+      { inventoryItemId, ...state },
+    );
+    return { result, count, state, activeViewId };
   }
 
   async findSuppliersTable(inventoryItemId: string, userId: string): Promise<InventoryItemSupplierTableResponseDto> {

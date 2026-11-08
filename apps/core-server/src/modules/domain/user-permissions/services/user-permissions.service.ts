@@ -22,6 +22,7 @@ import {
   type WorkspaceFeatureLocks,
 } from '@vritti/api-sdk/catalog-resolver';
 import { ForbiddenException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import type { SelectOptionsQueryDto, SelectQueryResult } from '@vritti/api-sdk/select';
 
 const CLIENT_BY_BUCKET: Record<PlatformBucket, ClientPlatform> = {
   web: 'web',
@@ -258,10 +259,37 @@ export class UserPermissionsDomainService {
     }
   }
 
-  // Returns the sites a user can access: direct, via the site's group chain, via its legal entity, or org-wide
-  async getAssignedSites(userId: string, orgId: string): Promise<AssignedSite[]> {
-    const structure = await this.getAssignedStructure(userId, orgId);
-    return structure.sites;
+  // Returns the sites a user can access as select options: direct, via a group chain, via its legal entity, or org-wide
+  async findAssignedSitesForSelect(
+    userId: string,
+    orgId: string,
+    query: SelectOptionsQueryDto,
+  ): Promise<SelectQueryResult> {
+    const grants = await this.userRoleAssignmentRepository.findGrantsByUser(userId);
+    if (grants.length === 0) return { options: [], hasMore: false, totalCount: 0 };
+
+    const [sites, groups, snapshot, org] = await Promise.all([
+      this.siteRepository.findAccessKeysByOrg(orgId),
+      this.siteRepository.findGroupParentsByOrg(orgId),
+      this.catalogService.getActiveSnapshot(),
+      this.organizationRepository.findById(orgId),
+    ]);
+    const parentMap = new Map(groups.map((group) => [group.id, group.parentId]));
+
+    const accessibleSiteIds = sites
+      .filter((site) => {
+        const chain = this.groupChainFromMap(site.groupId, parentMap);
+        const typed = this.filterGrantsBySiteType(
+          grants,
+          snapshot ?? undefined,
+          org?.businessCode ?? undefined,
+          site.type,
+        );
+        return this.selectNearestGrants(typed, site, chain).length > 0;
+      })
+      .map((site) => site.id);
+
+    return this.siteRepository.findForAccessSelectOptions(orgId, accessibleSiteIds, query);
   }
 
   // Resolves the user's accessible structure — sites plus the legal entities and site groups they touch

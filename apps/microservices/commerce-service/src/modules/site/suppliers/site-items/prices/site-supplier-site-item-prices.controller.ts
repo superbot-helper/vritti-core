@@ -23,7 +23,7 @@ export class SiteSupplierSiteItemPricesController {
   ): Promise<{ result: SupplierItemPriceDto[]; count: number }> {
     const { supplierItemId, ...state } = data;
     this.logger.log(`site.suppliers.siteItems.prices.table — supplierItemId: ${supplierItemId}`);
-    return this.service.findPricesForTable(supplierItemId, siteId, state);
+    return this.service.findPricesForTable(supplierItemId, state, siteId);
   }
 
   // Returns the caller site's price windows for a supplier item within a date range

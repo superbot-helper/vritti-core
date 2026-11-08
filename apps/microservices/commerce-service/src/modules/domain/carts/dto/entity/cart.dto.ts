@@ -32,6 +32,8 @@ export interface CartItemRow {
   createdAt: Date;
 }
 
+export type StaffCartItemRow = CartItemRow & { cartId: string; siteId: string | null; legalEntityId: string };
+
 export class CartItemDto {
   id: string;
   // Null once the catalogue stops carrying it — the line stays, as `isAvailable` explains
@@ -108,9 +110,7 @@ export class StaffCartItemDto extends CartItemDto {
   siteId: string | null;
   legalEntityId: string;
 
-  static fromStaffRow(
-    row: CartItemRow & { cartId: string; siteId: string | null; legalEntityId: string },
-  ): StaffCartItemDto {
+  static fromStaffRow(row: StaffCartItemRow): StaffCartItemDto {
     const dto = Object.assign(new StaffCartItemDto(), CartItemDto.from(row));
     dto.cartId = row.cartId;
     dto.siteId = row.siteId;

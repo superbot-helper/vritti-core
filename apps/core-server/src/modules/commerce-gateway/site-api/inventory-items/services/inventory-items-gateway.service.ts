@@ -26,9 +26,9 @@ import type {
 import { Injectable, Logger } from '@nestjs/common';
 import {
   DataTableStateService,
-  type FilterCondition,
   type SearchState,
   type SortCondition,
+  type TableFilters,
 } from '@vritti/api-sdk/data-table';
 import { NatsClientService } from '@vritti/api-sdk/nats';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
@@ -61,7 +61,7 @@ export class SiteInventoryItemsGatewayService {
 
   // Keyset/cursor Relay connection for the mobile infinite feed (GraphQL-only — no REST route).
   async findForFeed(query: {
-    filters?: FilterCondition[];
+    filters: TableFilters;
     search?: SearchState | null;
     sort?: SortCondition[];
     limit?: number;

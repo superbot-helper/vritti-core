@@ -338,20 +338,7 @@ export interface ItemSupplierPriceComparisonRow {
   priceCount: number;
 }
 
-export type ItemSupplierPriceComparisonTableResponse = TableResponse<ItemSupplierPriceComparisonRow> & {
-  // Sites the item has supplier prices at, and the one the table shows when none is picked
-  siteIds: string[];
-  defaultSiteId: string | null;
-  // The site the rows are at: the one asked for when the item is priced there, else the default
-  siteId: string | null;
-};
-
-// What the prices table is about — set in its context bar, not saved: a site (the default when omitted) and a day, as
-// YYYY-MM-DD or yesterday / today / tomorrow
-export interface PricesTableContext {
-  site?: string;
-  asOf: string;
-}
+export type ItemSupplierPriceComparisonTableResponse = TableResponse<ItemSupplierPriceComparisonRow>;
 
 // Each window carries its own currency; a supplier can requote an item in another of its currencies
 export interface SupplierItemPriceHistory {

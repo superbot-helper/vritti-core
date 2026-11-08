@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, desc, eq, ilike, ne, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, eq, ne, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
 import { type SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
 import { type PartyBankAccount, parties, partyBankAccounts } from '@/db/schema';
 
@@ -47,40 +47,21 @@ export class PartyBankAccountsDomainRepository extends PrimaryBaseRepository<typ
     await this.db.update(partyBankAccounts).set({ isPrimary: false }).where(where);
   }
 
-  // Returns paginated active bank account options of a party — account name label, bank + masked number description
-  async findOptionsForSelect(partyId: string, query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
-    const limit = Number(query.limit) || 20;
-    const offset = Number(query.offset) || 0;
-
-    const conditions: SQL[] = [eq(partyBankAccounts.partyId, partyId), eq(partyBankAccounts.isActive, true)];
-    if (query.search) {
-      conditions.push(ilike(partyBankAccounts.accountName, `%${query.search}%`));
-    }
-
-    const rows = await this.db
-      .select({
-        value: partyBankAccounts.id,
-        label: partyBankAccounts.accountName,
-        description: sql<string>`COALESCE(${partyBankAccounts.bankName} || ' ', '') || '····' || RIGHT(${partyBankAccounts.accountNumber}, 4)`,
-        isPrimary: partyBankAccounts.isPrimary,
-        totalCount: sql<number>`count(*) over()`.mapWith(Number),
-      })
-      .from(partyBankAccounts)
-      .where(and(...conditions))
-      .orderBy(desc(partyBankAccounts.isPrimary), asc(partyBankAccounts.accountName))
-      .limit(limit)
-      .offset(offset);
-
-    const totalCount = rows.length > 0 ? rows[0].totalCount : 0;
-    return {
-      options: rows.map((row) => ({
-        value: row.value,
-        label: row.label,
-        description: row.description,
-        additionals: { isPrimary: row.isPrimary },
-      })),
-      hasMore: offset + limit < totalCount,
-      totalCount,
-    };
+  // Returns a party's active bank accounts as select options, primary first — account name label, bank + masked number description
+  findOptionsForSelect(partyId: string, query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+    return this.findForSelect({
+      value: 'id',
+      label: 'accountName',
+      description: sql`coalesce(${partyBankAccounts.bankName} || ' ', '') || '····' || right(${partyBankAccounts.accountNumber}, 4)`,
+      additionalKeys: ['isPrimary'],
+      search: query.search,
+      searchKeys: ['accountName'],
+      limit: query.limit,
+      offset: query.offset,
+      values: query.values,
+      excludeIds: query.excludeIds,
+      orderBy: { isPrimary: 'desc', accountName: 'asc' },
+      where: { partyId, isActive: true },
+    });
   }
 }

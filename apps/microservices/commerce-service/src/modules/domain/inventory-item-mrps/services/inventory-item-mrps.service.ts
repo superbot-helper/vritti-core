@@ -1,18 +1,30 @@
 import { Injectable } from '@nestjs/common';
-import { sql } from '@vritti/api-sdk/drizzle-orm';
+import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
+import { and, asc, sql } from '@vritti/api-sdk/drizzle-orm';
 import { type CurrencyCode, majorToMinor, minorToMajor } from '@vritti/api-sdk/money';
 import type { SelectOptionsQueryDto, SelectQueryResult } from '@vritti/api-sdk/select';
-import { type InventoryItemMrp, uom } from '@/db/schema';
+import { type InventoryItemMrp, inventoryItemMrps, uom } from '@/db/schema';
+import { InventoryItemMrpDto } from '../dto/entity/inventory-item-mrp.dto';
 import type { AddInventoryItemMrpDto } from '../dto/request/add-inventory-item-mrp.dto';
 import type { UpdateInventoryItemMrpDto } from '../dto/request/update-inventory-item-mrp.dto';
-import {
-  InventoryItemMrpsDomainRepository,
-  type InventoryItemMrpWithUom,
-  type MrpPricedAt,
-} from '../repositories/inventory-item-mrps.repository';
+import { InventoryItemMrpsDomainRepository, type MrpPricedAt } from '../repositories/inventory-item-mrps.repository';
 
 @Injectable()
 export class InventoryItemMrpsDomainService {
+  private static readonly FIELD_MAP: FieldMap = {
+    uomSymbol: { column: uom.symbol, type: 'string' },
+    currencyCode: { column: inventoryItemMrps.currencyCode, type: 'string' },
+    amount: { column: inventoryItemMrps.amount, type: 'number' },
+    isCurrent: { column: inventoryItemMrps.isCurrent, type: 'boolean' },
+    sourcedAt: { column: inventoryItemMrps.sourcedAt, type: 'string' },
+  };
+
+  // Search runs ILIKE, which numbers and timestamps don't support — so it only covers the text columns
+  private static readonly SEARCH_FIELD_MAP: FieldMap = {
+    uomSymbol: InventoryItemMrpsDomainService.FIELD_MAP.uomSymbol,
+    currencyCode: InventoryItemMrpsDomainService.FIELD_MAP.currencyCode,
+  };
+
   constructor(private readonly repository: InventoryItemMrpsDomainRepository) {}
 
   // The options the Add Listings form offers for one variant, labelled the way a pack is read
@@ -118,9 +130,24 @@ export class InventoryItemMrpsDomainService {
     return this.repository.deleteOne(id);
   }
 
-  // Returns the suggested MRPs for an inventory item (one per uom×currency)
-  findByItem(inventoryItemId: string): Promise<InventoryItemMrpWithUom[]> {
-    return this.repository.findByItem(inventoryItemId);
+  // Returns one item's MRPs for the data table, by unit and currency unless the table sorts them
+  async findForTable(
+    inventoryItemId: string,
+    state: TableViewState,
+  ): Promise<{ result: InventoryItemMrpDto[]; count: number }> {
+    const fieldMap = InventoryItemMrpsDomainService.FIELD_MAP;
+    const { limit = 20, offset = 0 } = state.pagination;
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, fieldMap);
+    const { result, count } = await this.repository.findForTable(inventoryItemId, {
+      where: and(
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, InventoryItemMrpsDomainService.SEARCH_FIELD_MAP),
+      ),
+      orderBy: orderBy.length > 0 ? orderBy : [asc(uom.symbol), asc(inventoryItemMrps.currencyCode)],
+      limit,
+      offset,
+    });
+    return { result: result.map((row) => InventoryItemMrpDto.from(row)), count };
   }
 
   // Returns true when the uom shares the item's primary-uom family

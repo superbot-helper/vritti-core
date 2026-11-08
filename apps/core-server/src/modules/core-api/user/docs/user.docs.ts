@@ -4,6 +4,7 @@ import { UsersTableResponseDto } from '@domain/user/dto/response/users-table-res
 import { applyDecorators } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 import { MobileLookupResponseDto } from '../../auth/root/dto/response/mobile-lookup-response.dto';
 
 export function ApiGetOrganizationsByEmail() {
@@ -37,15 +38,11 @@ export function ApiGetUsers() {
     ApiOperation({
       summary: 'Get portal users by org',
       description:
-        'Returns paginated, filtered, and sorted users for the given organization. Filter/sort/search state is passed as JSON query params from cloud-server. Protected by request signature.',
+        "Returns one page of the organization's portal users from the page request (filters, search, sort, pagination) cloud-server sends for the view state it holds. Protected by request signature.",
     }),
-    ApiQuery({ name: 'orgId', description: 'Organization ID', required: true }),
-    ApiQuery({ name: 'filters', description: 'JSON-stringified FilterCondition[]', required: false }),
-    ApiQuery({ name: 'search', description: 'JSON-stringified SearchState', required: false }),
-    ApiQuery({ name: 'sort', description: 'JSON-stringified SortCondition[]', required: false }),
-    ApiQuery({ name: 'limit', description: 'Page size', required: false, type: Number }),
-    ApiQuery({ name: 'offset', description: 'Page offset', required: false, type: Number }),
+    ApiBody({ type: InternalTablePageDto }),
     ApiResponse({ status: 200, description: 'Users retrieved successfully.', type: UsersTableResponseDto }),
+    ApiResponse({ status: 400, description: 'Invalid table page request.' }),
     ApiResponse({ status: 401, description: 'Invalid or missing request signature.' }),
   );
 }

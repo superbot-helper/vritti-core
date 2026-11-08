@@ -316,9 +316,7 @@ const CategoryItemsSection: React.FC<CategoryItemsSectionProps> = ({ categoryId 
     slug: `category-${categoryId}-items`,
     label: 'item',
     enableRowSelection: false,
-    onStatePush: () => {
-      queryClient.invalidateQueries({ queryKey: CATEGORY_ITEMS_TABLE_KEY(categoryId) });
-    },
+    onStatePush: () => queryClient.invalidateQueries({ queryKey: CATEGORY_ITEMS_TABLE_KEY(categoryId) }),
   });
 
   return (

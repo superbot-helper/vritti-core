@@ -280,20 +280,13 @@ export function getSupplierItem({
     .then((r) => r.data);
 }
 
-// Fetches a supplier item's price timeline at one site
-export function getSupplierItemPricesTable({
-  supplierId,
-  itemId,
-  site,
-}: {
-  supplierId: string;
-  itemId: string;
-  site: string;
-}): Promise<SupplierItemPricesTableResponse> {
+// Fetches a supplier item's price timeline at the site in the table's context
+export function getSupplierItemPricesTable(
+  supplierId: string,
+  itemId: string,
+): Promise<SupplierItemPricesTableResponse> {
   return axios
-    .get<SupplierItemPricesTableResponse>(`commerce-api/le/suppliers/${supplierId}/items/${itemId}/prices/table`, {
-      params: { site },
-    })
+    .get<SupplierItemPricesTableResponse>(`commerce-api/le/suppliers/${supplierId}/items/${itemId}/prices/table`)
     .then((r) => r.data);
 }
 

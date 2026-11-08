@@ -15,14 +15,14 @@ export class SupplierSiteItemPricesController {
 
   constructor(private readonly service: SupplierItemPricesDomainService) {}
 
-  // Returns the paginated price timeline of a supplier item at one site
+  // Returns the paginated price timeline of a supplier item at the site in the table's context
   @MessagePattern({ cmd: 'le.suppliers.siteItems.prices.table' })
   table(
-    @Payload() data: { supplierItemId: string; siteId: string } & TableViewState,
+    @Payload() data: { supplierItemId: string } & TableViewState,
   ): Promise<{ result: SupplierItemPriceDto[]; count: number }> {
-    const { supplierItemId, siteId, ...state } = data;
-    this.logger.log(`le.suppliers.siteItems.prices.table — supplierItemId: ${supplierItemId}, siteId: ${siteId}`);
-    return this.service.findPricesForTable(supplierItemId, siteId, state);
+    const { supplierItemId, ...state } = data;
+    this.logger.log(`le.suppliers.siteItems.prices.table — supplierItemId: ${supplierItemId}`);
+    return this.service.findPricesForTable(supplierItemId, state);
   }
 
   // Returns the sites where a supplier item has prices

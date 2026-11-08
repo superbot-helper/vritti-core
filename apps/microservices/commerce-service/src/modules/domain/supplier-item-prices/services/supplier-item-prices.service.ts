@@ -1,18 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import {
-  type FieldMap,
-  type FilterCondition,
-  FilterOperators,
-  FilterProcessor,
-  type TableViewState,
-} from '@vritti/api-sdk/data-table';
+import { type FieldMap, FilterProcessor, type SortCondition, type TableViewState } from '@vritti/api-sdk/data-table';
 import { PrimaryDatabaseService } from '@vritti/api-sdk/database';
 import Decimal from '@vritti/api-sdk/decimal';
 import { and } from '@vritti/api-sdk/drizzle-orm';
 import { BadRequestException, NotFoundException } from '@vritti/api-sdk/exceptions';
-import { CurrencyAmountDto, majorToMinor } from '@vritti/api-sdk/money';
+import { majorToMinor } from '@vritti/api-sdk/money';
 import { pluralize } from '@vritti/api-sdk/pluralize';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { formatISO } from 'date-fns';
 import {
   type NewSupplierItemPrice,
   parties,
@@ -33,6 +28,7 @@ import {
 } from '../dto/entity/supplier-item-price-history.dto';
 import type { AddSupplierItemPriceDto } from '../dto/request/add-supplier-item-price.dto';
 import type { UpdateSupplierItemPriceDto } from '../dto/request/update-supplier-item-price.dto';
+import { ItemSupplierPriceComparisonsRepository } from '../repositories/item-supplier-price-comparisons.repository';
 import {
   type ItemPriceAtSiteRow,
   SupplierItemPricesDomainRepository,
@@ -78,6 +74,7 @@ export class SupplierItemPricesDomainService {
     validFrom: { column: supplierItemPrices.validFrom, type: 'string' },
     validTo: { column: supplierItemPrices.validTo, type: 'string' },
     source: { column: supplierItemPrices.source, type: 'string' },
+    site: { column: supplierItemPrices.siteId, type: 'string' },
   };
 
   // Field map for an inventory item's prices from every supplier at a site
@@ -88,9 +85,16 @@ export class SupplierItemPricesDomainService {
     uomSymbol: { column: uom.symbol, type: 'string' },
   };
 
+  // Cheapest effective price per primary unit first, then by supplier
+  private static readonly COMPARISON_DEFAULT_SORT: SortCondition[] = [
+    { field: 'effectivePricePerPrimary', direction: 'asc' },
+    { field: 'supplierName', direction: 'asc' },
+  ];
+
   constructor(
     private readonly database: PrimaryDatabaseService,
     private readonly repository: SupplierItemPricesDomainRepository,
+    private readonly comparisonsRepository: ItemSupplierPriceComparisonsRepository,
   ) {}
 
   // Returns a site's price row effective on a date, or null when unpriced
@@ -106,11 +110,12 @@ export class SupplierItemPricesDomainService {
     return row ? SupplierItemPriceDto.from(row) : null;
   }
 
-  // Returns the paginated price timeline of a supplier item at one site
+  // Returns the paginated price timeline of a supplier item, at the site in the table's context and within the
+  // workspace's own site when one is given
   async findPricesForTable(
     supplierItemId: string,
-    siteId: string,
     state: TableViewState,
+    workspaceSiteId?: string,
   ): Promise<{ result: SupplierItemPriceDto[]; count: number }> {
     await this.requirePriceContext(supplierItemId);
 
@@ -120,7 +125,7 @@ export class SupplierItemPricesDomainService {
     const orderBy = FilterProcessor.buildOrderBy(state.sort, SupplierItemPricesDomainService.PRICE_FIELD_MAP);
     const { limit = 20, offset = 0 } = state.pagination;
 
-    const { result, count } = await this.repository.findPricesForTable(supplierItemId, siteId, {
+    const { result, count } = await this.repository.findPricesForTable(supplierItemId, workspaceSiteId, {
       where,
       orderBy,
       limit,
@@ -228,86 +233,33 @@ export class SupplierItemPricesDomainService {
     return { suppliers: histories, supplierCount };
   }
 
-  // Every supplier item's standing for an inventory item at a site on a date (today by default), as a table: the price
-  // in force per its own unit and per the item's primary unit, what its scheme makes it cost, and how it last moved. The per-unit and
-  // scheme figures are Decimal arithmetic, so the rows — one per supplier item of one item at one site — are filtered,
-  // sorted and paged here rather than in SQL. Sorts cheapest effective price first by default.
+  // Every supplier item's standing for an inventory item at the site in the table's context on a day (today by default):
+  // the price in force per its own unit and per the item's primary unit, what its scheme makes it cost, and how it last
+  // moved — cheapest effective price per primary unit first. Every figure is per site, so with no site there are no rows.
   async findItemPriceComparisonTable(
     inventoryItemId: string,
-    siteId: string,
     state: TableViewState,
-    unitsPerPrimary: (uomId: string) => Promise<number>,
     asOf?: string,
   ): Promise<{ result: ItemSupplierPriceComparisonDto[]; count: number }> {
-    const rows = await this.repository.findItemPriceHistoryAtSite(inventoryItemId, siteId, {});
-    const preferred = new Set(await this.repository.findPreferredSupplierItemIdsAtSite(inventoryItemId, siteId));
-    const bySupplierItem = new Map<string, ItemPriceAtSiteRow[]>();
-    for (const row of rows) {
-      const group = bySupplierItem.get(row.supplierItemId) ?? [];
-      group.push(row);
-      bySupplierItem.set(row.supplierItemId, group);
-    }
+    if (!state.filters.context.some((condition) => condition.field === 'site')) return { result: [], count: 0 };
 
-    const today = asOf ?? SupplierItemPricesDomainService.today();
-    const all: ItemSupplierPriceComparisonDto[] = [];
-    for (const [supplierItemId, windows] of bySupplierItem) {
-      const [first] = windows;
-      const factor = new Decimal(await unitsPerPrimary(first.uomId));
-      const currentIndex = windows.findIndex(
-        (window) => window.validFrom <= today && (!window.validTo || window.validTo >= today),
-      );
-      const current = currentIndex >= 0 ? windows[currentIndex] : null;
-      const previous = currentIndex > 0 ? windows[currentIndex - 1] : null;
-      const perPrimary = current ? SupplierItemPricesDomainService.perPrimary(current.unitPrice, factor) : null;
-      const afterScheme = (amount: bigint | null) =>
-        amount != null && current?.schemeBuyQty && current.schemeFreeQty
-          ? SupplierItemPricesDomainService.afterScheme(amount, current.schemeBuyQty, current.schemeFreeQty)
-          : amount;
-      const effective = afterScheme(perPrimary);
-      const changePercent =
-        current && previous && previous.currencyCode === current.currencyCode && previous.unitPrice > 0n
-          ? new Decimal((current.unitPrice - previous.unitPrice).toString())
-              .dividedBy(previous.unitPrice.toString())
-              .times(100)
-              .toDecimalPlaces(1, Decimal.ROUND_HALF_UP)
-              .toNumber()
-          : null;
-      const money = (amount: bigint | null, currency: string | undefined) =>
-        amount != null && currency ? CurrencyAmountDto.from(amount, currency) : null;
-
-      const dto = new ItemSupplierPriceComparisonDto();
-      Object.assign(dto, {
-        supplierItemId,
-        supplierId: first.supplierId,
-        supplierName: first.supplierName,
-        supplierCode: first.supplierCode,
-        quotedUomSymbol: first.uomSymbol ?? null,
-        isPreferred: preferred.has(supplierItemId),
-        currentPrice: money(current?.unitPrice ?? null, current?.currencyCode),
-        currentFrom: current?.validFrom ?? null,
-        currentTo: current?.validTo ?? null,
-        effectivePrice: money(afterScheme(current?.unitPrice ?? null), current?.currencyCode),
-        pricePerPrimary: money(perPrimary, current?.currencyCode),
-        effectivePricePerPrimary: money(effective, current?.currencyCode),
-        schemeBuyQty: current?.schemeBuyQty ?? null,
-        schemeFreeQty: current?.schemeFreeQty ?? null,
-        mrp: money(current?.mrpAmount ?? null, current?.currencyCode),
-        previousPrice: money(previous?.unitPrice ?? null, previous?.currencyCode),
-        changePercent,
-        priceCount: windows.length,
-      });
-      all.push(dto);
-    }
-
-    const matching = all.filter(
-      (row) =>
-        SupplierItemPricesDomainService.matchesComparisonSearch(row, state.search) &&
-        (state.filters ?? []).every((filter) => SupplierItemPricesDomainService.matchesComparisonFilter(row, filter)),
-    );
-    const [sort] = state.sort?.length ? state.sort : [{ field: 'effectivePricePerPrimary', direction: 'asc' as const }];
-    matching.sort((a, b) => SupplierItemPricesDomainService.compareComparisonRows(a, b, sort.field, sort.direction));
+    const standing = this.comparisonsRepository.standingOn(asOf ?? formatISO(new Date(), { representation: 'date' }));
+    const fieldMap = this.comparisonsRepository.fieldMap(standing);
+    const sort = state.sort.length ? state.sort : SupplierItemPricesDomainService.COMPARISON_DEFAULT_SORT;
     const { limit = 20, offset = 0 } = state.pagination;
-    return { result: matching.slice(offset, offset + limit), count: matching.length };
+
+    const { result, count } = await this.comparisonsRepository.findForTable({
+      inventoryItemId,
+      standing,
+      where: and(
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, fieldMap),
+      ),
+      orderBy: FilterProcessor.buildOrderBy(sort, fieldMap),
+      limit,
+      offset,
+    });
+    return { result: result.map((row) => ItemSupplierPriceComparisonDto.from(row)), count };
   }
 
   // Adds a validity-dated price at each given site, delimiting that site's open row (SAP ME11)
@@ -599,89 +551,11 @@ export class SupplierItemPricesDomainService {
       .map(([supplierId]) => supplierId);
   }
 
-  // What an amount costs once a buy+free scheme is counted in: amount × buy ÷ (buy + free)
-  private static afterScheme(amount: bigint, buyQty: number, freeQty: number): bigint {
-    return BigInt(
-      new Decimal(amount.toString())
-        .times(buyQty)
-        .dividedBy(new Decimal(buyQty).plus(freeQty))
-        .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
-        .toFixed(0),
-    );
-  }
-
   // An amount per the item's primary unit, given how many primary units one quoted unit holds
   private static perPrimary(amount: bigint, factor: Decimal): bigint {
     return factor.lte(0)
       ? amount
       : BigInt(new Decimal(amount.toString()).dividedBy(factor).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toFixed(0));
-  }
-
-  private static matchesComparisonSearch(
-    row: ItemSupplierPriceComparisonDto,
-    search: TableViewState['search'],
-  ): boolean {
-    if (!search?.value) return true;
-    const needle = search.value.toLowerCase();
-    const fields =
-      search.columnId === 'supplierCode'
-        ? [row.supplierCode]
-        : search.columnId === 'supplierName'
-          ? [row.supplierName]
-          : [row.supplierName, row.supplierCode, row.quotedUomSymbol ?? ''];
-    return fields.some((field) => field.toLowerCase().includes(needle));
-  }
-
-  // The comparison table's filters: preferred, in force today, has a scheme (true / false), and the currency in force
-  private static matchesComparisonFilter(row: ItemSupplierPriceComparisonDto, filter: FilterCondition): boolean {
-    const values = (Array.isArray(filter.value) ? filter.value : [filter.value]).map(String);
-    const negate = filter.operator === FilterOperators.NOT_EQUALS || filter.operator === FilterOperators.IS_NOT_ANY_OF;
-    const flag = (actual: boolean) => (values[0] === 'true') === actual;
-    let matches: boolean;
-    switch (filter.field) {
-      case 'isPreferred':
-        matches = flag(row.isPreferred);
-        break;
-      case 'inForce':
-        matches = flag(row.currentPrice != null);
-        break;
-      case 'hasScheme':
-        matches = flag(row.schemeBuyQty != null && row.schemeFreeQty != null);
-        break;
-      case 'currency':
-        matches = row.currentPrice != null && values.includes(row.currentPrice.currency);
-        break;
-      default:
-        return true;
-    }
-    return matches !== negate;
-  }
-
-  // Orders comparison rows on one column; rows without a value sort last either way, and money compares within a
-  // currency before across currencies
-  private static compareComparisonRows(
-    a: ItemSupplierPriceComparisonDto,
-    b: ItemSupplierPriceComparisonDto,
-    field: string,
-    direction: 'asc' | 'desc',
-  ): number {
-    const value = (row: ItemSupplierPriceComparisonDto): string | number | null => {
-      const raw = (row as unknown as Record<string, unknown>)[field];
-      if (raw == null) return null;
-      if (typeof raw === 'object' && 'value' in (raw as object)) return Number((raw as CurrencyAmountDto).value);
-      if (typeof raw === 'boolean') return raw ? 1 : 0;
-      return raw as string | number;
-    };
-    const currencyOf = (row: ItemSupplierPriceComparisonDto) =>
-      ((row as unknown as Record<string, { currency?: string } | null>)[field]?.currency ?? '') as string;
-    const left = value(a);
-    const right = value(b);
-    if (left == null || right == null) return left == null ? (right == null ? 0 : 1) : -1;
-    const byCurrency = currencyOf(a).localeCompare(currencyOf(b));
-    if (byCurrency !== 0) return byCurrency;
-    const order =
-      typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right));
-    return direction === 'desc' ? -order : order;
   }
 
   private static dayBefore(isoDate: string): string {

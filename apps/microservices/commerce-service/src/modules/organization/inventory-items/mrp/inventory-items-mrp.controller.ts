@@ -3,6 +3,7 @@ import { AddInventoryItemMrpDto } from '@domain/inventory-item-mrps/dto/request/
 import { UpdateInventoryItemMrpDto } from '@domain/inventory-item-mrps/dto/request/update-inventory-item-mrp.dto';
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import type { TableViewState } from '@vritti/api-sdk/data-table';
 import type { SuccessResponseDto } from '@vritti/api-sdk/responses';
 import { InventoryItemsMrpService } from './services/inventory-items-mrp.service';
 
@@ -12,11 +13,14 @@ export class InventoryItemsMrpController {
 
   constructor(private readonly service: InventoryItemsMrpService) {}
 
-  // Returns the suggested MRPs (one per currency) for an inventory item
+  // Returns an inventory item's MRPs for the data table
   @MessagePattern({ cmd: 'org.inventoryItems.mrp.table' })
-  async table(@Payload() data: { inventoryItemId: string }): Promise<InventoryItemMrpDto[]> {
-    this.logger.log(`inventoryItems.mrp.table — inventoryItemId: ${data.inventoryItemId}`);
-    return this.service.findByItem(data.inventoryItemId);
+  async table(
+    @Payload() data: { inventoryItemId: string } & TableViewState,
+  ): Promise<{ result: InventoryItemMrpDto[]; count: number }> {
+    const { inventoryItemId, ...state } = data;
+    this.logger.log(`inventoryItems.mrp.table — inventoryItemId: ${inventoryItemId}`);
+    return this.service.findForTable(inventoryItemId, state);
   }
 
   // Adds a new suggested MRP for an (item, uom, currency)

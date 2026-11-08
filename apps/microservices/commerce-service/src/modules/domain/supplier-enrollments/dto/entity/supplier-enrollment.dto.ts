@@ -11,6 +11,8 @@ export class SupplierEnrollmentDto {
   partyBankAccountId: string | null;
   registrationNumber: string | null;
   registrationType: TaxRegistrationType | null;
+  registrationCountryCode: string | null;
+  registrationJurisdictionName: string | null;
   bankAccountName: string | null;
   bankName: string | null;
   orderRelationshipId: string | null;
@@ -40,6 +42,8 @@ export class SupplierEnrollmentDto {
     dto.partyBankAccountId = entity.partyBankAccountId ?? null;
     dto.registrationNumber = entity.registrationNumber ?? null;
     dto.registrationType = entity.registrationType ?? null;
+    dto.registrationCountryCode = entity.registrationCountryCode ?? null;
+    dto.registrationJurisdictionName = entity.registrationJurisdictionName ?? null;
     dto.bankAccountName = entity.bankAccountName ?? null;
     dto.bankName = entity.bankName ?? null;
     dto.orderRelationshipId = entity.orderRelationshipId ?? null;

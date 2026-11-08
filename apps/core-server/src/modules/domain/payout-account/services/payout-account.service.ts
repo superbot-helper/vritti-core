@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
+import { type FieldMap, FilterProcessor, type TablePageRequest } from '@vritti/api-sdk/data-table';
 import { and } from '@vritti/api-sdk/drizzle-orm';
 import { ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import { pluralize } from '@vritti/api-sdk/pluralize';
@@ -33,9 +33,9 @@ export class PayoutAccountDomainService {
     return rows.map((row) => PayoutAccountDto.from(row));
   }
 
-  // Returns a page of payout accounts for the data table; the caller pins it to its bank account with a filter
-  async findForTable(state: TableViewState): Promise<PayoutAccountsPageResponseDto> {
-    const { filters, search, sort, pagination } = state;
+  // Returns a page of the organization's payout accounts for the data table
+  async findForTable(page: TablePageRequest): Promise<PayoutAccountsPageResponseDto> {
+    const { filters, search, sort, pagination } = page;
     const fieldMap = PayoutAccountDomainService.FIELD_MAP;
     const { result, count } = await this.payoutAccountRepository.findForTable({
       where: and(FilterProcessor.buildWhere(filters, fieldMap), FilterProcessor.buildSearch(search, fieldMap)),

@@ -128,6 +128,16 @@ export const SupplierEnrollmentDetail: React.FC<SupplierEnrollmentDetailProps> =
               />
             ),
           },
+          ...(binding.invoices
+            ? [
+                {
+                  value: 'invoices',
+                  label: 'Invoices',
+                  permission: binding.invoices.permission,
+                  content: <binding.invoices.Tab supplierId={supplierRef.supplierId} />,
+                },
+              ]
+            : []),
         ]}
         value={activeTab}
         onValueChange={setActiveTab}

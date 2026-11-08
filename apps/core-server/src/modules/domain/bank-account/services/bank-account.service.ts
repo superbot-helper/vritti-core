@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
+import { type FieldMap, FilterProcessor, type TablePageRequest } from '@vritti/api-sdk/data-table';
 import { and, eq } from '@vritti/api-sdk/drizzle-orm';
 import { ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import { pluralize } from '@vritti/api-sdk/pluralize';
@@ -20,18 +20,22 @@ export class BankAccountDomainService {
     accountHolderName: { column: bankAccounts.accountHolderName, type: 'string' },
     bankName: { column: bankAccounts.bankName, type: 'string' },
     accountNumber: { column: bankAccounts.accountNumber, type: 'string' },
-    legalEntityId: { column: bankAccounts.legalEntityId, type: 'string' },
     ifscCode: { column: bankAccounts.ifscCode, type: 'string' },
     createdAt: { column: bankAccounts.createdAt, type: 'string' },
   };
 
   constructor(private readonly bankAccountRepository: BankAccountDomainRepository) {}
 
-  // Returns a page of the organization's bank accounts for the data table
-  async findForTable(orgId: string, state: TableViewState): Promise<BankAccountsPageResponseDto> {
-    const { filters, search, sort, pagination } = state;
+  // Returns a page of one legal entity's bank accounts for the data table
+  async findForTable(
+    orgId: string,
+    page: TablePageRequest,
+    legalEntityId: string,
+  ): Promise<BankAccountsPageResponseDto> {
+    const { filters, search, sort, pagination } = page;
     const where = and(
       eq(bankAccounts.organizationId, orgId),
+      eq(bankAccounts.legalEntityId, legalEntityId),
       FilterProcessor.buildWhere(filters, BankAccountDomainService.FIELD_MAP),
       FilterProcessor.buildSearch(search, BankAccountDomainService.FIELD_MAP),
     );

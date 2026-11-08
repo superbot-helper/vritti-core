@@ -24,6 +24,7 @@ import {
   supplierQuotations,
   suppliers,
   TaxIdIdentifierTypes,
+  taxJurisdictions,
 } from '@/db/schema';
 
 // Narrows a supplier pick list to the suppliers with a price for an inventory item at a site within a date window
@@ -45,13 +46,15 @@ const partyTaxIdField = <T>(column: AnyPgColumn) =>
     LIMIT 1
   )`;
 
+export type SupplierRegistrationRow = PartyTaxRegistration & { jurisdictionName: string | null };
+
 export type SupplierWithParty = Supplier & { partyName: string; defaultPaymentTermName: string };
 
 export type SupplierDetailRow = SupplierWithParty & {
   partyType: PartyType;
   partyTaxId: string | null;
   partyTaxIdType: PartyIdentifierType | null;
-  registrations: PartyTaxRegistration[];
+  registrations: SupplierRegistrationRow[];
   licenses: PartyLicense[];
   enrolledSiteCount: number;
   itemCount: number;
@@ -136,7 +139,7 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
     return entity;
   }
 
-  // Loads a supplier with party name, the party's registrations and licenses, and its enrollment and item counts
+  // Loads a supplier with party name, the party's registrations (with their jurisdiction) and licenses, and its enrollment and item counts
   async findDetailOrThrow(id: string): Promise<SupplierDetailRow> {
     const [row] = await this.db
       .select({
@@ -165,8 +168,9 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
     const supplier = row as Omit<SupplierDetailRow, 'registrations' | 'licenses'>;
     const [registrations, licenses] = await Promise.all([
       this.db
-        .select()
+        .select({ ...getColumns(partyTaxRegistrations), jurisdictionName: taxJurisdictions.name })
         .from(partyTaxRegistrations)
+        .leftJoin(taxJurisdictions, eq(taxJurisdictions.id, partyTaxRegistrations.jurisdictionId))
         .where(eq(partyTaxRegistrations.partyId, supplier.partyId))
         .orderBy(desc(partyTaxRegistrations.isPrimary), asc(partyTaxRegistrations.createdAt)),
       this.db
@@ -178,7 +182,7 @@ export class SuppliersDomainRepository extends PrimaryBaseRepository<typeof supp
 
     return {
       ...supplier,
-      registrations: registrations as PartyTaxRegistration[],
+      registrations,
       licenses: licenses as PartyLicense[],
     };
   }

@@ -1,21 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, desc, eq, gt, lte, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, eq, gt, lte, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
 import {
   type Cart,
   type CartItem,
   cartItems,
   carts,
-  catalogListingPrices,
-  catalogListings,
-  listingPriceSpecificity,
-  offerings,
   offeringVariants,
   ownedByWorkspaceExpression,
   parties,
-  partyChannelCatalogId,
 } from '@/db/schema';
-import type { CartItemRow, CartTableRow } from '../dto/entity/cart.dto';
+import type { CartTableRow } from '../dto/entity/cart.dto';
 
 @Injectable()
 export class CartsDomainRepository extends PrimaryBaseRepository<typeof carts> {
@@ -44,101 +39,6 @@ export class CartsDomainRepository extends PrimaryBaseRepository<typeof carts> {
     const existing = await this.findByParty(partyId);
     if (existing) return { cart: existing, opened: false };
     throw new Error(`Could not open a cart for party ${partyId}`);
-  }
-
-  // The shape of a priced cart line, ready for a `where` to narrow it
-  private lineRows(currencyCode: string, appId?: string | null) {
-    const price = this.priceLateral(currencyCode);
-
-    return this.db
-      .select({
-        id: cartItems.id,
-        cartId: carts.id,
-        siteId: carts.siteId,
-        legalEntityId: carts.legalEntityId,
-        catalogListingId: catalogListings.id,
-        offeringId: offeringVariants.offeringId,
-        offeringVariantId: offeringVariants.id,
-        quantity: cartItems.quantity,
-        amount: price.amount,
-        currencyCode: price.currencyCode,
-        code: offeringVariants.code,
-        offeringName: offerings.name,
-        dimensions: offeringVariants.dimensions,
-        attributes: offeringVariants.attributes,
-        listingActive: sql<boolean>`${catalogListings.id} is not null`,
-        variantActive: offeringVariants.isActive,
-        offeringActive: offerings.isActive,
-        createdAt: cartItems.createdAt,
-      })
-      .from(cartItems)
-      .innerJoin(carts, eq(carts.id, cartItems.cartId))
-      .innerJoin(
-        offeringVariants,
-        and(eq(offeringVariants.organizationId, cartItems.organizationId), eq(offeringVariants.code, cartItems.code)),
-      )
-      .innerJoin(offerings, eq(offerings.id, offeringVariants.offeringId))
-      .leftJoin(
-        catalogListings,
-        and(
-          eq(catalogListings.offeringVariantId, offeringVariants.id),
-          eq(catalogListings.catalogId, partyChannelCatalogId(sql`${carts.partyId}`, appId)),
-        ),
-      )
-      .leftJoinLateral(price, sql`true`);
-  }
-
-  // The price that applies to the reader: reach narrows the rows to the ones this workspace inherits, and the narrowest
-  // of those wins — the same precedence the storefront listing resolves with.
-  private priceLateral(currencyCode: string) {
-    return this.db
-      .select({ amount: catalogListingPrices.amount, currencyCode: catalogListingPrices.currencyCode })
-      .from(catalogListingPrices)
-      .where(
-        and(
-          eq(catalogListingPrices.catalogListingId, catalogListings.id),
-          eq(catalogListingPrices.currencyCode, currencyCode),
-        ),
-      )
-      .orderBy(desc(listingPriceSpecificity))
-      .limit(1)
-      .as('price');
-  }
-
-  // Every line of one cart
-  async findItems(cartId: string, currencyCode: string, appId?: string | null): Promise<CartItemRow[]> {
-    const rows = await this.lineRows(currencyCode, appId)
-      .where(eq(cartItems.cartId, cartId))
-      .orderBy(asc(cartItems.createdAt));
-    return rows as CartItemRow[];
-  }
-
-  // One cart's items for the data table — filtered, sorted and paged by the table's own state
-  async findItemsForTable(
-    cartId: string,
-    options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
-    currencyCode: string,
-    appId?: string | null,
-  ): Promise<{ result: CartItemRow[]; count: number }> {
-    const where = and(eq(cartItems.cartId, cartId), options.where);
-
-    const [rows, [total]] = await Promise.all([
-      this.lineRows(currencyCode, appId)
-        .where(where)
-        .orderBy(...(options.orderBy?.length ? options.orderBy : [asc(cartItems.createdAt)]))
-        .limit(options.limit)
-        .offset(options.offset),
-      this.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(cartItems)
-        .innerJoin(
-          offeringVariants,
-          and(eq(offeringVariants.organizationId, cartItems.organizationId), eq(offeringVariants.code, cartItems.code)),
-        )
-        .where(where),
-    ]);
-
-    return { result: rows as CartItemRow[], count: Number(total?.count ?? 0) };
   }
 
   // How many of each product a party holds in their cart here — what a product page draws its quantity stepper from
@@ -203,18 +103,6 @@ export class CartsDomainRepository extends PrimaryBaseRepository<typeof carts> {
       .update(cartItems)
       .set({ quantity: sql`${cartItems.quantity} - ${quantity}`, updatedAt: new Date() })
       .where(and(line, gt(cartItems.quantity, quantity)));
-  }
-
-  // Every line a person holds that this workspace can reach
-  async findAllForParty(
-    partyId: string,
-    currencyCode: string,
-    appId?: string | null,
-  ): Promise<(CartItemRow & { cartId: string; siteId: string | null; legalEntityId: string })[]> {
-    const rows = await this.lineRows(currencyCode, appId)
-      .where(eq(carts.partyId, partyId))
-      .orderBy(asc(cartItems.createdAt));
-    return rows as (CartItemRow & { cartId: string; siteId: string | null; legalEntityId: string })[];
   }
 
   // The carts open at this workspace, for the staff table

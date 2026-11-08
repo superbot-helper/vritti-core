@@ -5,6 +5,7 @@ import { Badge } from '@vritti/quantum-ui/Badge';
 import type { CurrencyValue } from '@vritti/quantum-ui/currency';
 import { type ColumnDef, CurrencyCell, DataTable, RowActions, useDataTable } from '@vritti/quantum-ui/DataTable';
 import { DateFilter } from '@vritti/quantum-ui/DateFilter';
+import { filter } from '@vritti/quantum-ui/filter';
 import { useFormatters, useWorkspaceTimeZone } from '@vritti/quantum-ui/hooks';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import { SelectFilter } from '@vritti/quantum-ui/Select';
@@ -12,17 +13,18 @@ import { buildSlug } from '@vritti/quantum-ui/slug';
 import { isoTodayDate } from '@vritti/quantum-ui/timezone';
 import { Eye, Scale } from 'lucide-react';
 import type React from 'react';
-import { Suspense, startTransition, useCallback, useMemo, useState } from 'react';
+import { startTransition, useCallback, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ContextFilterSkeleton } from '@/components/ContextFilterSkeleton';
-import { SiteContextFilter } from '@/components/prices/SiteContextFilter';
 import { PriceTrendChip } from '@/components/suppliers/PriceTrendChip';
 import {
   LE_INVENTORY_ITEM_PRICES_TABLE_KEY,
+  useInventoryItemPricedSiteIds,
   useInventoryItemPricesTable,
-  useInventoryItemPricesTableSites,
 } from '@/hooks/legal-entity/inventory-items';
-import type { ItemSupplierPriceComparisonRow, PricesTableContext } from '@/schemas/suppliers';
+import type { ItemSupplierPriceComparisonRow } from '@/schemas/suppliers';
+import { SiteFilter } from '@/selectors/site';
+import { contextSiteId, pickerSiteIds } from '@/utils/supplierPrice';
 import { workspaceBase } from '@/utils/workspace';
 
 interface PricesTableTabProps {
@@ -44,11 +46,11 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const fmt = useFormatters();
-  // The site and day the table is about — set in its context bar, not saved; the server picks the default site
-  const [site, setSite] = useState<string>();
-  const timeZone = useWorkspaceTimeZone(site);
+  // The day the table is about — set in its context bar and not saved, since a saved day goes stale
+  const timeZone = useWorkspaceTimeZone();
   const [asOf, setAsOf] = useState(() => isoTodayDate(timeZone));
-  const { data: response, isLoading } = useInventoryItemPricesTable(inventoryItemId, { site, asOf });
+  const { data: response, isLoading, isFetching } = useInventoryItemPricesTable(inventoryItemId, asOf);
+  const { data: siteIds, isLoading: isSitesLoading } = useInventoryItemPricedSiteIds(inventoryItemId);
   const showMrp = usePermission(LE_INVENTORY_ITEMS.mrp.view).available;
 
   // A price per the unit the supplier quotes, and below it per the item's own unit when the two differ — as on a PO line
@@ -179,7 +181,8 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
     [showMrp, fmt, priceLines, navigate, pathname, itemName],
   );
 
-  const { table } = useDataTable({
+  // The site is context saved with the table, defaulting to the first priced site in the picker's order
+  const { table, context } = useDataTable({
     columns,
     serverState: response,
     slug: `commerce-le-inventory-item-${inventoryItemId}-prices`,
@@ -188,13 +191,16 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
     enableSorting: true,
     enableMultiSort: false,
     onStatePush: () => queryClient.invalidateQueries({ queryKey: LE_INVENTORY_ITEM_PRICES_TABLE_KEY(inventoryItemId) }),
+    defaultContext: siteIds?.length ? [filter('site').equals(siteIds[0])] : [],
   });
+  const siteOptions = pickerSiteIds(siteIds ?? [], contextSiteId(context));
 
   return (
     <DataTable
       table={table}
       mode="tab"
-      isLoading={isLoading}
+      isLoading={isLoading || isSitesLoading}
+      isFetching={isFetching}
       permission={LE_INVENTORY_ITEMS.prices.view}
       searchConfig={{
         columns: [{ id: 'supplierName', label: 'Supplier name' }],
@@ -202,13 +208,11 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
       }}
       contextBar={
         <>
-          <Suspense fallback={<ContextFilterSkeleton labelWidth="w-8" valueWidth="w-24" />}>
-            <PricesTableSiteFilter
-              inventoryItemId={inventoryItemId}
-              context={{ site, asOf }}
-              onChange={(next) => startTransition(() => setSite(next))}
-            />
-          </Suspense>
+          {isSitesLoading ? (
+            <ContextFilterSkeleton labelWidth="w-8" valueWidth="w-24" />
+          ) : (
+            siteOptions.length > 0 && <SiteFilter name="site" mode="context" siteIds={siteOptions} />
+          )}
           <DateFilter
             name="asOf"
             label="As of"
@@ -231,21 +235,4 @@ export const PricesTableTab: React.FC<PricesTableTabProps> = ({ inventoryItemId,
       }}
     />
   );
-};
-
-interface PricesTableSiteFilterProps {
-  inventoryItemId: string;
-  context: PricesTableContext;
-  onChange: (siteId: string) => void;
-}
-
-// The site the table is about, offering only the sites with prices. Suspends until the table loads so it always holds
-// a site, and hides while no site has a price for the item.
-const PricesTableSiteFilter: React.FC<PricesTableSiteFilterProps> = ({ inventoryItemId, context, onChange }) => {
-  const {
-    data: { siteId, siteIds },
-  } = useInventoryItemPricesTableSites(inventoryItemId, context);
-  if (!siteId) return null;
-
-  return <SiteContextFilter value={siteId} siteIds={siteIds} onChange={onChange} />;
 };

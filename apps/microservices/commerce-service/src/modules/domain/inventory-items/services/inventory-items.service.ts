@@ -2,16 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   CursorCodec,
   type FieldMap,
-  type FilterCondition,
   FilterProcessor,
   type KeysetOrderBy,
   KeysetProcessor,
   keysetSignature,
   type SearchState,
   type SortCondition,
+  type TableFilters,
   type TableViewState,
 } from '@vritti/api-sdk/data-table';
-import { and, asc, desc, eq, isNotNull, isNull } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, Column, desc, eq, is, isNotNull, isNull } from '@vritti/api-sdk/drizzle-orm';
 import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import { pluralize } from '@vritti/api-sdk/pluralize';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
@@ -24,7 +24,7 @@ import type { UpdateInventoryItemDto } from '../dto/request/update-inventory-ite
 import { InventoryItemsDomainRepository } from '../repositories/inventory-items.repository';
 
 interface InventoryItemsFeedQuery {
-  filters?: FilterCondition[];
+  filters: TableFilters;
   search?: SearchState | null;
   sort?: SortCondition[];
   limit?: number;
@@ -121,7 +121,8 @@ export class InventoryItemsDomainService {
     };
     const sortEntries: (KeysetOrderBy & { key: string })[] = (query.sort ?? []).flatMap((s) => {
       const def = fieldMap[s.field];
-      if (!def || !('column' in def)) return [];
+      // A keyset cursor reads a real column's value, so only plain columns can be sort keys here
+      if (!def || !('column' in def) || !is(def.column, Column)) return [];
       return [{ column: def.column, direction: s.direction, key: s.field }];
     });
     const orderByEntries: (KeysetOrderBy & { key: string })[] =

@@ -17,11 +17,11 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthType, Require } from '@vritti/api-sdk/auth';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 import type { PaymentGatewayOptionDto } from '@/modules/payments-gateway/gateways/dto/response/payment-gateway-option.dto';
 import { OrgId } from '@/security/decorators';
 import {
@@ -41,7 +41,6 @@ import {
   ApiVerifyPaymentGatewayConfigInternal,
   ApiVerifyPlatformPaymentGatewayConfigInternal,
 } from './docs/payment-gateway-config-internal.docs';
-import { GetPaymentGatewayConfigsInternalDto } from './dto/request/get-payment-gateway-configs-internal.dto';
 import type {
   WebhookCheckStartedResponseDto,
   WebhookCheckStatusResponseDto,
@@ -64,15 +63,16 @@ export class PaymentGatewayConfigInternalController {
     return this.paymentGatewayConfigService.list();
   }
 
-  // Resolves one table page from the view state cloud holds and sends serialized
-  @Get('table')
+  // Resolves one table page from the page request cloud sends for the view state it holds
+  @Post('table')
+  @HttpCode(HttpStatus.OK)
   @ApiFindForTablePaymentGatewayConfigsInternal()
   findForTable(
     @OrgId() orgId: string,
-    @Query() query: GetPaymentGatewayConfigsInternalDto,
+    @Body() page: InternalTablePageDto,
   ): Promise<PaymentGatewayConfigsPageResponseDto> {
-    this.logger.log(`GET /payment-gateway-configs/internal/table — org ${orgId}`);
-    return this.paymentGatewayConfigService.findForTableWithQuery('organization', query);
+    this.logger.log(`POST /payment-gateway-configs/internal/table — org ${orgId}`);
+    return this.paymentGatewayConfigService.findForTablePage('organization', page);
   }
 
   // The gateways payments-service can charge through, for the cloud UI to intersect with the catalog
@@ -85,14 +85,13 @@ export class PaymentGatewayConfigInternalController {
 
   // ---- Platform gateways — Vritti's accounts on this deployment, managed only from cloud admin ----
 
-  // Resolves one page of the platform rows from the view state cloud holds
-  @Get('platform/table')
+  // Resolves one page of the platform rows from the page request cloud sends
+  @Post('platform/table')
+  @HttpCode(HttpStatus.OK)
   @ApiFindForTablePlatformPaymentGatewayConfigsInternal()
-  findPlatformForTable(
-    @Query() query: GetPaymentGatewayConfigsInternalDto,
-  ): Promise<PaymentGatewayConfigsPageResponseDto> {
-    this.logger.log('GET /payment-gateway-configs/internal/platform/table');
-    return this.paymentGatewayConfigService.findForTableWithQuery('platform', query);
+  findPlatformForTable(@Body() page: InternalTablePageDto): Promise<PaymentGatewayConfigsPageResponseDto> {
+    this.logger.log('POST /payment-gateway-configs/internal/platform/table');
+    return this.paymentGatewayConfigService.findForTablePage('platform', page);
   }
 
   // Lists Vritti's gateways on this deployment

@@ -4,7 +4,7 @@ import { AuthType, Require } from '@vritti/api-sdk/auth';
 import { SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
 import { SessionTypeValues } from '@/db/schema';
 import { AppDomainService } from '@/modules/domain/app/services/app.service';
-import { SiteDomainRepository } from '@/modules/domain/site/repositories/site.repository';
+import { SiteDomainService } from '@/modules/domain/site/services/site.service';
 import { LegalEntityId, OrgId } from '@/security/decorators';
 import { ApiSelectApps } from './docs/select-api.docs';
 import { SiteSelectQueryDto } from './dto/site-select-query.dto';
@@ -18,7 +18,7 @@ export class CoreSelectApiController {
 
   constructor(
     private readonly appService: AppDomainService,
-    private readonly siteRepository: SiteDomainRepository,
+    private readonly siteService: SiteDomainService,
   ) {}
 
   // Returns paginated app options for select dropdowns
@@ -37,7 +37,6 @@ export class CoreSelectApiController {
     @Query() query: SiteSelectQueryDto,
   ): Promise<SelectQueryResult> {
     this.logger.log(`GET /select-api/sites (search=${query.search ?? 'none'})`);
-    if (!legalEntityId) return Promise.resolve({ options: [], hasMore: false, totalCount: 0 });
-    return this.siteRepository.findForSelectOptions(legalEntityId, query, query.ids);
+    return this.siteService.findForLegalEntitySelect(legalEntityId, query);
   }
 }

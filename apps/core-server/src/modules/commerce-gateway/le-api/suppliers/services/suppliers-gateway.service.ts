@@ -28,7 +28,7 @@ import type { SupplierItemResponseDto } from '@commerce/suppliers/dto/response/s
 import type { SupplierItemTableResponseDto } from '@commerce/suppliers/dto/response/supplier-item-table-response.dto';
 import type { SupplierResponseDto } from '@commerce/suppliers/dto/response/supplier-response.dto';
 import type { SupplierTableResponseDto } from '@commerce/suppliers/dto/response/supplier-table-response.dto';
-import { SiteDomainRepository } from '@domain/site/repositories/site.repository';
+import { SiteDomainRepository, type SiteEnrollment } from '@domain/site/repositories/site.repository';
 import { Injectable, Logger } from '@nestjs/common';
 import { DataTableStateService, FilterOperators, type TableViewState } from '@vritti/api-sdk/data-table';
 import { BadRequestException } from '@vritti/api-sdk/exceptions';
@@ -254,6 +254,8 @@ export class SuppliersGatewayService {
         paymentTermName: enrollment?.paymentTermName ?? null,
         partyTaxRegistrationId: enrollment?.partyTaxRegistrationId ?? null,
         registrationNumber: enrollment?.registrationNumber ?? null,
+        registrationCountryCode: enrollment?.registrationCountryCode ?? null,
+        registrationJurisdictionName: enrollment?.registrationJurisdictionName ?? null,
         partyBankAccountId: enrollment?.partyBankAccountId ?? null,
         bankAccountName: enrollment?.bankAccountName ?? null,
         orderRelationshipId: enrollment?.orderRelationshipId ?? null,
@@ -284,7 +286,7 @@ export class SuppliersGatewayService {
 
   // Applies the Enrollments tab's enrollment-status filter (single or multi value, positive or negated)
   private static matchesEnrollmentFilters(row: SupplierEnrollmentRowResponseDto, state: TableViewState): boolean {
-    return state.filters.every((filter) => {
+    return state.filters.panel.every((filter) => {
       if (filter.field !== 'enrollmentStatus') return true;
       const values = Array.isArray(filter.value) ? filter.value.map(String) : [String(filter.value)];
       const hit = values.includes(row.enrollmentStatus);
@@ -323,67 +325,22 @@ export class SuppliersGatewayService {
     return enriched;
   }
 
-  // Returns the LE's sites for a supplier's enrollment picker — enrolled (default), not enrolled, or all — named by core
+  // Returns the LE's sites for a supplier's enrollment picker — enrolled (default), not enrolled, or all — each marked
+  // with the supplier's enrollment there
   async selectEnrollments(
     query: SupplierEnrollmentSitesSelectQueryDto,
-    orgId: string,
     legalEntityId: string | undefined,
   ): Promise<SelectQueryResult> {
     const { supplierId, enrollmentStatus = SupplierEnrollmentStatusValues.ENROLLED, activeOnly } = query;
-    this.logger.log(`le.suppliers.enrollments.select — supplierId: ${supplierId}, status: ${enrollmentStatus}`);
-    const enrolled = await this.nats.send<SelectQueryResult>('commerce', 'le.suppliers.enrollments.select', {
+    this.logger.log(`le.suppliers.enrollments.siteIds — supplierId: ${supplierId}, status: ${enrollmentStatus}`);
+    const leId = SuppliersGatewayService.requireLegalEntity(legalEntityId);
+    const enrolledSites = await this.nats.send<SiteEnrollment[]>('commerce', 'le.suppliers.enrollments.siteIds', {
       supplierId,
       activeOnly,
     });
-    const activeBySite = new Map(
-      enrolled.options.map((option) => [String(option.value), option.additionals?.isActive]),
-    );
-    const sites =
-      enrollmentStatus === SupplierEnrollmentStatusValues.ENROLLED
-        ? await this.ownerNames.withSiteNames(
-            orgId,
-            [...activeBySite.keys()].map((siteId) => ({ siteId })),
-          )
-        : (await this.siteRepository.siblingsOrdered(orgId, SuppliersGatewayService.requireLegalEntity(legalEntityId)))
-            .map((site) => ({ siteId: site.id, siteName: site.name, siteCode: site.code }))
-            .filter(
-              (site) =>
-                enrollmentStatus !== SupplierEnrollmentStatusValues.NOT_ENROLLED || !activeBySite.has(site.siteId),
-            );
-
-    const values = SuppliersGatewayService.splitIds(query.values);
-    const excludeIds = new Set(SuppliersGatewayService.splitIds(query.excludeIds));
-    const term = query.search?.trim().toLowerCase();
-    const matching = sites
-      .filter((site) =>
-        values.length > 0
-          ? values.includes(site.siteId)
-          : !excludeIds.has(site.siteId) &&
-            (!term || [site.siteName, site.siteCode].some((text) => text?.toLowerCase().includes(term))),
-      )
-      .sort((a, b) => (a.siteName ?? '').localeCompare(b.siteName ?? ''));
-    const limit = Number(query.limit) || 20;
-    const offset = values.length > 0 ? 0 : Number(query.offset) || 0;
-    const page = values.length > 0 ? matching : matching.slice(offset, offset + limit);
-    return {
-      options: page.map((site) => {
-        const isEnrolled = activeBySite.has(site.siteId);
-        return {
-          value: site.siteId,
-          label: site.siteName ?? site.siteId,
-          description: site.siteCode ?? undefined,
-          additionals: {
-            siteCode: site.siteCode,
-            enrollmentStatus: isEnrolled
-              ? SupplierEnrollmentStatusValues.ENROLLED
-              : SupplierEnrollmentStatusValues.NOT_ENROLLED,
-            isActive: isEnrolled ? (activeBySite.get(site.siteId) ?? null) : null,
-          },
-        };
-      }),
-      hasMore: values.length === 0 && offset + limit < matching.length,
-      totalCount: matching.length,
-    };
+    const enrolled =
+      enrollmentStatus === 'ALL' ? undefined : enrollmentStatus === SupplierEnrollmentStatusValues.ENROLLED;
+    return this.siteRepository.findForSelectOptions(leId, query, undefined, { sites: enrolledSites, enrolled });
   }
 
   // Returns a supplier's site items at one of the LE's sites
@@ -524,13 +481,5 @@ export class SuppliersGatewayService {
       label: 'Missing Legal Entity Context',
       detail: 'A legal entity workspace is required to manage supplier enrollments.',
     });
-  }
-
-  // Splits a comma-separated id list from a select query
-  private static splitIds(input?: string): string[] {
-    return (input ?? '')
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean);
   }
 }

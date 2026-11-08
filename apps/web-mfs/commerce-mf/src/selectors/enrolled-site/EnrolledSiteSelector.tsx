@@ -10,7 +10,7 @@ export type EnrolledSiteSelectorProps = Omit<SelectProps, 'optionsEndpoint'> & {
 
 // The site's code, then a marker when the supplier is not enrolled there
 function describeSite(value: string, option: SelectOption): string {
-  const notEnrolled = option.additionals?.enrollmentStatus === 'NOT_ENROLLED' ? 'Not Enrolled' : '';
+  const notEnrolled = option.additionals?.isEnrolled === false ? 'Not Enrolled' : '';
   return [value, notEnrolled].filter(Boolean).join(' · ');
 }
 
@@ -26,7 +26,7 @@ export const EnrolledSiteSelector = forwardRef<HTMLButtonElement, EnrolledSiteSe
         valueKey: 'id',
         labelKey: 'name',
         descriptionKey: 'code',
-        additionalKeys: 'siteCode,enrollmentStatus,isActive',
+        additionalKeys: 'siteCode,isEnrolled,isActive',
       }}
       transformDescription={describeSite}
       {...props}

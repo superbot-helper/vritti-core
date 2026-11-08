@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
 import { PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, desc } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, desc } from '@vritti/api-sdk/drizzle-orm';
 import { ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import type { NatsHeaders } from '@vritti/api-sdk/nats';
 import { pluralize } from '@vritti/api-sdk/pluralize';
@@ -9,6 +9,7 @@ import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/resp
 import { cartItems, carts, offerings, offeringVariants, parties } from '@/db/schema';
 import { CartDetailDto, CartDto, CartItemDto, type CartItemRow, StaffCartItemDto } from '../dto/entity/cart.dto';
 import type { CartSiteScopeDto } from '../dto/request/cart-request.dto';
+import { CartItemsDomainRepository } from '../repositories/cart-items.repository';
 import { CartsDomainRepository } from '../repositories/carts.repository';
 
 // The bound the `ck_cart_items_quantity` CHECK enforces. Kept in step with it by hand
@@ -37,6 +38,11 @@ export class CartsDomainService {
     updatedAt: { column: carts.updatedAt, type: 'string' },
   };
 
+  // Search runs ILIKE, which timestamps don't support — so it only covers the text columns
+  private static readonly SEARCH_FIELD_MAP: FieldMap = {
+    partyName: CartsDomainService.FIELD_MAP.partyName,
+  };
+
   // What the items table may filter, search and sort on
   private static readonly ITEM_FIELD_MAP: FieldMap = {
     name: { column: offerings.name, type: 'string' },
@@ -45,8 +51,15 @@ export class CartsDomainService {
     createdAt: { column: cartItems.createdAt, type: 'string' },
   };
 
+  // Search runs ILIKE, which timestamps and numbers don't support — so it only covers the text columns
+  private static readonly ITEM_SEARCH_FIELD_MAP: FieldMap = {
+    name: CartsDomainService.ITEM_FIELD_MAP.name,
+    code: CartsDomainService.ITEM_FIELD_MAP.code,
+  };
+
   constructor(
     private readonly repository: CartsDomainRepository,
+    private readonly itemsRepository: CartItemsDomainRepository,
     private readonly db: PrimaryDatabaseService,
   ) {}
 
@@ -55,7 +68,7 @@ export class CartsDomainService {
     const where =
       and(
         FilterProcessor.buildWhere(state.filters, CartsDomainService.FIELD_MAP),
-        FilterProcessor.buildSearch(state.search, CartsDomainService.FIELD_MAP),
+        FilterProcessor.buildSearch(state.search, CartsDomainService.SEARCH_FIELD_MAP),
       ) || undefined;
     const orderBy = FilterProcessor.buildOrderBy(state.sort, CartsDomainService.FIELD_MAP);
     const { limit = 20, offset = 0 } = state.pagination;
@@ -84,7 +97,7 @@ export class CartsDomainService {
 
   // Its lines, priced by the catalogue the caller reads from
   async findItemsById(id: string, currencyCode: string, appId?: string | null): Promise<CartDto> {
-    const items = await this.repository.findItems(id, currencyCode, appId);
+    const items = await this.itemsRepository.findByCart(id, currencyCode, appId);
     return CartDto.from(currencyCode, items);
   }
 
@@ -95,17 +108,16 @@ export class CartsDomainService {
     currencyCode: string,
     appId?: string | null,
   ): Promise<{ result: CartItemDto[]; count: number }> {
-    const where =
-      and(
-        FilterProcessor.buildWhere(state.filters, CartsDomainService.ITEM_FIELD_MAP),
-        FilterProcessor.buildSearch(state.search, CartsDomainService.ITEM_FIELD_MAP),
-      ) || undefined;
+    const where = and(
+      FilterProcessor.buildWhere(state.filters, CartsDomainService.ITEM_FIELD_MAP),
+      FilterProcessor.buildSearch(state.search, CartsDomainService.ITEM_SEARCH_FIELD_MAP),
+    );
     const orderBy = FilterProcessor.buildOrderBy(state.sort, CartsDomainService.ITEM_FIELD_MAP);
     const { limit = 20, offset = 0 } = state.pagination;
 
-    const { result, count } = await this.repository.findItemsForTable(
+    const { result, count } = await this.itemsRepository.findForTable(
       cartId,
-      { where, orderBy, limit, offset },
+      { where, orderBy: orderBy.length > 0 ? orderBy : [asc(cartItems.createdAt)], limit, offset },
       currencyCode,
       appId,
     );
@@ -138,7 +150,7 @@ export class CartsDomainService {
     const cart = await this.repository.findByParty(partyId);
     if (!cart) return CartDto.from(currencyCode, []);
 
-    const items = await this.repository.findItems(cart.id, currencyCode, appId);
+    const items = await this.itemsRepository.findByCart(cart.id, currencyCode, appId);
     return CartDto.from(currencyCode, items);
   }
 
@@ -190,7 +202,7 @@ export class CartsDomainService {
   ): Promise<{ cartId: string; lines: CartItemRow[] } | null> {
     const cart = await this.repository.findByParty(partyId);
     if (!cart) return null;
-    return { cartId: cart.id, lines: await this.repository.findItems(cart.id, currencyCode, appId) };
+    return { cartId: cart.id, lines: await this.itemsRepository.findByCart(cart.id, currencyCode, appId) };
   }
 
   // Takes paid-for quantities out of the shopper's cart, leaving anything added since checkout
@@ -255,7 +267,7 @@ export class CartsDomainService {
 
   // Every cart line a person holds, across every outlet
   async findAllForParty(partyId: string, currencyCode: string, appId?: string | null): Promise<StaffCartItemDto[]> {
-    const rows = await this.repository.findAllForParty(partyId, currencyCode, appId);
+    const rows = await this.itemsRepository.findAllForParty(partyId, currencyCode, appId);
     return rows.map((row) => StaffCartItemDto.fromStaffRow(row));
   }
 

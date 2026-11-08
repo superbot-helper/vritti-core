@@ -14,11 +14,6 @@ export class LegalEntityDomainRepository extends PrimaryBaseRepository<typeof le
   async findForSelectOptions(query: SelectOptionsQueryDto, excludeId?: string): Promise<SelectQueryResult> {
     const conditions: SQL[] = [];
 
-    if (query.search) {
-      const term = `%${query.search}%`;
-      conditions.push(sql`(${legalEntities.name} ilike ${term} or ${legalEntities.code} ilike ${term})`);
-    }
-
     if (excludeId) {
       conditions.push(sql`${legalEntities.id} not in (
         with recursive subtree as (
@@ -36,9 +31,12 @@ export class LegalEntityDomainRepository extends PrimaryBaseRepository<typeof le
       value: 'id',
       label: 'name',
       description: 'code',
+      search: query.search,
+      searchKeys: ['name', 'code'],
       limit: query.limit,
       offset: query.offset,
       values: query.values,
+      excludeIds: query.excludeIds,
       orderBy: { name: 'asc' },
       conditions,
     });

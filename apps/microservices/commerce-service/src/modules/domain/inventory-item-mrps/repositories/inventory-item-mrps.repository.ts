@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, eq, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, eq, getColumns, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
 import { ConflictException } from '@vritti/api-sdk/exceptions';
 import type { FindForSelectConfig } from '@vritti/api-sdk/select';
 import {
@@ -249,27 +249,19 @@ export class InventoryItemMrpsDomainRepository extends PrimaryBaseRepository<typ
     return row;
   }
 
-  // Returns all suggested MRPs for an inventory item (one row per uom×currency) with the uom symbol
-  async findByItem(inventoryItemId: string): Promise<InventoryItemMrpWithUom[]> {
-    return this.db
-      .select({
-        id: inventoryItemMrps.id,
-        organizationId: inventoryItemMrps.organizationId,
-        inventoryItemId: inventoryItemMrps.inventoryItemId,
-        uomId: inventoryItemMrps.uomId,
-        currencyCode: inventoryItemMrps.currencyCode,
-        amount: inventoryItemMrps.amount,
-        sourceLotId: inventoryItemMrps.sourceLotId,
-        sourcedAt: inventoryItemMrps.sourcedAt,
-        isCurrent: inventoryItemMrps.isCurrent,
-        createdAt: inventoryItemMrps.createdAt,
-        updatedAt: inventoryItemMrps.updatedAt,
-        uomSymbol: uom.symbol,
-      })
-      .from(inventoryItemMrps)
-      .leftJoin(uom, eq(inventoryItemMrps.uomId, uom.id))
-      .where(eq(inventoryItemMrps.inventoryItemId, inventoryItemId))
-      .orderBy(asc(uom.symbol), asc(inventoryItemMrps.currencyCode));
+  // One item's MRPs with their unit's symbol for the data table — filtered, sorted and paged by the table's own state
+  findForTable(
+    inventoryItemId: string,
+    options: { where?: SQL; orderBy: SQL[]; limit: number; offset: number },
+  ): Promise<{ result: InventoryItemMrpWithUom[]; count: number }> {
+    return this.findAllAndCount<InventoryItemMrpWithUom>({
+      select: { ...getColumns(inventoryItemMrps), uomSymbol: uom.symbol },
+      leftJoin: { table: uom, on: eq(uom.id, inventoryItemMrps.uomId) },
+      where: and(eq(inventoryItemMrps.inventoryItemId, inventoryItemId), options.where),
+      orderBy: options.orderBy,
+      limit: options.limit,
+      offset: options.offset,
+    });
   }
 
   // Returns true when the uom shares the item's primary-uom family (same COALESCE(base_unit_id, id))

@@ -20,7 +20,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { AuthType, Require } from '@vritti/api-sdk/auth';
 import { pluralize } from '@vritti/api-sdk/pluralize';
 import { SuccessResponseDto } from '@vritti/api-sdk/responses';
-import type { SelectQueryResult } from '@vritti/api-sdk/select';
+import { SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
 import { OrgId } from '@/security/decorators/org-id.decorator';
 import { SetFeatureLocksInternalDto } from '../dto/request/set-feature-locks-internal.dto';
 import {
@@ -73,9 +73,9 @@ export class SiteController {
   // Returns the site types this organization actually has, as select options
   @Get('types')
   @ApiSelectSiteTypes()
-  async findTypesForSelect(@OrgId() orgId: string): Promise<SelectQueryResult> {
+  async findTypesForSelect(@OrgId() orgId: string, @Query() query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
     this.logger.log(`GET /sites/internal/types — org ${orgId}`);
-    return this.siteApiService.findTypesForSelect(orgId);
+    return this.siteApiService.findTypesForSelect(orgId, query);
   }
 
   // Returns a single site

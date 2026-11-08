@@ -21,7 +21,7 @@ import type {
 } from '@/schemas/party-identifiers';
 import type { PartyLicensePayload, PartyLicenseRow, PartyLicensesTableResponse } from '@/schemas/party-licenses';
 import type {
-  PartyRegistrationFormData,
+  PartyRegistrationPayload,
   PartyRegistrationsTableResponse,
   PartyTaxRegistrationRow,
 } from '@/schemas/party-registrations';
@@ -65,8 +65,8 @@ export interface AddressesBinding extends BaseBinding {
 
 export interface RegistrationsBinding extends BaseBinding {
   useList: QueryHook<PartyRegistrationsTableResponse>;
-  useCreate: MutationHook<PartyTaxRegistrationRow, PartyRegistrationFormData>;
-  useUpdate: MutationHook<SuccessResponse, { registrationId: string; data: PartyRegistrationFormData }>;
+  useCreate: MutationHook<PartyTaxRegistrationRow, PartyRegistrationPayload>;
+  useUpdate: MutationHook<SuccessResponse, { registrationId: string; data: PartyRegistrationPayload }>;
   useSetActive: MutationHook<SuccessResponse, { registrationId: string; isActive: boolean }>;
   useRemove: MutationHook<SuccessResponse, string>;
 }

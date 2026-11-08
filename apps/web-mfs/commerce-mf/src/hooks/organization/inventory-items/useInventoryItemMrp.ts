@@ -6,22 +6,28 @@ import type { AxiosError } from 'axios';
 import type {
   AddInventoryItemMrpFormData,
   InventoryItemMrpData,
+  InventoryItemMrpTableResponse,
   UpdateInventoryItemMrpFormData,
 } from '@/schemas/inventory-item-mrp';
 import {
   addOrgInventoryItemMrp,
   deleteOrgInventoryItemMrp,
-  getOrgInventoryItemMrp,
+  getOrgInventoryItemMrpTable,
   updateOrgInventoryItemMrp,
 } from '@/services/organization/inventory-items.service';
-import { ORG_INVENTORY_ITEM_MRP_KEY } from './keys';
+import { ORG_INVENTORY_ITEM_KEY, ORG_INVENTORY_ITEM_MRP_KEY } from './keys';
 
-// Fetches the ORG inventory item MRP list (one row per unit + currency)
-export function useInventoryItemMrp(inventoryItemId: string | null) {
+const ITEM_ID_INDEX = ORG_INVENTORY_ITEM_KEY('').length - 1;
+
+// The item's MRPs for its data table; keeps the rows on screen while the table state changes, never another item's,
+// and self-gates on the MRP view permission
+export function useInventoryItemMrpTable(inventoryItemId: string) {
   const { available } = usePermission(ORG_INVENTORY_ITEMS.mrp.view);
-  return useQuery<InventoryItemMrpData[], AxiosError>({
-    queryKey: [...ORG_INVENTORY_ITEM_MRP_KEY(inventoryItemId ?? '')],
-    queryFn: () => getOrgInventoryItemMrp(inventoryItemId as string),
+  return useQuery<InventoryItemMrpTableResponse, AxiosError>({
+    queryKey: ORG_INVENTORY_ITEM_MRP_KEY(inventoryItemId),
+    queryFn: () => getOrgInventoryItemMrpTable(inventoryItemId),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[ITEM_ID_INDEX] === inventoryItemId ? previous : undefined,
     enabled: available && !!inventoryItemId,
   });
 }

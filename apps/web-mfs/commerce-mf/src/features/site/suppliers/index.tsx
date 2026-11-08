@@ -1,8 +1,10 @@
 import { Suspense } from 'react';
 import type { RouteObject } from 'react-router-dom';
+import { SupplierInvoiceDetailSkeleton } from '@/components/supplier-invoices/SupplierInvoiceDetailSkeleton';
 import { SupplierQuotationPageSkeleton } from '@/components/suppliers/quotations/SupplierQuotationPageSkeleton';
 import { SupplierEnrollmentDetailSkeleton } from '@/components/suppliers/SupplierEnrollmentDetailSkeleton';
 import { SupplierSiteItemDetailSkeleton } from '@/components/suppliers/SupplierSiteItemDetailSkeleton';
+import { SupplierInvoicePage } from './invoices/SupplierInvoicePage';
 import { SupplierQuotationPage } from './quotations/SupplierQuotationPage';
 import { SupplierDetailPage } from './SupplierDetailPage';
 import { SupplierSiteItemDetailPage } from './SupplierSiteItemDetailPage';
@@ -23,6 +25,14 @@ const routes: RouteObject[] = [
     element: (
       <Suspense fallback={<SupplierQuotationPageSkeleton />}>
         <SupplierQuotationPage />
+      </Suspense>
+    ),
+  },
+  {
+    path: ':supplierSlug/invoices/:invoiceSlug',
+    element: (
+      <Suspense fallback={<SupplierInvoiceDetailSkeleton />}>
+        <SupplierInvoicePage />
       </Suspense>
     ),
   },

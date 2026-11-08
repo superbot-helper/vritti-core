@@ -1,27 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, desc, eq, ilike, inArray, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, desc, eq, getColumns, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
 import { alias } from '@vritti/api-sdk/drizzle-pg-core';
-import { type FindForSelectConfig, type SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
+import { BadRequestException } from '@vritti/api-sdk/exceptions';
+import { type FindForSelectConfig, type SelectQueryResult } from '@vritti/api-sdk/select';
 import {
-  type NewPartyTaxRegistration,
   type Party,
   type PartyAddress,
   PartyCommunicationChannelValues,
   PartyFunctionTypeValues,
-  type PartyTaxRegistration,
   parties,
   partyAddresses,
   partyCommunications,
   partyFunctions,
   partyRelationships,
   partySocialProfiles,
-  partyTaxRegistrations,
   SocialPlatformValues,
   suppliers,
+  type TaxJurisdiction,
+  TaxJurisdictionLevelValues,
   TaxRegistrationTypeValues,
   taxJurisdictions,
 } from '@/db/schema';
+import type { PartyRegistrationPlacement } from './party-tax-registrations.repository';
 
 // Aliased primary-communication joins so a party's EMAIL and PHONE main lines can be projected side by side
 export const emailComm = alias(partyCommunications, 'email_comm');
@@ -167,138 +168,75 @@ export class PartiesDomainRepository extends PrimaryBaseRepository<typeof partie
     };
   }
 
-  // Returns paginated parties (with EMAIL/PHONE main lines) filtered by an already-built where clause
-  async findForTable(options: { where?: SQL; orderBy?: SQL[]; limit?: number; offset?: number }): Promise<{
-    result: PartyTableRow[];
-    count: number;
-  }> {
-    const rowsPromise = this.db
-      .select({ party: parties, email: emailComm.value, phone: phoneComm.value })
-      .from(parties)
-      .leftJoin(emailComm, emailPrimaryJoin)
-      .leftJoin(phoneComm, phonePrimaryJoin)
-      .where(options.where)
-      .orderBy(...(options.orderBy ?? []))
-      .limit(options.limit ?? 20)
-      .offset(options.offset ?? 0);
-
-    const countPromise = this.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(parties)
-      .leftJoin(emailComm, emailPrimaryJoin)
-      .leftJoin(phoneComm, phonePrimaryJoin)
-      .where(options.where);
-
-    const [rows, countResult] = await Promise.all([rowsPromise, countPromise]);
-    return {
-      result: rows.map((row) => ({ ...row.party, email: row.email ?? null, phone: row.phone ?? null })),
-      count: countResult[0]?.count ?? 0,
-    };
-  }
-
-  // Returns paginated tax registrations joined with the jurisdiction name
-  async findRegistrationsForTable(options: {
+  // Returns paginated parties with their EMAIL/PHONE main lines, filtered by an already-built where clause
+  findForTable(options: {
     where?: SQL;
-    orderBy?: SQL[];
+    orderBy: SQL[];
     limit: number;
     offset: number;
-  }): Promise<{ result: (PartyTaxRegistration & { jurisdictionName: string | null })[]; count: number }> {
-    const rowsPromise = this.db
-      .select({ registration: partyTaxRegistrations, jurisdictionName: taxJurisdictions.name })
-      .from(partyTaxRegistrations)
-      .leftJoin(taxJurisdictions, eq(taxJurisdictions.id, partyTaxRegistrations.jurisdictionId))
-      .where(options.where)
-      .orderBy(...(options.orderBy ?? []))
-      .limit(options.limit)
-      .offset(options.offset);
-
-    const countPromise = this.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(partyTaxRegistrations)
-      .leftJoin(taxJurisdictions, eq(taxJurisdictions.id, partyTaxRegistrations.jurisdictionId))
-      .where(options.where);
-
-    const [rows, countResult] = await Promise.all([rowsPromise, countPromise]);
-    return {
-      result: rows.map((row) => ({ ...row.registration, jurisdictionName: row.jurisdictionName ?? null })),
-      count: countResult[0]?.count ?? 0,
-    };
+  }): Promise<{ result: PartyTableRow[]; count: number }> {
+    return this.findAllAndCount<PartyTableRow>({
+      select: { ...getColumns(parties), email: emailComm.value, phone: phoneComm.value },
+      leftJoins: [
+        { table: emailComm, on: emailPrimaryJoin },
+        { table: phoneComm, on: phonePrimaryJoin },
+      ],
+      ...options,
+    });
   }
 
-  // Creates a party tax registration row
-  async createRegistration(data: NewPartyTaxRegistration): Promise<PartyTaxRegistration> {
-    const [row] = await this.db.insert(partyTaxRegistrations).values(data).returning();
-    return row as PartyTaxRegistration;
-  }
-
-  // Loads a single party tax registration by id
-  async findRegistrationById(id: string): Promise<PartyTaxRegistration | undefined> {
-    const [row] = await this.db.select().from(partyTaxRegistrations).where(eq(partyTaxRegistrations.id, id)).limit(1);
-    return row as PartyTaxRegistration | undefined;
-  }
-
-  // Updates a party tax registration row
-  async updateRegistration(id: string, data: Partial<PartyTaxRegistration>): Promise<PartyTaxRegistration> {
-    const [row] = await this.db
-      .update(partyTaxRegistrations)
-      .set(data)
-      .where(eq(partyTaxRegistrations.id, id))
-      .returning();
-    return row as PartyTaxRegistration;
-  }
-
-  // Deletes a party tax registration row
-  async deleteRegistration(id: string): Promise<void> {
-    await this.db.delete(partyTaxRegistrations).where(eq(partyTaxRegistrations.id, id));
-  }
-
-  // Returns paginated active tax registration options of a party for the select component
-  async findRegistrationOptionsForSelect(
-    partyId: string,
-    query: SelectOptionsQueryDto,
-    options?: { salesTaxOnly?: boolean },
-  ): Promise<SelectQueryResult> {
-    const limit = Number(query.limit) || 20;
-    const offset = Number(query.offset) || 0;
-
-    const conditions: SQL[] = [eq(partyTaxRegistrations.partyId, partyId), eq(partyTaxRegistrations.isActive, true)];
-    if (options?.salesTaxOnly) {
-      conditions.push(
-        inArray(partyTaxRegistrations.registrationType, [
-          TaxRegistrationTypeValues.GSTIN,
-          TaxRegistrationTypeValues.VAT,
-        ]),
-      );
+  // A party or registration that names a jurisdiction must lie in that jurisdiction's country. Returns the jurisdiction
+  // so callers can name it
+  async findJurisdictionInCountryOrThrow(
+    jurisdictionId: string | null | undefined,
+    countryCode: string | null,
+  ): Promise<TaxJurisdiction | null> {
+    if (!jurisdictionId) return null;
+    const [jurisdiction] = await this.db
+      .select()
+      .from(taxJurisdictions)
+      .where(eq(taxJurisdictions.id, jurisdictionId))
+      .limit(1);
+    if (!jurisdiction) {
+      throw new BadRequestException({
+        label: 'Jurisdiction Not Found',
+        detail: 'The selected jurisdiction no longer exists. Pick another one.',
+        errors: [{ field: 'jurisdictionId', message: 'Jurisdiction not found' }],
+      });
     }
-    if (query.search) {
-      conditions.push(ilike(partyTaxRegistrations.registrationNumber, `%${query.search}%`));
+    if (jurisdiction.countryCode !== countryCode) {
+      throw new BadRequestException({
+        label: 'Jurisdiction In Another Country',
+        detail: countryCode
+          ? `${jurisdiction.name} is in ${jurisdiction.countryCode}, not ${countryCode}. Pick a jurisdiction in ${countryCode}.`
+          : `${jurisdiction.name} is in ${jurisdiction.countryCode}. Set the country to ${jurisdiction.countryCode}, or clear the jurisdiction.`,
+        errors: [{ field: 'jurisdictionId', message: countryCode ? `Not in ${countryCode}` : 'Country not set' }],
+      });
     }
+    return jurisdiction;
+  }
 
-    const rows = await this.db
-      .select({
-        value: partyTaxRegistrations.id,
-        label: partyTaxRegistrations.registrationNumber,
-        description: partyTaxRegistrations.registrationType,
-        isPrimary: partyTaxRegistrations.isPrimary,
-        registrationType: partyTaxRegistrations.registrationType,
-        totalCount: sql<number>`count(*) over()`.mapWith(Number),
-      })
-      .from(partyTaxRegistrations)
-      .where(and(...conditions))
-      .orderBy(desc(partyTaxRegistrations.isPrimary), asc(partyTaxRegistrations.registrationNumber))
-      .limit(limit)
-      .offset(offset);
-
-    const totalCount = rows.length > 0 ? rows[0].totalCount : 0;
-    return {
-      options: rows.map((row) => ({
-        value: row.value,
-        label: row.label,
-        description: row.description,
-        additionals: { isPrimary: row.isPrimary, registrationType: row.registrationType },
-      })),
-      hasMore: offset + limit < totalCount,
-      totalCount,
-    };
+  // A GSTIN is issued per state, so it must name a state of its country; VAT, TIN and other numbers may be national
+  async findRegistrationJurisdictionOrThrow(registration: PartyRegistrationPlacement): Promise<TaxJurisdiction | null> {
+    const isGstin = registration.registrationType === TaxRegistrationTypeValues.GSTIN;
+    if (isGstin && !registration.jurisdictionId) {
+      throw new BadRequestException({
+        label: 'State Required',
+        detail: 'A GSTIN is issued per state. Choose the state this GSTIN is registered in.',
+        errors: [{ field: 'jurisdictionId', message: 'Choose a state' }],
+      });
+    }
+    const jurisdiction = await this.findJurisdictionInCountryOrThrow(
+      registration.jurisdictionId,
+      registration.countryCode,
+    );
+    if (isGstin && jurisdiction && jurisdiction.level !== TaxJurisdictionLevelValues.STATE) {
+      throw new BadRequestException({
+        label: 'State Required',
+        detail: `A GSTIN is issued per state, and ${jurisdiction.name} is a ${jurisdiction.level.toLowerCase()}. Choose its state.`,
+        errors: [{ field: 'jurisdictionId', message: 'Choose a state' }],
+      });
+    }
+    return jurisdiction;
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
+import { type FieldMap, FilterProcessor, type TablePageRequest } from '@vritti/api-sdk/data-table';
 import { and } from '@vritti/api-sdk/drizzle-orm';
 import {
   BadRequestException,
@@ -81,9 +81,9 @@ export class PaymentGatewayConfigDomainService {
   // Returns a page of the configs the caller may see for the data table
   async findForTable(
     viewer: PaymentGatewayConfigViewer,
-    state: TableViewState,
+    page: TablePageRequest,
   ): Promise<PaymentGatewayConfigsPageResponseDto> {
-    const { filters, search, sort, pagination } = state;
+    const { filters, search, sort, pagination } = page;
     const fieldMap = PaymentGatewayConfigDomainService.FIELD_MAP;
     const { result, count } = await this.configRepository.findForTable({
       where: and(FilterProcessor.buildWhere(filters, fieldMap), FilterProcessor.buildSearch(search, fieldMap)),

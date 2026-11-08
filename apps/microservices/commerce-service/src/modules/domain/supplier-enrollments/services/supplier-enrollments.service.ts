@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { type FieldMap, FilterOperators, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
-import { and, eq, isNotNull, isNull, or } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, eq, isNotNull, isNull, or } from '@vritti/api-sdk/drizzle-orm';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import type { SelectQueryResult } from '@vritti/api-sdk/select';
 import { parties, paymentTerms, supplierEnrollments, suppliers } from '@/db/schema';
@@ -9,10 +9,14 @@ import { SupplierEnrollmentDetailDto } from '../dto/entity/supplier-enrollment-d
 import { SupplierEnrollmentRowDto, SupplierEnrollmentStatusValues } from '../dto/entity/supplier-enrollment-row.dto';
 import type { CreateSupplierEnrollmentDto } from '../dto/request/create-supplier-enrollment.dto';
 import type { SetSupplierEnrollmentActiveDto } from '../dto/request/set-supplier-enrollment-active.dto';
+import type { SupplierEnrolledSitesQueryDto } from '../dto/request/supplier-enrolled-sites-query.dto';
 import type { SupplierEnrollmentSelectQueryDto } from '../dto/request/supplier-enrollment-select-query.dto';
-import type { SupplierEnrollmentSitesSelectQueryDto } from '../dto/request/supplier-enrollment-sites-select-query.dto';
 import type { UpdateSupplierEnrollmentDto } from '../dto/request/update-supplier-enrollment.dto';
-import { SupplierEnrollmentsDomainRepository } from '../repositories/supplier-enrollments.repository';
+import { SiteSuppliersDomainRepository } from '../repositories/site-suppliers.repository';
+import {
+  type EnrolledSite,
+  SupplierEnrollmentsDomainRepository,
+} from '../repositories/supplier-enrollments.repository';
 
 @Injectable()
 export class SupplierEnrollmentsDomainService {
@@ -39,7 +43,10 @@ export class SupplierEnrollmentsDomainService {
     },
   };
 
-  constructor(private readonly repository: SupplierEnrollmentsDomainRepository) {}
+  constructor(
+    private readonly repository: SupplierEnrollmentsDomainRepository,
+    private readonly siteSuppliersRepository: SiteSuppliersDomainRepository,
+  ) {}
 
   // Returns the legal entity's suppliers with their enrollment at the site: every active one, plus inactive ones already
   // enrolled here so their enrollment stays visible
@@ -49,16 +56,17 @@ export class SupplierEnrollmentsDomainService {
     state: TableViewState,
   ): Promise<{ result: SupplierEnrollmentRowDto[]; count: number }> {
     const { limit = 20, offset = 0 } = state.pagination;
-    const { result, count } = await this.repository.findForSiteList(legalEntityId, siteId, {
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, {
+      ...SupplierEnrollmentsDomainService.SEARCH_FIELD_MAP,
+      ...SupplierEnrollmentsDomainService.FILTER_FIELD_MAP,
+    });
+    const { result, count } = await this.siteSuppliersRepository.findForSiteTable(legalEntityId, siteId, {
       where: and(
         or(eq(suppliers.isActive, true), isNotNull(supplierEnrollments.id)),
         FilterProcessor.buildWhere(state.filters, SupplierEnrollmentsDomainService.FILTER_FIELD_MAP),
         FilterProcessor.buildSearch(state.search, SupplierEnrollmentsDomainService.SEARCH_FIELD_MAP),
       ),
-      orderBy: FilterProcessor.buildOrderBy(state.sort, {
-        ...SupplierEnrollmentsDomainService.SEARCH_FIELD_MAP,
-        ...SupplierEnrollmentsDomainService.FILTER_FIELD_MAP,
-      }),
+      orderBy: orderBy.length > 0 ? orderBy : [isNull(supplierEnrollments.id), asc(parties.displayName)],
       limit,
       offset,
     });
@@ -67,7 +75,7 @@ export class SupplierEnrollmentsDomainService {
 
   // Returns a supplier's enrollment at a site with its commercial identity, enrolled or not
   async findDetail(legalEntityId: string, siteId: string, supplierId: string): Promise<SupplierEnrollmentDetailDto> {
-    const row = await this.repository.findDetailOrThrow(legalEntityId, siteId, supplierId);
+    const row = await this.siteSuppliersRepository.findDetailOrThrow(legalEntityId, siteId, supplierId);
     return SupplierEnrollmentDetailDto.fromDetail(row, siteId);
   }
 
@@ -144,20 +152,12 @@ export class SupplierEnrollmentsDomainService {
     siteId: string,
     query: SupplierEnrollmentSelectQueryDto,
   ): Promise<SelectQueryResult> {
-    return this.repository.findSuppliersForSiteSelect(legalEntityId, siteId, query);
+    return this.siteSuppliersRepository.findForSiteSelect(legalEntityId, siteId, query);
   }
 
-  // Returns the sites a supplier is enrolled at as options keyed by site id; the gateway fills in site names
-  async findSitesForSelect(query: SupplierEnrollmentSitesSelectQueryDto): Promise<SelectQueryResult> {
-    const sites = await this.repository.findEnrolledSites(query.supplierId, query.activeOnly);
-    return {
-      options: sites.map((site) => ({
-        value: site.siteId,
-        label: site.siteId,
-        additionals: { isActive: site.isActive },
-      })),
-      hasMore: false,
-      totalCount: sites.length,
-    };
+  // Returns the sites a supplier is enrolled at, each with whether the enrollment is effectively active; the gateway
+  // builds the site options
+  findEnrolledSites(query: SupplierEnrolledSitesQueryDto): Promise<EnrolledSite[]> {
+    return this.repository.findEnrolledSites(query.supplierId, query.activeOnly);
   }
 }

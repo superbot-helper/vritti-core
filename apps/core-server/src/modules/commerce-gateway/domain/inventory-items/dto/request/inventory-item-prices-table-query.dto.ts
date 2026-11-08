@@ -1,12 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsUUID, Matches } from 'class-validator';
+import { IsDateString, IsOptional, Matches } from 'class-validator';
 
 export class InventoryItemPricesTableQueryDto {
-  @ApiPropertyOptional({ description: "Site to read the prices at; the item's default priced site when omitted" })
-  @IsOptional()
-  @IsUUID('7')
-  site?: string;
-
   @ApiPropertyOptional({
     description: 'Day the prices in force are read on (YYYY-MM-DD); today when omitted',
     example: '2026-11-14',

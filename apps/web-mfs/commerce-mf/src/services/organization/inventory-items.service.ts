@@ -3,6 +3,7 @@ import type { CreateResponse, SuccessResponse } from '@vritti/quantum-ui/types/a
 import type {
   AddInventoryItemMrpFormData,
   InventoryItemMrpData,
+  InventoryItemMrpTableResponse,
   UpdateInventoryItemMrpFormData,
 } from '@/schemas/inventory-item-mrp';
 import type {
@@ -43,8 +44,8 @@ export function deleteOrgInventoryItem(id: string): Promise<SuccessResponse> {
   return axios.delete<SuccessResponse>(`${BASE}/${id}`).then((r) => r.data);
 }
 
-export function getOrgInventoryItemMrp(id: string): Promise<InventoryItemMrpData[]> {
-  return axios.get<InventoryItemMrpData[]>(`${BASE}/${id}/mrp`, { showSuccessToast: false }).then((r) => r.data);
+export function getOrgInventoryItemMrpTable(id: string): Promise<InventoryItemMrpTableResponse> {
+  return axios.get<InventoryItemMrpTableResponse>(`${BASE}/${id}/mrp/table`).then((r) => r.data);
 }
 
 export function addOrgInventoryItemMrp({

@@ -4,6 +4,14 @@ import { UpdateSupplierEnrollmentDto } from '@commerce/supplier-enrollments/dto/
 import type { SupplierEnrollmentDetailResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-detail-response.dto';
 import type { SupplierEnrollmentResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-response.dto';
 import type { SupplierEnrollmentTableResponseDto } from '@commerce/supplier-enrollments/dto/response/supplier-enrollment-table-response.dto';
+import { CreateSupplierInvoiceDto } from '@commerce/supplier-invoices/dto/request/create-supplier-invoice.dto';
+import { SupplierInvoiceLineDto } from '@commerce/supplier-invoices/dto/request/supplier-invoice-line.dto';
+import { UpdateSupplierInvoiceDto } from '@commerce/supplier-invoices/dto/request/update-supplier-invoice.dto';
+import type {
+  SupplierInvoiceDetailResponseDto,
+  SupplierInvoiceResponseDto,
+} from '@commerce/supplier-invoices/dto/response/supplier-invoice-response.dto';
+import type { SupplierInvoiceTableResponseDto } from '@commerce/supplier-invoices/dto/response/supplier-invoice-table-response.dto';
 import { UpdateSupplierSiteItemDto } from '@commerce/supplier-items/dto/request/update-supplier-site-item.dto';
 import type { SupplierSiteItemRowResponseDto } from '@commerce/supplier-items/dto/response/supplier-site-item-row-response.dto';
 import type { SupplierSiteItemRowTableResponseDto } from '@commerce/supplier-items/dto/response/supplier-site-item-row-table-response.dto';
@@ -27,6 +35,16 @@ import { SITE_SUPPLIERS } from '@vritti/commerce-permissions/suppliers';
 import { SessionTypeValues } from '@/db/schema';
 import { RequireFeature, RequirePermission } from '@/rbac/decorators';
 import { OrgId, SiteId } from '@/security/decorators';
+import {
+  ApiCreateSiteSupplierInvoice,
+  ApiCreateSiteSupplierInvoiceLine,
+  ApiDeleteSiteSupplierInvoiceLine,
+  ApiFindForTableSiteSupplierInvoices,
+  ApiFindSiteSupplierInvoiceById,
+  ApiPostSiteSupplierInvoice,
+  ApiUpdateSiteSupplierInvoice,
+  ApiUpdateSiteSupplierInvoiceLine,
+} from './docs/site-suppliers-gateway.docs';
 import { SiteSuppliersGatewayService } from './services/site-suppliers-gateway.service';
 
 @ApiTags('Commerce - Site Suppliers')
@@ -134,5 +152,111 @@ export class SiteSuppliersGatewayController {
   ): Promise<SuccessResponseDto> {
     this.logger.log(`PATCH /commerce-api/site/suppliers/${supplierId}/site-items/${supplierSiteItemId}`);
     return this.siteSuppliersGatewayService.updateSiteItem(supplierSiteItemId, dto);
+  }
+
+  // Returns the supplier's invoices at this site for the data table
+  @Get(':id/invoices/table')
+  @RequirePermission(SITE_SUPPLIERS.invoices.view)
+  @ApiFindForTableSiteSupplierInvoices()
+  getInvoicesTable(
+    @Param('id', new ParseUUIDPipe()) supplierId: string,
+    @UserId() userId: string,
+    @OrgId() orgId: string,
+  ): Promise<SupplierInvoiceTableResponseDto> {
+    this.logger.log(`GET /commerce-api/site/suppliers/${supplierId}/invoices/table`);
+    return this.siteSuppliersGatewayService.findInvoicesTable(supplierId, userId, orgId);
+  }
+
+  // Records a draft invoice billing one of this site's purchase orders from the supplier
+  @Post(':id/invoices')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermission(SITE_SUPPLIERS.invoices.add)
+  @ApiCreateSiteSupplierInvoice()
+  createInvoice(
+    @Param('id', new ParseUUIDPipe()) supplierId: string,
+    @Body() dto: CreateSupplierInvoiceDto,
+  ): Promise<CreateResponseDto<SupplierInvoiceResponseDto>> {
+    this.logger.log(`POST /commerce-api/site/suppliers/${supplierId}/invoices`);
+    return this.siteSuppliersGatewayService.createInvoice(dto);
+  }
+
+  // Returns one of the supplier's invoices with its lines, flags and linked receipts
+  @Get(':id/invoices/:invoiceId')
+  @RequirePermission(SITE_SUPPLIERS.invoices.view)
+  @ApiFindSiteSupplierInvoiceById()
+  findInvoiceById(
+    @Param('id', new ParseUUIDPipe()) supplierId: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+    @OrgId() orgId: string,
+  ): Promise<SupplierInvoiceDetailResponseDto> {
+    this.logger.log(`GET /commerce-api/site/suppliers/${supplierId}/invoices/${invoiceId}`);
+    return this.siteSuppliersGatewayService.findInvoiceById(supplierId, invoiceId, orgId);
+  }
+
+  // Updates an invoice's header
+  @Patch(':id/invoices/:invoiceId')
+  @RequirePermission(SITE_SUPPLIERS.invoices.edit)
+  @ApiUpdateSiteSupplierInvoice()
+  updateInvoice(
+    @Param('id', new ParseUUIDPipe()) supplierId: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+    @Body() dto: UpdateSupplierInvoiceDto,
+  ): Promise<SuccessResponseDto> {
+    this.logger.log(`PATCH /commerce-api/site/suppliers/${supplierId}/invoices/${invoiceId}`);
+    return this.siteSuppliersGatewayService.updateInvoice(invoiceId, dto);
+  }
+
+  // Posts a draft invoice, setting the final cost of the stock it bills
+  @Post(':id/invoices/:invoiceId/post')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission(SITE_SUPPLIERS.invoices.edit)
+  @ApiPostSiteSupplierInvoice()
+  postInvoice(
+    @Param('id', new ParseUUIDPipe()) supplierId: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+  ): Promise<SuccessResponseDto> {
+    this.logger.log(`POST /commerce-api/site/suppliers/${supplierId}/invoices/${invoiceId}/post`);
+    return this.siteSuppliersGatewayService.postInvoice(invoiceId);
+  }
+
+  // Adds a billed line to an invoice
+  @Post(':id/invoices/:invoiceId/lines')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermission(SITE_SUPPLIERS.invoices.edit)
+  @ApiCreateSiteSupplierInvoiceLine()
+  createInvoiceLine(
+    @Param('id', new ParseUUIDPipe()) supplierId: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+    @Body() dto: SupplierInvoiceLineDto,
+  ): Promise<SuccessResponseDto> {
+    this.logger.log(`POST /commerce-api/site/suppliers/${supplierId}/invoices/${invoiceId}/lines`);
+    return this.siteSuppliersGatewayService.createInvoiceLine(invoiceId, dto);
+  }
+
+  // Updates a line of an invoice
+  @Patch(':id/invoices/:invoiceId/lines/:lineId')
+  @RequirePermission(SITE_SUPPLIERS.invoices.edit)
+  @ApiUpdateSiteSupplierInvoiceLine()
+  updateInvoiceLine(
+    @Param('id', new ParseUUIDPipe()) supplierId: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+    @Param('lineId', new ParseUUIDPipe()) lineId: string,
+    @Body() dto: SupplierInvoiceLineDto,
+  ): Promise<SuccessResponseDto> {
+    this.logger.log(`PATCH /commerce-api/site/suppliers/${supplierId}/invoices/${invoiceId}/lines/${lineId}`);
+    return this.siteSuppliersGatewayService.updateInvoiceLine(invoiceId, lineId, dto);
+  }
+
+  // Removes a line from an invoice
+  @Delete(':id/invoices/:invoiceId/lines/:lineId')
+  @RequirePermission(SITE_SUPPLIERS.invoices.edit)
+  @ApiDeleteSiteSupplierInvoiceLine()
+  deleteInvoiceLine(
+    @Param('id', new ParseUUIDPipe()) supplierId: string,
+    @Param('invoiceId', new ParseUUIDPipe()) invoiceId: string,
+    @Param('lineId', new ParseUUIDPipe()) lineId: string,
+  ): Promise<SuccessResponseDto> {
+    this.logger.log(`DELETE /commerce-api/site/suppliers/${supplierId}/invoices/${invoiceId}/lines/${lineId}`);
+    return this.siteSuppliersGatewayService.deleteInvoiceLine(invoiceId, lineId);
   }
 }

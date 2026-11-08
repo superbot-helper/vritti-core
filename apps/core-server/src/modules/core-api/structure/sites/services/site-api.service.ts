@@ -5,11 +5,10 @@ import { SiteDomainService } from '@domain/site/services/site.service';
 import { UserRoleDomainService } from '@domain/user-role/services/user-role.service';
 import { Injectable } from '@nestjs/common';
 import type { SuccessResponseDto } from '@vritti/api-sdk/responses';
-import type { SelectQueryResult } from '@vritti/api-sdk/select';
+import type { SelectOptionsQueryDto, SelectQueryResult } from '@vritti/api-sdk/select';
 import type { UserRoleAssignment } from '@/db/schema';
 import type { SetFeatureLocksInternalDto } from '../../dto/request/set-feature-locks-internal.dto';
 import type { SiteSelectQueryDto } from '../dto/request/site-select-query.dto';
-import { SITE_TYPE_LABELS } from '../site-type-labels';
 
 @Injectable()
 export class SiteService {
@@ -34,12 +33,8 @@ export class SiteService {
   }
 
   // The site types this organization has, as select options.
-  async findTypesForSelect(orgId: string): Promise<SelectQueryResult> {
-    const types = await this.siteService.findTypesForOrg(orgId);
-    return {
-      options: types.map((type) => ({ value: type, label: SITE_TYPE_LABELS[type] ?? type })),
-      hasMore: false,
-    };
+  findTypesForSelect(orgId: string, query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+    return this.siteService.findTypesForSelect(orgId, query);
   }
 
   // Returns a single site by ID

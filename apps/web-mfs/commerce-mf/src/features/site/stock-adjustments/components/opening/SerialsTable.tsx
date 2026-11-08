@@ -146,7 +146,7 @@ export const SerialsTable = ({ adjustmentId, inventoryItemId, lineId, isDraft, o
     enableRowSelection: isDraft,
     onStatePush: () => {
       if (lineId) {
-        queryClient.invalidateQueries({ queryKey: STOCK_ADJUSTMENT_LINE_ITEMS_TABLE_KEY(adjustmentId, lineId) });
+        return queryClient.invalidateQueries({ queryKey: STOCK_ADJUSTMENT_LINE_ITEMS_TABLE_KEY(adjustmentId, lineId) });
       }
     },
   });

@@ -11,7 +11,7 @@ export { useInventoryItem } from './useInventoryItem';
 export {
   useAddInventoryItemMrp,
   useDeleteInventoryItemMrp,
-  useInventoryItemMrp,
+  useInventoryItemMrpTable,
   useUpdateInventoryItemMrp,
 } from './useInventoryItemMrp';
 export { useInventoryItemSuppliersTable } from './useInventoryItemSuppliers';

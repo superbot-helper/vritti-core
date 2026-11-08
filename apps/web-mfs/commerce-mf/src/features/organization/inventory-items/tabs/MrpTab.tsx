@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { ORG_INVENTORY_ITEMS } from '@vritti/commerce-permissions/inventory-items';
 import { Button } from '@vritti/quantum-ui/Button';
 import {
@@ -13,7 +14,11 @@ import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
 import { Pencil, Plus, Tag, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
-import { useDeleteInventoryItemMrp, useInventoryItemMrp } from '@/hooks/organization/inventory-items';
+import {
+  ORG_INVENTORY_ITEM_MRP_KEY,
+  useDeleteInventoryItemMrp,
+  useInventoryItemMrpTable,
+} from '@/hooks/organization/inventory-items';
 import type { InventoryItemMrpData } from '@/schemas/inventory-item-mrp';
 import { AddMrpForm } from '../forms/AddMrpForm';
 import { EditMrpForm } from '../forms/EditMrpForm';
@@ -23,9 +28,10 @@ interface MrpTabProps {
 }
 
 export const MrpTab: React.FC<MrpTabProps> = ({ inventoryItemId }) => {
+  const queryClient = useQueryClient();
   const confirm = useConfirm();
   const addDialog = useDialog();
-  const { data: rows = [], isLoading } = useInventoryItemMrp(inventoryItemId);
+  const { data: response, isLoading, isFetching } = useInventoryItemMrpTable(inventoryItemId);
   const deleteMutation = useDeleteInventoryItemMrp(inventoryItemId);
 
   const handleDelete = useCallback(
@@ -49,12 +55,12 @@ export const MrpTab: React.FC<MrpTabProps> = ({ inventoryItemId }) => {
         cell: ({ row }) => row.original.uomSymbol ?? '—',
       },
       {
-        accessorKey: 'amount',
+        id: 'currencyCode',
+        accessorFn: (row) => row.amount.currency,
         header: 'Currency',
-        cell: ({ row }) => row.original.amount.currency,
       },
       {
-        id: 'value',
+        accessorKey: 'amount',
         header: 'MRP',
         cell: ({ row }) => <CurrencyCell value={row.original.amount} />,
       },
@@ -110,15 +116,14 @@ export const MrpTab: React.FC<MrpTabProps> = ({ inventoryItemId }) => {
     [inventoryItemId, handleDelete],
   );
 
-  const serverState = useMemo(() => ({ result: rows, count: rows.length }), [rows]);
-
   const { table } = useDataTable({
     columns,
-    serverState,
-    slug: `org-inventory-item-${inventoryItemId}-mrp`,
+    serverState: response,
+    slug: `commerce-org-inventory-item-${inventoryItemId}-mrp`,
     label: 'MRP',
     enableRowSelection: false,
-    enableSorting: false,
+    enableSorting: true,
+    onStatePush: () => queryClient.invalidateQueries({ queryKey: ORG_INVENTORY_ITEM_MRP_KEY(inventoryItemId) }),
   });
 
   return (
@@ -127,6 +132,7 @@ export const MrpTab: React.FC<MrpTabProps> = ({ inventoryItemId }) => {
         table={table}
         mode="tab"
         isLoading={isLoading}
+        isFetching={isFetching}
         permission={ORG_INVENTORY_ITEMS.mrp.view}
         toolbarActions={{
           actions: (

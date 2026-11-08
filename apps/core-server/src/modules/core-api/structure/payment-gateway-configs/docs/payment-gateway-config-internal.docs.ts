@@ -7,6 +7,7 @@ import { PaymentGatewayConfigsPageResponseDto } from '@domain/payment-gateway-co
 import { applyDecorators } from '@nestjs/common';
 import { ApiBody, ApiHeader, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import { InternalTablePageDto } from '@/common/dto/request/internal-table-page.dto';
 import { PaymentGatewayOptionDto } from '@/modules/payments-gateway/gateways/dto/response/payment-gateway-option.dto';
 import {
   WebhookCheckStartedResponseDto,
@@ -58,14 +59,16 @@ export function ApiFindForTablePaymentGatewayConfigsInternal() {
     ApiOperation({
       summary: 'Payment gateway configs table',
       description:
-        "Resolves one page of the organization's own gateways (ORG) and Vritti's (PLATFORM, key id withheld) from a serialized view state (filters, search, sort, pagination) that cloud holds. Secrets are never included.",
+        "Resolves one page of the organization's own gateways (ORG) and Vritti's (PLATFORM, key id withheld) from the page request (filters, search, sort, pagination) cloud sends for the view state it holds. Secrets are never included.",
     }),
     ...ORG_HEADERS,
+    ApiBody({ type: InternalTablePageDto }),
     ApiResponse({
       status: 200,
       description: 'Payment gateway configs page retrieved.',
       type: PaymentGatewayConfigsPageResponseDto,
     }),
+    ApiResponse({ status: 400, description: 'Invalid table page request.' }),
     UNAUTHORIZED,
   );
 }
@@ -174,14 +177,16 @@ export function ApiFindForTablePlatformPaymentGatewayConfigsInternal() {
   return applyDecorators(
     ApiOperation({
       summary: 'Platform payment gateways table',
-      description: `${PLATFORM_NOTE} Resolves one page from a serialized view state that cloud holds.`,
+      description: `${PLATFORM_NOTE} Resolves one page from the page request cloud sends for the view state it holds.`,
     }),
     ...SIGNATURE_HEADERS,
+    ApiBody({ type: InternalTablePageDto }),
     ApiResponse({
       status: 200,
       description: 'Platform gateways page retrieved.',
       type: PaymentGatewayConfigsPageResponseDto,
     }),
+    ApiResponse({ status: 400, description: 'Invalid table page request.' }),
     UNAUTHORIZED,
   );
 }

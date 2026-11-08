@@ -7,12 +7,16 @@ import type {
   PartyIdentifierType,
   PartyLicense,
   PartyLicenseType,
-  PartyTaxRegistration,
   PartyType,
   SupplierItem,
+  TaxRegistrationScheme,
   TaxRegistrationType,
 } from '@/db/schema';
-import type { SupplierDetailRow, SupplierWithParty } from '../../repositories/suppliers.repository';
+import type {
+  SupplierDetailRow,
+  SupplierRegistrationRow,
+  SupplierWithParty,
+} from '../../repositories/suppliers.repository';
 
 export class SupplierItemDto {
   id: string;
@@ -129,16 +133,25 @@ export class InventoryItemSupplierDto {
 
 export class SupplierRegistrationDto {
   id: string;
+  countryCode: string;
+  jurisdictionId: string | null;
+  jurisdictionName: string | null;
   registrationNumber: string;
   registrationType: TaxRegistrationType;
+  scheme: TaxRegistrationScheme;
   isPrimary: boolean;
   isActive: boolean;
 
-  static from(entity: PartyTaxRegistration): SupplierRegistrationDto {
+  // Maps a party registration with its jurisdiction name — null for a national registration
+  static from(entity: SupplierRegistrationRow): SupplierRegistrationDto {
     const dto = new SupplierRegistrationDto();
     dto.id = entity.id;
+    dto.countryCode = entity.countryCode;
+    dto.jurisdictionId = entity.jurisdictionId ?? null;
+    dto.jurisdictionName = entity.jurisdictionName ?? null;
     dto.registrationNumber = entity.registrationNumber;
     dto.registrationType = entity.registrationType;
+    dto.scheme = entity.scheme;
     dto.isPrimary = entity.isPrimary;
     dto.isActive = entity.isActive;
     return dto;

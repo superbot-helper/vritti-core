@@ -50,6 +50,9 @@ import { PurchaseOrderItemsSelectQueryDto } from './dto/request/purchase-order-i
 import { PurchaseOrdersSelectQueryDto } from './dto/request/purchase-orders-select-query.dto';
 import { SupplierItemsSelectQueryDto } from './dto/request/supplier-items-select-query.dto';
 import { SuppliersSelectQueryDto } from './dto/request/suppliers-select-query.dto';
+import { TaxComponentsSelectQueryDto } from './dto/request/tax-components-select-query.dto';
+import { TaxGroupsSelectQueryDto } from './dto/request/tax-groups-select-query.dto';
+import { TaxJurisdictionsSelectQueryDto } from './dto/request/tax-jurisdictions-select-query.dto';
 import { UomSelectQueryDto } from './dto/request/uom-select-query.dto';
 
 @Controller()
@@ -256,7 +259,7 @@ export class SelectController {
   async purchaseOrderItems(@Payload() data: PurchaseOrderItemsSelectQueryDto): Promise<SelectQueryResult> {
     const { purchaseOrderId, excludeOnGoodsReceiptId, ...query } = data;
     this.logger.log(`select.purchaseOrderItems — poId: ${purchaseOrderId}`);
-    return this.purchaseOrderItemsService.findForSelectByPo(purchaseOrderId, query, { excludeOnGoodsReceiptId });
+    return this.purchaseOrderItemsService.findForSelectByPurchaseOrder(purchaseOrderId, query, excludeOnGoodsReceiptId);
   }
 
   // Returns paginated purchase order options for the select component
@@ -311,24 +314,27 @@ export class SelectController {
     return this.taxClassesService.findForSelect(query);
   }
 
-  // Returns paginated tax component options for the select component
+  // Returns paginated tax component options for the select component, optionally of one country
   @MessagePattern({ cmd: 'select.taxComponents' })
-  async taxComponents(@Payload() query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
-    this.logger.log('select.taxComponents');
-    return this.taxComponentsService.findForSelect(query);
+  async taxComponents(@Payload() data: TaxComponentsSelectQueryDto): Promise<SelectQueryResult> {
+    const { country, ...query } = data;
+    this.logger.log(`select.taxComponents — country: ${country ?? 'all'}`);
+    return this.taxComponentsService.findForSelect(query, { country });
   }
 
-  // Returns paginated tax group options for the select component
+  // Returns paginated tax group options for the select component, optionally of one country
   @MessagePattern({ cmd: 'select.taxGroups' })
-  async taxGroups(@Payload() query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
-    this.logger.log('select.taxGroups');
-    return this.taxGroupsService.findForSelect(query);
+  async taxGroups(@Payload() data: TaxGroupsSelectQueryDto): Promise<SelectQueryResult> {
+    const { country, ...query } = data;
+    this.logger.log(`select.taxGroups — country: ${country ?? 'all'}`);
+    return this.taxGroupsService.findForSelect(query, { country });
   }
 
-  // Returns paginated tax jurisdiction options for the select component
+  // Returns paginated tax jurisdiction options for the select component, optionally of one country
   @MessagePattern({ cmd: 'select.taxJurisdictions' })
-  async taxJurisdictions(@Payload() query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
-    this.logger.log('select.taxJurisdictions');
-    return this.taxJurisdictionsService.findForSelect(query);
+  async taxJurisdictions(@Payload() data: TaxJurisdictionsSelectQueryDto): Promise<SelectQueryResult> {
+    const { country, ...query } = data;
+    this.logger.log(`select.taxJurisdictions — country: ${country ?? 'all'}`);
+    return this.taxJurisdictionsService.findForSelect(query, { country });
   }
 }

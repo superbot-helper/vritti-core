@@ -207,18 +207,22 @@ export class OfferingVariantsDomainService {
   }
 
   // Variant options for a storefront's own picker — which variant a product page is about
-  findOptions(query: {
+  async findOptions(query: {
     search?: string;
     excludeIds?: string[];
     limit?: number;
     offset?: number;
   }): Promise<{ items: VariantOptionRow[]; total: number }> {
-    return this.repository.findOptions({
+    const { options, totalCount } = await this.repository.findOptions({
       search: query.search,
       excludeIds: query.excludeIds,
       limit: Math.min(query.limit ?? 50, 200),
       offset: query.offset ?? 0,
     });
+    return {
+      items: options.map((option) => ({ id: String(option.value), code: option.label })),
+      total: totalCount ?? 0,
+    };
   }
 
   // Returns paginated active variant options for the select component — one offering's when offeringId is given

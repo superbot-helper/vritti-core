@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { and, asc, eq, inArray, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
+import { and, asc, eq, inArray, notInArray, type SQL, sql } from '@vritti/api-sdk/drizzle-orm';
 import { type SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
 import {
   type LegalEntity,
@@ -11,6 +11,7 @@ import {
   siteGroups,
   sites,
 } from '@/db/schema';
+import { SITE_TYPE_LABELS } from '../site-type-labels';
 
 export interface AppSiteRow {
   id: string;
@@ -21,6 +22,20 @@ export interface AppSiteRow {
   legalEntityId: string;
   currencyCode: string;
   sortOrder: number;
+}
+
+export type SiteAccessKeys = Pick<Site, 'id' | 'type' | 'groupId' | 'legalEntityId'>;
+
+export type SiteGroupParent = Pick<SiteGroup, 'id' | 'parentId'>;
+
+export interface SiteEnrollment {
+  siteId: string;
+  isActive: boolean;
+}
+
+export interface SiteEnrollmentsScope {
+  sites: SiteEnrollment[];
+  enrolled?: boolean;
 }
 
 @Injectable()
@@ -37,28 +52,43 @@ export class SiteDomainRepository extends PrimaryBaseRepository<typeof sites> {
     });
   }
 
-  // Returns a legal entity's active sites as select options
+  // Returns a legal entity's active sites as select options; siteIds keeps only those sites, and enrollments marks each
+  // option enrolled or not (with the enrollment's activity), keeping only the enrolled (true) or the other (false) sites
   async findForSelectOptions(
     legalEntityId: string,
     query: SelectOptionsQueryDto,
     siteIds?: string[],
+    enrollments?: SiteEnrollmentsScope,
   ): Promise<SelectQueryResult> {
     if (siteIds?.length === 0) return { options: [], hasMore: false, totalCount: 0 };
+
     const conditions: SQL[] = [];
     if (siteIds) conditions.push(inArray(sites.id, siteIds));
 
-    if (query.search) {
-      const term = `%${query.search}%`;
-      conditions.push(sql`(${sites.name} ilike ${term} or ${sites.code} ilike ${term})`);
+    let additionalExpressions: Record<string, SQL> | undefined;
+    if (enrollments) {
+      const enrolledIds = enrollments.sites.map((site) => site.siteId);
+      const activeIds = enrollments.sites.filter((site) => site.isActive).map((site) => site.siteId);
+      if (enrollments.enrolled === true) conditions.push(inArray(sites.id, enrolledIds));
+      if (enrollments.enrolled === false) conditions.push(notInArray(sites.id, enrolledIds));
+      additionalExpressions = {
+        siteCode: sql`${sites.code}`,
+        isEnrolled: sql`${inArray(sites.id, enrolledIds)}`,
+        isActive: sql`case when ${inArray(sites.id, enrolledIds)} then ${inArray(sites.id, activeIds)} end`,
+      };
     }
 
     return this.findForSelect({
       value: 'id',
       label: 'name',
       description: 'code',
+      additionalExpressions,
+      search: query.search,
+      searchKeys: ['name', 'code'],
       limit: query.limit,
       offset: query.offset,
       values: query.values,
+      excludeIds: query.excludeIds,
       where: { legalEntityId, isActive: true },
       orderBy: { sortOrder: 'asc', name: 'asc' },
       conditions,
@@ -100,20 +130,16 @@ export class SiteDomainRepository extends PrimaryBaseRepository<typeof sites> {
     orgId: string,
     query: SelectOptionsQueryDto & { legalEntityId?: string },
   ): Promise<SelectQueryResult> {
-    const conditions: SQL[] = [];
-
-    if (query.search) {
-      const term = `%${query.search}%`;
-      conditions.push(sql`(${sites.name} ilike ${term} or ${sites.code} ilike ${term})`);
-    }
-
     return this.findForSelect({
       value: 'id',
       label: 'name',
       description: 'code',
+      search: query.search,
+      searchKeys: ['name', 'code'],
       limit: query.limit,
       offset: query.offset,
       values: query.values,
+      excludeIds: query.excludeIds,
       where: {
         organizationId: orgId,
         isActive: true,
@@ -121,18 +147,57 @@ export class SiteDomainRepository extends PrimaryBaseRepository<typeof sites> {
       },
       orderBy: { sortOrder: 'asc', name: 'asc' },
       additionalKeys: 'legalEntityId',
-      conditions,
     });
   }
 
-  // The site types this organization actually has, as select options.
-  async findTypesForOrg(orgId: string): Promise<SiteType[]> {
-    const rows = await this.db
-      .selectDistinct({ type: sites.type })
+  // The given sites of an organization as select options, described by their type
+  async findForAccessSelectOptions(
+    orgId: string,
+    siteIds: string[],
+    query: SelectOptionsQueryDto,
+  ): Promise<SelectQueryResult> {
+    if (siteIds.length === 0) return { options: [], hasMore: false, totalCount: 0 };
+
+    return this.findForSelect({
+      value: 'id',
+      label: 'name',
+      description: 'type',
+      search: query.search,
+      searchKeys: ['name', 'code'],
+      limit: query.limit,
+      offset: query.offset,
+      values: query.values,
+      excludeIds: query.excludeIds,
+      where: { organizationId: orgId },
+      orderBy: { sortOrder: 'asc', name: 'asc' },
+      conditions: [inArray(sites.id, siteIds)],
+    });
+  }
+
+  // The site types this organization's active sites have, as select options labelled for an operator
+  async findTypesForSelect(orgId: string, query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+    const labelCases = Object.entries(SITE_TYPE_LABELS).map(([type, label]) => sql`when ${type} then ${label}`);
+
+    return this.findForSelect({
+      value: 'type',
+      label: sql<string>`case ${sites.type} ${sql.join(labelCases, sql` `)} else ${sites.type}::text end`,
+      distinct: true,
+      search: query.search,
+      limit: query.limit,
+      offset: query.offset,
+      values: query.values,
+      excludeIds: query.excludeIds,
+      where: { organizationId: orgId, isActive: true },
+      orderByKey: 'type',
+    });
+  }
+
+  // The fields role access is resolved from, for each of an organization's sites
+  async findAccessKeysByOrg(orgId: string): Promise<SiteAccessKeys[]> {
+    return this.db
+      .select({ id: sites.id, type: sites.type, groupId: sites.groupId, legalEntityId: sites.legalEntityId })
       .from(sites)
-      .where(and(eq(sites.organizationId, orgId), eq(sites.isActive, true)))
-      .orderBy(asc(sites.type));
-    return rows.map((row) => row.type);
+      .where(eq(sites.organizationId, orgId));
   }
 
   // Finds sites by ids scoped to an organization
@@ -187,6 +252,14 @@ export class SiteDomainRepository extends PrimaryBaseRepository<typeof sites> {
   // Finds all site groups for an organization for session-structure resolution
   async findGroupsByOrg(orgId: string): Promise<SiteGroup[]> {
     return this.db.select().from(siteGroups).where(eq(siteGroups.organizationId, orgId));
+  }
+
+  // Each of an organization's site groups with its parent, for walking group chains
+  async findGroupParentsByOrg(orgId: string): Promise<SiteGroupParent[]> {
+    return this.db
+      .select({ id: siteGroups.id, parentId: siteGroups.parentId })
+      .from(siteGroups)
+      .where(eq(siteGroups.organizationId, orgId));
   }
 
   // Finds all legal entities for an organization for session-structure resolution

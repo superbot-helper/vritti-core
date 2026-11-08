@@ -347,9 +347,11 @@ export function ApiTaxComponentsSelect() {
   return applyDecorators(
     ApiOperation({
       summary: 'Get tax component select options',
-      description: 'Returns paginated tax component options for the select component (id → name, code as description).',
+      description:
+        'Returns paginated tax component options for the select component (id → name, code as description). Pass `country` to offer only that country’s components.',
     }),
     ...BASE_SELECT_QUERIES,
+    ApiQuery({ name: 'country', description: 'Uppercase ISO 3166-1 alpha-2 country code', required: false }),
     ApiResponse({ status: 200, description: 'Tax component select options retrieved successfully.' }),
     ApiResponse({ status: 401, description: 'Unauthorized.' }),
   );
@@ -359,10 +361,26 @@ export function ApiTaxGroupsSelect() {
   return applyDecorators(
     ApiOperation({
       summary: 'List tax groups as dropdown options',
-      description: 'Returns tax groups formatted as select options (id → name), searchable and paginated.',
+      description:
+        'Returns tax groups formatted as select options (id → name, code as description), searchable and paginated. Pass `country` to offer only that country’s groups.',
     }),
     ...BASE_SELECT_QUERIES,
+    ApiQuery({ name: 'country', description: 'Uppercase ISO 3166-1 alpha-2 country code', required: false }),
     ApiResponse({ status: 200, description: 'Tax group options retrieved successfully.' }),
+    ApiResponse({ status: 401, description: 'Unauthorized.' }),
+  );
+}
+
+export function ApiTaxJurisdictionsSelect() {
+  return applyDecorators(
+    ApiOperation({
+      summary: 'Get tax jurisdiction select options',
+      description:
+        'Returns paginated tax jurisdiction options (id → name, code as description). Pass `country` to offer only that country’s states, counties, cities and districts.',
+    }),
+    ...BASE_SELECT_QUERIES,
+    ApiQuery({ name: 'country', description: 'Uppercase ISO 3166-1 alpha-2 country code', required: false }),
+    ApiResponse({ status: 200, description: 'Tax jurisdiction select options retrieved successfully.' }),
     ApiResponse({ status: 401, description: 'Unauthorized.' }),
   );
 }

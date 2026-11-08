@@ -132,9 +132,7 @@ export const ChangeContent = ({ adjustment, isDraft, tracking }: ChangeContentPr
     slug: `stock-adjustment-${adjustment.id}-change-lines`,
     label: 'line',
     enableRowSelection: false,
-    onStatePush: () => {
-      queryClient.invalidateQueries({ queryKey: STOCK_ADJUSTMENT_LINES_TABLE_KEY(adjustment.id) });
-    },
+    onStatePush: () => queryClient.invalidateQueries({ queryKey: STOCK_ADJUSTMENT_LINES_TABLE_KEY(adjustment.id) }),
   });
 
   return (

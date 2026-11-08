@@ -5,6 +5,7 @@ import type { UpdateInventoryItemDto } from '@commerce/inventory-items/dto/reque
 import type { UpdateInventoryItemMrpDto } from '@commerce/inventory-items/dto/request/update-inventory-item-mrp.dto';
 import type { UpdateInventoryItemUomConversionDto } from '@commerce/inventory-items/dto/request/update-inventory-item-uom-conversion.dto';
 import type { InventoryItemMrpResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-mrp-response.dto';
+import type { InventoryItemMrpTableResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-mrp-table-response.dto';
 import type { InventoryItemResponseDto } from '@commerce/inventory-items/dto/response/inventory-item-response.dto';
 import type {
   InventoryItemSupplierResponseDto,
@@ -108,10 +109,21 @@ export class InventoryItemsGatewayService {
     return this.nats.send('commerce', 'org.inventoryItems.uom.delete', { id: conversionId });
   }
 
-  // Returns the suggested MRPs (one per currency) for an inventory item
-  async findMrp(inventoryItemId: string): Promise<InventoryItemMrpResponseDto[]> {
+  // Returns an inventory item's MRPs, table-shaped
+  async findMrpTable(inventoryItemId: string, userId: string): Promise<InventoryItemMrpTableResponseDto> {
     this.logger.log(`org.inventoryItems.mrp.table — inventoryItemId: ${inventoryItemId}`);
-    return this.nats.send('commerce', 'org.inventoryItems.mrp.table', { inventoryItemId });
+    const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
+      userId,
+      `commerce-org-inventory-item-${inventoryItemId}-mrp`,
+    );
+
+    const { result, count } = await this.nats.send<{ result: InventoryItemMrpResponseDto[]; count: number }>(
+      'commerce',
+      'org.inventoryItems.mrp.table',
+      { inventoryItemId, ...state },
+    );
+
+    return { result, count, state, activeViewId };
   }
 
   // Adds a manual MRP for an inventory item

@@ -15,6 +15,9 @@ import { SupplierEnrollmentSelectQueryDto } from '@commerce/supplier-enrollments
 import { SupplierEnrollmentSitesSelectQueryDto } from '@commerce/supplier-enrollments/dto/request/supplier-enrollment-sites-select-query.dto';
 import { SupplierItemsSelectQueryDto } from '@commerce/supplier-items/dto/request/supplier-items-select-query.dto';
 import { SuppliersSelectQueryDto } from '@commerce/suppliers/dto/request/suppliers-select-query.dto';
+import { TaxComponentsSelectQueryDto } from '@commerce/tax-components/dto/request/tax-components-select-query.dto';
+import { TaxGroupsSelectQueryDto } from '@commerce/tax-groups/dto/request/tax-groups-select-query.dto';
+import { TaxJurisdictionSelectQueryDto } from '@commerce/tax-jurisdictions/dto/request/tax-jurisdiction-select-query.dto';
 import { UomSelectQueryDto } from '@commerce/uom/dto/request/uom-select-query.dto';
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -22,7 +25,7 @@ import { AuthType, Require } from '@vritti/api-sdk/auth';
 import { NatsClientService } from '@vritti/api-sdk/nats';
 import { SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
 import { SessionTypeValues } from '@/db/schema';
-import { LegalEntityId, OrgId } from '@/security/decorators';
+import { LegalEntityId } from '@/security/decorators';
 import { SuppliersGatewayService } from '../le-api/suppliers/services/suppliers-gateway.service';
 import {
   ApiAttributeTemplatesSelect,
@@ -50,6 +53,7 @@ import {
   ApiTaxClassesSelect,
   ApiTaxComponentsSelect,
   ApiTaxGroupsSelect,
+  ApiTaxJurisdictionsSelect,
   ApiUomDimensionsSelect,
   ApiUomSelect,
 } from './docs/select-api.docs';
@@ -191,10 +195,9 @@ export class SelectApiController {
   @ApiSupplierEnrollmentsSelect()
   selectSupplierEnrollments(
     @Query() query: SupplierEnrollmentSitesSelectQueryDto,
-    @OrgId() orgId: string,
     @LegalEntityId() legalEntityId: string | undefined,
   ): Promise<SelectQueryResult> {
-    return this.suppliersGatewayService.selectEnrollments(query, orgId, legalEntityId);
+    return this.suppliersGatewayService.selectEnrollments(query, legalEntityId);
   }
 
   @Get('payment-terms')
@@ -245,21 +248,24 @@ export class SelectApiController {
     return this.nats.send<SelectQueryResult>('commerce', 'select.partyContacts', query);
   }
 
-  // Returns tax-jurisdiction options for select dropdowns
+  // Returns tax-jurisdiction options for select dropdowns, only one country's when `country` is given
   @Get('tax-jurisdictions')
-  selectTaxJurisdictions(@Query() query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+  @ApiTaxJurisdictionsSelect()
+  selectTaxJurisdictions(@Query() query: TaxJurisdictionSelectQueryDto): Promise<SelectQueryResult> {
     return this.nats.send<SelectQueryResult>('commerce', 'select.taxJurisdictions', query);
   }
 
+  // Returns tax-component options for select dropdowns, only one country's when `country` is given
   @Get('tax-components')
   @ApiTaxComponentsSelect()
-  selectTaxComponents(@Query() query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+  selectTaxComponents(@Query() query: TaxComponentsSelectQueryDto): Promise<SelectQueryResult> {
     return this.nats.send<SelectQueryResult>('commerce', 'select.taxComponents', query);
   }
 
+  // Returns tax-group options for select dropdowns, only one country's when `country` is given
   @Get('tax-groups')
   @ApiTaxGroupsSelect()
-  selectTaxGroups(@Query() query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+  selectTaxGroups(@Query() query: TaxGroupsSelectQueryDto): Promise<SelectQueryResult> {
     return this.nats.send<SelectQueryResult>('commerce', 'select.taxGroups', query);
   }
 

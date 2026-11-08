@@ -20,7 +20,8 @@ import { PartyTaxRegistrationDto } from '../dto/entity/party-tax-registration.dt
 import { PersonDto } from '../dto/entity/person.dto';
 import type { CreateCompanyRegistrationDto } from '../dto/request/create-company-registration.dto';
 import type { UpdateCompanyRegistrationDto } from '../dto/request/update-company-registration.dto';
-import { emailComm, PartiesDomainRepository, type PartyTableRow, phoneComm } from '../repositories/parties.repository';
+import { emailComm, PartiesDomainRepository, phoneComm } from '../repositories/parties.repository';
+import { PartyTaxRegistrationsDomainRepository } from '../repositories/party-tax-registrations.repository';
 
 export interface CreatePartyInput {
   partyType: PartyType;
@@ -29,6 +30,7 @@ export interface CreatePartyInput {
   phone?: string | null;
   isActive: boolean;
   legalName?: string | null;
+  countryCode?: string | null;
   jurisdictionId?: string | null;
   website?: string | null;
   firstName?: string | null;
@@ -41,6 +43,7 @@ export interface UpdatePartyInput {
   phone?: string | null;
   isActive?: boolean;
   legalName?: string | null;
+  countryCode?: string | null;
   jurisdictionId?: string | null;
   website?: string | null;
   firstName?: string | null;
@@ -68,45 +71,59 @@ export class PartiesDomainService {
   private static readonly REGISTRATION_FIELD_MAP: FieldMap = {
     registrationNumber: { column: partyTaxRegistrations.registrationNumber, type: 'string' },
     registrationType: { column: partyTaxRegistrations.registrationType, type: 'string' },
+    scheme: { column: partyTaxRegistrations.scheme, type: 'string' },
+    countryCode: { column: partyTaxRegistrations.countryCode, type: 'string' },
     isPrimary: { column: partyTaxRegistrations.isPrimary, type: 'boolean' },
+  };
+
+  // Search runs ILIKE, which Postgres enums (registration type, scheme) don't support — so it only covers text columns
+  private static readonly REGISTRATION_SEARCH_FIELD_MAP: FieldMap = {
+    registrationNumber: PartiesDomainService.REGISTRATION_FIELD_MAP.registrationNumber,
+    countryCode: PartiesDomainService.REGISTRATION_FIELD_MAP.countryCode,
   };
 
   constructor(
     private readonly database: PrimaryDatabaseService,
     private readonly repository: PartiesDomainRepository,
+    private readonly registrationsRepository: PartyTaxRegistrationsDomainRepository,
     private readonly communicationsService: PartyCommunicationsDomainService,
     private readonly socialProfilesService: PartySocialProfilesDomainService,
   ) {}
 
-  // Returns paginated COMPANY parties for the companies data table
+  // Returns paginated COMPANY parties with their main lines for the companies data table
   async findCompaniesForTable(state: TableViewState): Promise<{ result: CompanyDto[]; count: number }> {
-    const { result, count } = await this.queryPartiesForTable(state, PartyTypeValues.COMPANY);
-    return { result: result.map((row) => CompanyDto.from(row, { email: row.email, phone: row.phone })), count };
-  }
-
-  // Returns paginated PERSON parties for the people data table
-  async findPeopleForTable(state: TableViewState): Promise<{ result: PersonDto[]; count: number }> {
-    const { result, count } = await this.queryPartiesForTable(state, PartyTypeValues.PERSON);
-    return { result: result.map((row) => PersonDto.from(row, { email: row.email, phone: row.phone })), count };
-  }
-
-  // Returns paginated party rows of the given type, applying filters, search, sort, and pagination
-  private queryPartiesForTable(
-    state: TableViewState,
-    partyType: PartyType,
-  ): Promise<{ result: PartyTableRow[]; count: number }> {
-    const filterWhere = FilterProcessor.buildWhere(state.filters, PartiesDomainService.FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, PartiesDomainService.FIELD_MAP);
-    const where = and(eq(parties.partyType, partyType), filterWhere, searchWhere) || undefined;
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, PartiesDomainService.FIELD_MAP);
+    const fieldMap = PartiesDomainService.FIELD_MAP;
     const { limit = 20, offset = 0 } = state.pagination;
-
-    return this.repository.findForTable({
-      where,
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, fieldMap);
+    const { result, count } = await this.repository.findForTable({
+      where: and(
+        eq(parties.partyType, PartyTypeValues.COMPANY),
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, fieldMap),
+      ),
       orderBy: orderBy.length > 0 ? orderBy : [desc(parties.createdAt)],
       limit,
       offset,
     });
+    return { result: result.map((row) => CompanyDto.from(row, { email: row.email, phone: row.phone })), count };
+  }
+
+  // Returns paginated PERSON parties with their main lines for the people data table
+  async findPeopleForTable(state: TableViewState): Promise<{ result: PersonDto[]; count: number }> {
+    const fieldMap = PartiesDomainService.FIELD_MAP;
+    const { limit = 20, offset = 0 } = state.pagination;
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, fieldMap);
+    const { result, count } = await this.repository.findForTable({
+      where: and(
+        eq(parties.partyType, PartyTypeValues.PERSON),
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, fieldMap),
+      ),
+      orderBy: orderBy.length > 0 ? orderBy : [desc(parties.createdAt)],
+      limit,
+      offset,
+    });
+    return { result: result.map((row) => PersonDto.from(row, { email: row.email, phone: row.phone })), count };
   }
 
   // Returns paginated party options of the given type for select dropdowns
@@ -134,7 +151,7 @@ export class PartiesDomainService {
     partyId: string,
     options?: { salesTaxOnly?: boolean },
   ): Promise<SelectQueryResult> {
-    return this.repository.findRegistrationOptionsForSelect(partyId, query, options);
+    return this.registrationsRepository.findOptionsForSelect(partyId, query, options);
   }
 
   // Creates a COMPANY party and returns it as a CompanyDto
@@ -167,6 +184,9 @@ export class PartiesDomainService {
       });
     }
 
+    const countryCode = data.countryCode ?? null;
+    await this.repository.findJurisdictionInCountryOrThrow(data.jurisdictionId, countryCode);
+
     const email = data.email ?? null;
     const phone = data.phone ?? null;
     const website = data.website ?? null;
@@ -177,6 +197,7 @@ export class PartiesDomainService {
         displayName,
         isActive: data.isActive,
         legalName: data.legalName ?? null,
+        countryCode,
         jurisdictionId: data.jurisdictionId ?? null,
         firstName: data.firstName ?? null,
         lastName: data.lastName ?? null,
@@ -217,9 +238,16 @@ export class PartiesDomainService {
     );
   }
 
-  // Updates a party's editable fields, upserting its primary EMAIL/PHONE communications
+  // Updates a party's editable fields, upserting its primary EMAIL/PHONE communications; a jurisdiction it names must
+  // lie in its resulting country
   async update(id: string, data: UpdatePartyInput): Promise<SuccessResponseDto> {
     const existing = await this.requireById(id);
+    if (data.countryCode !== undefined || data.jurisdictionId !== undefined) {
+      await this.repository.findJurisdictionInCountryOrThrow(
+        data.jurisdictionId === undefined ? existing.jurisdictionId : data.jurisdictionId,
+        data.countryCode === undefined ? existing.countryCode : data.countryCode,
+      );
+    }
 
     const { email, phone, website, ...rest } = data;
     const payload: Partial<Party> = { ...rest };
@@ -273,24 +301,25 @@ export class PartiesDomainService {
     partyId: string,
     state: TableViewState,
   ): Promise<{ result: PartyTaxRegistrationDto[]; count: number }> {
-    const filterWhere = FilterProcessor.buildWhere(state.filters, PartiesDomainService.REGISTRATION_FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, PartiesDomainService.REGISTRATION_FIELD_MAP);
-    const where = and(eq(partyTaxRegistrations.partyId, partyId), filterWhere, searchWhere) || undefined;
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, PartiesDomainService.REGISTRATION_FIELD_MAP);
+    const fieldMap = PartiesDomainService.REGISTRATION_FIELD_MAP;
     const { limit = 20, offset = 0 } = state.pagination;
-
-    const { result: rows, count } = await this.repository.findRegistrationsForTable({
-      where,
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, fieldMap);
+    const { result, count } = await this.registrationsRepository.findForTable({
+      where: and(
+        eq(partyTaxRegistrations.partyId, partyId),
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, PartiesDomainService.REGISTRATION_SEARCH_FIELD_MAP),
+      ),
       orderBy:
         orderBy.length > 0 ? orderBy : [desc(partyTaxRegistrations.isPrimary), asc(partyTaxRegistrations.createdAt)],
       limit,
       offset,
     });
-
-    return { result: rows.map((row) => PartyTaxRegistrationDto.from(row, row.jurisdictionName)), count };
+    return { result: result.map((row) => PartyTaxRegistrationDto.from(row, row.jurisdictionName)), count };
   }
 
-  // Creates a tax registration for a party
+  // Creates a tax registration for a party in a country and, optionally, one of its jurisdictions; a GSTIN must name a
+  // state
   async createRegistration(
     partyId: string,
     data: Omit<CreateCompanyRegistrationDto, 'companyId'>,
@@ -306,11 +335,19 @@ export class PartiesDomainService {
       });
     }
 
-    const entity = await this.repository.createRegistration({
+    const registration = {
       partyId,
-      jurisdictionId: data.jurisdictionId,
+      countryCode: data.countryCode,
+      jurisdictionId: data.jurisdictionId ?? null,
       registrationNumber: data.registrationNumber,
       registrationType: data.registrationType,
+    };
+    const jurisdiction = await this.repository.findRegistrationJurisdictionOrThrow(registration);
+    await this.registrationsRepository.assertNoConflicts(registration, jurisdiction);
+
+    const entity = await this.registrationsRepository.create({
+      ...registration,
+      scheme: data.scheme,
       isPrimary,
       isActive,
     });
@@ -319,13 +356,13 @@ export class PartiesDomainService {
     return {
       success: true,
       message: 'Tax registration created successfully.',
-      data: PartyTaxRegistrationDto.from(entity),
+      data: PartyTaxRegistrationDto.from(entity, jurisdiction?.name ?? null),
     };
   }
 
-  // Updates a party tax registration
+  // Updates a party tax registration, checking its resulting country, jurisdiction and number as a whole
   async updateRegistration(id: string, data: Omit<UpdateCompanyRegistrationDto, 'id'>): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findRegistrationById(id);
+    const existing = await this.registrationsRepository.findById(id);
     if (!existing) throw new NotFoundException('Tax registration not found.');
 
     const nextPrimary = data.isPrimary ?? existing.isPrimary;
@@ -337,7 +374,17 @@ export class PartiesDomainService {
       });
     }
 
-    await this.repository.updateRegistration(id, data);
+    const registration = {
+      partyId: existing.partyId,
+      countryCode: data.countryCode ?? existing.countryCode,
+      jurisdictionId: data.jurisdictionId === undefined ? existing.jurisdictionId : data.jurisdictionId,
+      registrationNumber: data.registrationNumber ?? existing.registrationNumber,
+      registrationType: data.registrationType ?? existing.registrationType,
+    };
+    const jurisdiction = await this.repository.findRegistrationJurisdictionOrThrow(registration);
+    await this.registrationsRepository.assertNoConflicts(registration, jurisdiction, id);
+
+    await this.registrationsRepository.update(id, data);
 
     this.logger.log(`Updated tax registration: ${id}`);
     return { success: true, message: 'Tax registration updated successfully.' };
@@ -346,7 +393,7 @@ export class PartiesDomainService {
   // Activates or retires a tax registration; only active ones can be picked for a supplier's site enrollment, and the
   // primary registration must stay active
   async setRegistrationActive(id: string, isActive: boolean): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findRegistrationById(id);
+    const existing = await this.registrationsRepository.findById(id);
     if (!existing) throw new NotFoundException('Tax registration not found.');
     if (!isActive && existing.isPrimary) {
       throw new ConflictException({
@@ -355,7 +402,7 @@ export class PartiesDomainService {
           'The primary registration must stay active. Set another registration as primary before retiring this one.',
       });
     }
-    await this.repository.updateRegistration(id, { isActive });
+    await this.registrationsRepository.update(id, { isActive });
     this.logger.log(`${isActive ? 'Activated' : 'Deactivated'} tax registration: ${id}`);
     return {
       success: true,
@@ -365,9 +412,9 @@ export class PartiesDomainService {
 
   // Deletes a party tax registration
   async deleteRegistration(id: string): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findRegistrationById(id);
+    const existing = await this.registrationsRepository.findById(id);
     if (!existing) throw new NotFoundException('Tax registration not found.');
-    await this.repository.deleteRegistration(id);
+    await this.registrationsRepository.delete(id);
     this.logger.log(`Deleted tax registration: ${id}`);
     return { success: true, message: 'Tax registration deleted successfully.' };
   }

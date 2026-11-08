@@ -38,10 +38,10 @@ export class SupplierItemPricesDomainRepository extends PrimaryBaseRepository<ty
     super(database, supplierItemPrices);
   }
 
-  // Returns paginated price timeline rows of a supplier item at one site
+  // Returns paginated price timeline rows of a supplier item, within the workspace's own site when one is given
   findPricesForTable(
     supplierItemId: string,
-    siteId: string,
+    workspaceSiteId: string | undefined,
     options: { where?: SQL; orderBy?: SQL[]; limit: number; offset: number },
   ): Promise<{ result: SupplierItemPriceRow[]; count: number }> {
     return this.findAllAndCount<SupplierItemPriceRow>({
@@ -49,7 +49,7 @@ export class SupplierItemPricesDomainRepository extends PrimaryBaseRepository<ty
       leftJoin: { table: inventoryItemMrps, on: eq(inventoryItemMrps.id, supplierItemPrices.mrpId) },
       where: and(
         eq(supplierItemPrices.supplierItemId, supplierItemId),
-        eq(supplierItemPrices.siteId, siteId),
+        workspaceSiteId ? eq(supplierItemPrices.siteId, workspaceSiteId) : undefined,
         options.where,
       ),
       orderBy: options.orderBy?.length ? options.orderBy : [desc(supplierItemPrices.validFrom)],

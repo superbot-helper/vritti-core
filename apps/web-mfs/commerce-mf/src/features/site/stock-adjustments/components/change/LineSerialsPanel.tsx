@@ -169,9 +169,8 @@ function LineSerialsPanelContent({ adjustment, lineId, line, isDraft, onLineRemo
     slug: `stock-adjustment-${adjustment.id}-line-${lineId}-items`,
     label: 'serial',
     enableRowSelection: isDraft,
-    onStatePush: () => {
-      queryClient.invalidateQueries({ queryKey: STOCK_ADJUSTMENT_LINE_ITEMS_TABLE_KEY(adjustment.id, lineId) });
-    },
+    onStatePush: () =>
+      queryClient.invalidateQueries({ queryKey: STOCK_ADJUSTMENT_LINE_ITEMS_TABLE_KEY(adjustment.id, lineId) }),
   });
 
   const handleBulkUnpick = useCallback(

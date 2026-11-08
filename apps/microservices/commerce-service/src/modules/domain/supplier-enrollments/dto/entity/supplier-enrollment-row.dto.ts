@@ -30,6 +30,8 @@ export class SupplierEnrollmentRowDto {
   paymentTermName: string | null;
   partyTaxRegistrationId: string | null;
   registrationNumber: string | null;
+  registrationCountryCode: string | null;
+  registrationJurisdictionName: string | null;
   partyBankAccountId: string | null;
   bankAccountName: string | null;
   orderRelationshipId: string | null;
@@ -66,6 +68,8 @@ export class SupplierEnrollmentRowDto {
     dto.paymentTermName = row.paymentTermName ?? null;
     dto.partyTaxRegistrationId = row.partyTaxRegistrationId ?? null;
     dto.registrationNumber = row.registrationNumber ?? null;
+    dto.registrationCountryCode = row.registrationCountryCode ?? null;
+    dto.registrationJurisdictionName = row.registrationJurisdictionName ?? null;
     dto.partyBankAccountId = row.partyBankAccountId ?? null;
     dto.bankAccountName = row.bankAccountName ?? null;
     dto.orderRelationshipId = row.orderRelationshipId ?? null;

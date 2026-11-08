@@ -2,6 +2,7 @@ export {
   LE_INVENTORY_ITEM_KEY,
   LE_INVENTORY_ITEM_MRP_KEY,
   LE_INVENTORY_ITEM_PRICE_GRAPH_KEY,
+  LE_INVENTORY_ITEM_PRICED_SITE_IDS_KEY,
   LE_INVENTORY_ITEM_PRICES_TABLE_KEY,
   LE_INVENTORY_ITEM_SUPPLIERS_TABLE_KEY,
   LE_INVENTORY_ITEMS_KEY,
@@ -9,11 +10,11 @@ export {
 } from './keys';
 export {
   useInventoryItem,
-  useInventoryItemMrp,
+  useInventoryItemMrpTable,
+  useInventoryItemPricedSiteIds,
   useInventoryItemPriceGraph,
   useInventoryItemPriceGraphSiteId,
   useInventoryItemPricesTable,
-  useInventoryItemPricesTableSites,
   useInventoryItemSuppliersTable,
   useSaveInventoryItemPriceGraph,
 } from './useInventoryItem';
