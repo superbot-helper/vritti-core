@@ -293,3 +293,32 @@ Route param must be named `:slug`, not `:id`:
 - Microfrontends export route arrays (`authRoutes`, `accountRoutes`, `cloudRoutes`)
 - Protocol auto-detected from `window.location.protocol`
 - Environment variables use `PUBLIC_` prefix via `import.meta.env`
+
+## DataTable — filters, context and defaults
+
+Filters apply as soon as they change (no Apply button). A **context** is a filter that lives in the context bar:
+always visible, saved with views, not counted or reset. Moving a filter there is the JSX move plus `mode="context"` —
+no hook, service, gateway or domain change.
+
+```tsx
+import { filter } from '@vritti/quantum-ui/filter';
+
+const { table, context } = useDataTable({
+  ...,
+  defaultContext: siteIds ? [filter('site').equals(siteIds[0])] : [], // fills the field whenever it is missing
+});
+
+<DataTable
+  table={table}
+  contextBar={<SiteFilter name="site" mode="context" />}   // a context with a default can't be cleared — no prop needed
+  filters={[<SelectFilter key="status" name="status" options={STATUS_OPTIONS} multiple />]}
+/>
+```
+
+- Build conditions with `filter('field').<operator>(value)` — never hand-write `{ field, operator, value }`.
+- Only the context bar has defaults (`defaultContext`). The filter panel starts empty and Reset empties it (or returns to
+  the active view's filters).
+- Never hold a context value in `useState` and pass it to the hook. A context control with a `value` prop stays the
+  page's (controlled) — only for scratch inputs and "as of" dates, which go stale if saved.
+- A URL that seeds a context (`?site=`) is written into the context once on entry and then removed from the URL.
+- A field lives in the filter panel or the context bar, never both.

@@ -119,6 +119,16 @@ getCurrentState(userId, `commerce-site-inventory-item-${inventoryItemId}-lots`);
 The backend key and the frontend `slug` are the SAME string — renaming one WITHOUT the other resets/loses
 that user's saved table view. Change both together.
 
+## DataTable context — from table state, never a query param
+
+A table's context-bar value (country, site, sites, …) lives in the saved table state's `filters.context`, exactly like
+a filter in `filters.panel`. The gateway forwards the stored state unchanged; the domain's `FIELD_MAP` turns it into a
+`WHERE` via `FilterProcessor.buildWhere(state.filters, FIELD_MAP)`. No query DTO for it, no stripping or rewriting of
+saved filters in the gateway.
+
+Scope the server owns (the workspace LE, the record in the route) is NOT a filter: pass it as an explicit argument and
+AND an `eq()` in the domain — never append a `FilterCondition` to `state.filters` (see `backend-service.md`).
+
 ## Query parameters — always use a DTO class
 
 Never use inline `@Query('field')`. Create a proper DTO with validation + Swagger decorators:

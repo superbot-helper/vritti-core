@@ -121,3 +121,20 @@ async findByEmail(email: string): Promise<User | undefined> {
   return this.userRepository.findByEmail(email);
 }
 ```
+
+## Never add a condition to `state.filters`
+
+`state.filters` holds only what the user picked. Scope the server owns (the workspace's legal entity, the record in
+the route, a version, a business) is an explicit argument ANDed as a real `eq()` — never a faked `FilterCondition`.
+`FilterProcessor.buildWhere` silently skips a field missing from the `FIELD_MAP`, so a faked scope pin disappears
+without an error if the map key is renamed, and the table returns every scope's rows.
+
+```typescript
+// WRONG
+findForTable(orgId, { ...state, filters: [...state.filters, { field: 'legalEntityId', operator: 'equals', value: leId }] });
+
+// CORRECT
+findForTable(orgId, legalEntityId, state);
+// repository
+where: and(eq(bankAccounts.legalEntityId, legalEntityId), filterWhere, searchWhere),
+```

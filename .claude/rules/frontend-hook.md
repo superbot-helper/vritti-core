@@ -77,6 +77,33 @@ type UseLoginOptions = Omit<UseMutationOptions<LoginResponse, AxiosError, LoginD
 ['conversations']
 ```
 
+## Table hooks — keep previous rows while refetching
+
+A DataTable hook refetches on every filter / context / sort change, so it keeps the previous page on screen instead of
+flashing the skeleton:
+
+```typescript
+return useQuery<OfferingsTableResponse, AxiosError>({
+  queryKey: OFFERINGS_TABLE_KEY,
+  queryFn: getOfferingsTable,
+  placeholderData: keepPreviousData,
+});
+```
+
+The page passes `isLoading` (first load → skeleton) and `isFetching` (thin progress bar over the kept rows) to
+`DataTable`, and `onStatePush` returns the invalidation promise (`() => queryClient.invalidateQueries(...)`) so the
+skeleton holds until a default-filled refetch lands. Context and filters travel in the saved table state — the hook
+takes no context arguments and its query key carries none.
+
+A table whose slug carries a record id (`commerce-le-inventory-item-${id}-prices`) must not keep another record's
+rows: the response carries that record's saved `state`, and `useDataTable` would load it into the new slug. Keep the
+previous data only for the same record:
+
+```typescript
+placeholderData: (previous, previousQuery) =>
+  previousQuery?.queryKey[ITEM_ID_INDEX] === itemId ? previous : undefined,
+```
+
 ## Constants as `export const`
 
 ```typescript
