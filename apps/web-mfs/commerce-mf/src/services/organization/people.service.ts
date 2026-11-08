@@ -20,7 +20,7 @@ import type {
 } from '@/schemas/party-identifiers';
 import type { PartyLicensePayload, PartyLicenseRow, PartyLicensesTableResponse } from '@/schemas/party-licenses';
 import type {
-  PartyRegistrationFormData,
+  PartyRegistrationPayload,
   PartyRegistrationsTableResponse,
   PartyTaxRegistrationRow,
 } from '@/schemas/party-registrations';
@@ -164,7 +164,7 @@ export function createPersonRegistration({
   data,
 }: {
   personId: string;
-  data: PartyRegistrationFormData;
+  data: PartyRegistrationPayload;
 }): Promise<PartyTaxRegistrationRow> {
   return axios
     .post<CreateResponse<PartyTaxRegistrationRow>>(`commerce-api/people/${personId}/registrations`, data)
@@ -178,7 +178,7 @@ export function updatePersonRegistration({
 }: {
   personId: string;
   registrationId: string;
-  data: PartyRegistrationFormData;
+  data: PartyRegistrationPayload;
 }): Promise<SuccessResponse> {
   return axios
     .patch<SuccessResponse>(`commerce-api/people/${personId}/registrations/${registrationId}`, data)

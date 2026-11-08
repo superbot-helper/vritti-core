@@ -48,6 +48,9 @@ export class CompanyResponseDto {
   @ApiPropertyOptional({ description: 'Company website URL', nullable: true })
   website: string | null;
 
+  @ApiPropertyOptional({ description: 'Uppercase ISO 3166-1 alpha-2 country', nullable: true })
+  countryCode: string | null;
+
   @ApiPropertyOptional({ description: 'Tax jurisdiction ID', nullable: true })
   jurisdictionId: string | null;
 

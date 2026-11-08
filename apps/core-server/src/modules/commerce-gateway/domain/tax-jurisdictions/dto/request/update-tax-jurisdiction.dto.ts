@@ -1,6 +1,18 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsCountry, Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { Trim } from '@vritti/api-sdk/decorators';
+import {
+  IsBoolean,
+  IsIn,
+  IsISO31661Alpha2,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+
+const TAX_JURISDICTION_LEVELS = ['STATE', 'COUNTY', 'CITY', 'DISTRICT'] as const;
 
 export class UpdateTaxJurisdictionDto {
   @Trim({ nullify: false })
@@ -13,21 +25,28 @@ export class UpdateTaxJurisdictionDto {
 
   @ApiPropertyOptional({
     description: 'Hierarchy level of the jurisdiction',
-    enum: ['COUNTRY', 'STATE', 'COUNTY', 'CITY', 'DISTRICT'],
+    enum: TAX_JURISDICTION_LEVELS,
   })
   @IsOptional()
   @IsString()
-  @IsIn(['COUNTRY', 'STATE', 'COUNTY', 'CITY', 'DISTRICT'])
-  level?: string;
+  @IsIn(TAX_JURISDICTION_LEVELS)
+  level?: (typeof TAX_JURISDICTION_LEVELS)[number];
 
-  @ApiPropertyOptional({ description: 'Parent jurisdiction ID (for nested jurisdictions)' })
+  @ApiPropertyOptional({
+    description:
+      'Parent jurisdiction in the same country, one level up: a county under a state, a city under a county or state, a district under any. A state has none.',
+    nullable: true,
+  })
   @IsOptional()
   @IsUUID('7')
   parentId?: string | null;
 
-  @ApiPropertyOptional({ description: 'ISO 3166-1 alpha-2 country code' })
+  @ApiPropertyOptional({
+    description: 'Uppercase ISO 3166-1 alpha-2 country code; fixed once children, registrations or companies use it',
+  })
   @IsOptional()
-  @IsCountry()
+  @IsISO31661Alpha2()
+  @IsUppercase()
   countryCode?: string;
 
   @Trim()

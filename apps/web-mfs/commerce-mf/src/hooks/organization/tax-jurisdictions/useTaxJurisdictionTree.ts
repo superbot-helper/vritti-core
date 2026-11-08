@@ -2,16 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { ORG_TAX_JURISDICTIONS } from '@vritti/commerce-permissions/tax-jurisdictions';
 import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import type { AxiosError } from 'axios';
-import type { TaxJurisdictionTreeNode } from '@/schemas/tax-jurisdictions';
+import type { TaxJurisdictionTreeNode, TaxJurisdictionTreeQuery } from '@/schemas/tax-jurisdictions';
 import { getTaxJurisdictionsTree } from '@/services/organization/tax-jurisdictions.service';
 import { TAX_JURISDICTION_TREE_KEY } from './keys';
 
-export function useTaxJurisdictionTree(search?: string) {
+export function useTaxJurisdictionTree(query: TaxJurisdictionTreeQuery) {
   // The tree endpoint is guarded by tax-jurisdictions.view — self-gate so a locked/denied user never fires the request
   const { available } = usePermission(ORG_TAX_JURISDICTIONS.view);
   return useQuery<TaxJurisdictionTreeNode[], AxiosError>({
-    queryKey: [...TAX_JURISDICTION_TREE_KEY, search ?? ''],
-    queryFn: () => getTaxJurisdictionsTree(search),
+    queryKey: [...TAX_JURISDICTION_TREE_KEY, query],
+    queryFn: () => getTaxJurisdictionsTree(query),
     enabled: available,
   });
 }

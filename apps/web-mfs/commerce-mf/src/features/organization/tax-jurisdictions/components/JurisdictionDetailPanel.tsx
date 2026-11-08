@@ -8,6 +8,7 @@ import { Dialog } from '@vritti/quantum-ui/Dialog';
 import { Empty } from '@vritti/quantum-ui/Empty';
 import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
 import { PageContentDetails } from '@vritti/quantum-ui/PageContent';
+import { countryFlag } from '@vritti/quantum-ui/selects/iso-country';
 import { Typography } from '@vritti/quantum-ui/Typography';
 import { Eye, Map as MapIcon, Pencil, Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
@@ -142,10 +143,7 @@ const JurisdictionDetailContent: React.FC<JurisdictionDetailContentProps> = ({
         title={jurisdiction.name}
         badges={
           <>
-            <Badge
-              variant={jurisdiction.isActive ? 'secondary' : 'outline'}
-              className={jurisdiction.isActive ? 'bg-success/15 text-success' : ''}
-            >
+            <Badge variant={jurisdiction.isActive ? 'success' : 'outline'}>
               {jurisdiction.isActive ? 'Active' : 'Inactive'}
             </Badge>
             <Badge variant="outline">{LEVEL_LABELS[jurisdiction.level]}</Badge>
@@ -181,7 +179,12 @@ const JurisdictionDetailContent: React.FC<JurisdictionDetailContentProps> = ({
         <DetailSection wrap>
           <DetailField className="px-4 py-2" label="Code" type="string" value={jurisdiction.code} mono />
           <DetailField className="px-4 py-2" label="Level" type="string" value={LEVEL_LABELS[jurisdiction.level]} />
-          <DetailField className="px-4 py-2" label="Country" type="string" value={jurisdiction.countryCode} />
+          <DetailField
+            className="px-4 py-2"
+            label="Country"
+            type="string"
+            value={`${countryFlag(jurisdiction.countryCode)} ${jurisdiction.countryCode}`}
+          />
           <DetailField className="px-4 py-2" label="Region Code" type="string" value={jurisdiction.regionCode} />
           <DetailField className="px-4 py-2" label="Tax Union" type="string" value={jurisdiction.taxUnion} />
           <DetailField className="px-4 py-2" label="Parent" type="string" value={jurisdiction.parentName} />
@@ -224,8 +227,7 @@ const JurisdictionDetailContent: React.FC<JurisdictionDetailContentProps> = ({
         description={`Add a child jurisdiction under "${jurisdiction.name}".`}
         content={(close) => (
           <AddJurisdictionDialog
-            defaultParentId={jurisdiction.id}
-            defaultCountryCode={jurisdiction.countryCode}
+            parent={jurisdiction}
             onSuccess={() => {
               queryClient.invalidateQueries({ queryKey: TAX_JURISDICTION_CHILDREN_TABLE_KEY(jurisdiction.id) });
               close();

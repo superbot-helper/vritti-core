@@ -7,11 +7,12 @@ import {
   partyFunctionAssignmentSchema,
 } from './party-functions';
 import {
-  type PartyRegistrationFormData,
+  type PartyRegistrationPayload,
   type PartyRegistrationsTableResponse,
   type PartyTaxRegistrationRow,
   partyRegistrationSchema,
 } from './party-registrations';
+import { countryCodeField } from './tax-jurisdictions';
 
 export { REGISTRATION_TYPE_LABELS, REGISTRATION_TYPE_OPTIONS, type RegistrationType } from './party-registrations';
 
@@ -38,20 +39,21 @@ export const createCompanySchema = z
     email: z.string().email('Enter a valid email').max(255).optional().or(z.literal('')),
     phone: z.string().max(20).optional(),
     website: z.string().max(255).optional(),
-    jurisdictionId: z.uuid('Select a valid jurisdiction').nullable().optional(),
+    countryCode: countryCodeField.nullish(),
+    jurisdictionId: z.uuid('Select a valid state').nullish(),
     isActive: z.boolean(),
     line1: z.string().max(255).optional(),
     line2: z.string().optional(),
     city: z.string().optional(),
     region: z.string().optional(),
     postalCode: z.string().max(20).optional(),
-    countryCode: z.string().optional(),
+    addressCountryCode: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.line1 && !data.countryCode) {
+    if (data.line1 && !data.addressCountryCode) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['countryCode'],
+        path: ['addressCountryCode'],
         message: 'Country is required when an address is entered',
       });
     }
@@ -64,20 +66,21 @@ export const updateCompanySchema = z
     email: z.string().email('Enter a valid email').max(255).optional().or(z.literal('')),
     phone: z.string().max(20).nullable().optional(),
     website: z.string().max(255).nullable().optional(),
-    jurisdictionId: z.uuid('Select a valid jurisdiction').nullable().optional(),
+    countryCode: countryCodeField.nullish(),
+    jurisdictionId: z.uuid('Select a valid state').nullish(),
     isActive: z.boolean().optional(),
     line1: z.string().max(255).optional(),
     line2: z.string().optional(),
     city: z.string().optional(),
     region: z.string().optional(),
     postalCode: z.string().max(20).optional(),
-    countryCode: z.string().optional(),
+    addressCountryCode: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.line1 && !data.countryCode) {
+    if (data.line1 && !data.addressCountryCode) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['countryCode'],
+        path: ['addressCountryCode'],
         message: 'Country is required when an address is entered',
       });
     }
@@ -116,6 +119,7 @@ export interface CreateCompanyPayload {
   email?: string;
   phone?: string;
   website?: string;
+  countryCode?: string | null;
   jurisdictionId?: string | null;
   isActive: boolean;
   address?: CompanyAddressInput;
@@ -127,6 +131,7 @@ export interface UpdateCompanyPayload {
   email?: string;
   phone?: string | null;
   website?: string | null;
+  countryCode?: string | null;
   jurisdictionId?: string | null;
   isActive?: boolean;
   address?: CompanyAddressInput;
@@ -142,7 +147,7 @@ export interface UpdateCompanyPersonPayload {
   jobTitle?: string | null;
   functions?: PartyFunctionAssignment[];
 }
-export type CompanyRegistrationFormData = PartyRegistrationFormData;
+export type CompanyRegistrationPayload = PartyRegistrationPayload;
 
 export interface CompanyData {
   id: string;
@@ -151,6 +156,7 @@ export interface CompanyData {
   email: string | null;
   phone: string | null;
   website: string | null;
+  countryCode: string | null;
   jurisdictionId: string | null;
   jurisdictionName: string | null;
   isActive: boolean;

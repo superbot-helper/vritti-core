@@ -1,7 +1,17 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Trim } from '@vritti/api-sdk/decorators';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEmail, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsISO31661Alpha2,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  IsUUID,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { CompanyAddressInputDto } from './company-address-input.dto';
 
 export class UpdateCompanyDto {
@@ -46,10 +56,16 @@ export class UpdateCompanyDto {
   @MaxLength(255)
   website?: string | null;
 
-  @ApiPropertyOptional({ description: 'Tax jurisdiction ID' })
+  @ApiPropertyOptional({ description: 'Uppercase ISO 3166-1 alpha-2 country', example: 'IN', nullable: true })
+  @IsOptional()
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode?: string | null;
+
+  @ApiPropertyOptional({ description: "Tax jurisdiction ID — must be in the company's country", nullable: true })
   @IsOptional()
   @IsUUID('7')
-  jurisdictionId?: string;
+  jurisdictionId?: string | null;
 
   @ApiPropertyOptional({ description: 'Whether the company is selectable' })
   @IsOptional()

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
-import { and, asc, type SQL } from '@vritti/api-sdk/drizzle-orm';
-import { ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import { type FieldMap, FilterProcessor, type TablePageRequest } from '@vritti/api-sdk/data-table';
+import { and, asc, eq, type SQL } from '@vritti/api-sdk/drizzle-orm';
+import { NotFoundException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import { taxRegistrations } from '@/db/schema';
 import { TaxRegistrationDto } from '../dto/entity/tax-registration.dto';
@@ -17,27 +17,33 @@ export class TaxRegistrationsDomainService {
     registrationNumber: { column: taxRegistrations.registrationNumber, type: 'string' },
   };
   private static readonly FILTER_FIELD_MAP: FieldMap = {
-    legalEntityId: { column: taxRegistrations.legalEntityId, type: 'string' },
+    countryCode: { column: taxRegistrations.countryCode, type: 'string' },
     jurisdictionId: { column: taxRegistrations.jurisdictionId, type: 'string' },
     isActive: { column: taxRegistrations.isActive, type: 'boolean' },
   };
 
   constructor(private readonly repository: TaxRegistrationsDomainRepository) {}
 
-  async findForTable(state: TableViewState): Promise<{ result: TaxRegistrationDto[]; count: number }> {
+  // Returns a page of registrations, limited to one legal entity when the caller names it
+  async findForTable(
+    page: TablePageRequest,
+    legalEntityId?: string,
+  ): Promise<{ result: TaxRegistrationDto[]; count: number }> {
     const where = and(
-      FilterProcessor.buildWhere(state.filters, TaxRegistrationsDomainService.FILTER_FIELD_MAP),
-      FilterProcessor.buildSearch(state.search, TaxRegistrationsDomainService.SEARCH_FIELD_MAP),
+      legalEntityId ? eq(taxRegistrations.legalEntityId, legalEntityId) : undefined,
+      FilterProcessor.buildWhere(page.filters, TaxRegistrationsDomainService.FILTER_FIELD_MAP),
+      FilterProcessor.buildSearch(page.search, TaxRegistrationsDomainService.SEARCH_FIELD_MAP),
     );
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, {
+    const orderBy = FilterProcessor.buildOrderBy(page.sort, {
       ...TaxRegistrationsDomainService.SEARCH_FIELD_MAP,
       ...TaxRegistrationsDomainService.FILTER_FIELD_MAP,
     });
-    const { limit = 20, offset = 0 } = state.pagination;
+    const { limit = 20, offset = 0 } = page.pagination;
 
     const { result, count } = await this.repository.findForTable({
       where: (where as SQL) || undefined,
-      orderBy: orderBy.length > 0 ? orderBy : [asc(taxRegistrations.registrationNumber)],
+      orderBy:
+        orderBy.length > 0 ? orderBy : [asc(taxRegistrations.countryCode), asc(taxRegistrations.registrationNumber)],
       limit,
       offset,
     });
@@ -60,19 +66,23 @@ export class TaxRegistrationsDomainService {
     return TaxRegistrationDto.from(row);
   }
 
+  // Adds a registration for a country and, optionally, one of its jurisdictions; a GSTIN must name a state
   async create(data: CreateTaxRegistrationDto): Promise<CreateResponseDto<TaxRegistrationDto>> {
-    await this.assertNumberFree(data.registrationNumber);
+    const registration = { ...data, jurisdictionId: data.jurisdictionId ?? null };
+    const jurisdiction = await this.repository.findJurisdictionOrThrow(registration);
+    await this.repository.assertNoConflicts(registration, jurisdiction);
 
     const created = await this.repository.create({
       ...(data.legalEntityId ? { legalEntityId: data.legalEntityId } : {}),
-      jurisdictionId: data.jurisdictionId,
+      countryCode: data.countryCode,
+      jurisdictionId: registration.jurisdictionId,
       registrationNumber: data.registrationNumber,
       registrationType: data.registrationType,
       isPrimary: data.isPrimary ?? false,
     });
     if (created.isPrimary) await this.repository.clearPrimary(created.legalEntityId, created.id);
 
-    this.logger.log(`Registered ${data.registrationNumber} for legal entity ${data.legalEntityId}`);
+    this.logger.log(`Registered ${data.registrationNumber} for legal entity ${created.legalEntityId}`);
     return {
       success: true,
       message: `"${data.registrationNumber}" added.`,
@@ -80,35 +90,29 @@ export class TaxRegistrationsDomainService {
     };
   }
 
+  // Updates a registration, checking its resulting country, jurisdiction and number as a whole
   async update(id: string, data: UpdateTaxRegistrationDto): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Tax registration not found.');
-    if (data.registrationNumber && data.registrationNumber !== existing.registrationNumber) {
-      await this.assertNumberFree(data.registrationNumber);
-    }
+    const existing = await this.repository.findByIdOrThrow(id);
+    const registration = {
+      legalEntityId: existing.legalEntityId,
+      countryCode: data.countryCode ?? existing.countryCode,
+      jurisdictionId: data.jurisdictionId === undefined ? existing.jurisdictionId : data.jurisdictionId,
+      registrationNumber: data.registrationNumber ?? existing.registrationNumber,
+      registrationType: data.registrationType ?? existing.registrationType,
+    };
+    const jurisdiction = await this.repository.findJurisdictionOrThrow(registration);
+    await this.repository.assertNoConflicts(registration, jurisdiction, id);
 
     await this.repository.update(id, data);
     if (data.isPrimary) await this.repository.clearPrimary(existing.legalEntityId, id);
 
-    return { success: true, message: `"${data.registrationNumber ?? existing.registrationNumber}" updated.` };
+    return { success: true, message: `"${registration.registrationNumber}" updated.` };
   }
 
+  // Removes a registration
   async delete(id: string): Promise<SuccessResponseDto> {
-    const existing = await this.repository.findById(id);
-    if (!existing) throw new NotFoundException('Tax registration not found.');
+    const existing = await this.repository.findByIdOrThrow(id);
     await this.repository.delete(id);
     return { success: true, message: `"${existing.registrationNumber}" removed.` };
-  }
-
-  // The number is unique per organization, so a clash is reported before the constraint fires
-  private async assertNumberFree(registrationNumber: string): Promise<void> {
-    const clash = await this.repository.findByNumber(registrationNumber);
-    if (clash) {
-      throw new ConflictException({
-        label: 'Already Registered',
-        detail: `"${registrationNumber}" is already recorded against a legal entity in this organization.`,
-        errors: [{ field: 'registrationNumber', message: 'Already in use' }],
-      });
-    }
   }
 }

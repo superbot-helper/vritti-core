@@ -22,11 +22,11 @@ export class TaxJurisdictionsController {
     return this.service.count();
   }
 
-  // Returns tax jurisdictions as a tree hierarchy for TreeView
+  // Returns tax jurisdictions as a tree hierarchy for TreeView, optionally for one country
   @MessagePattern({ cmd: 'org.taxJurisdictions.tree' })
-  async tree(@Payload() data?: { search?: string }): Promise<TaxJurisdictionTreeDto[]> {
-    this.logger.log('taxJurisdictions.tree');
-    return this.service.tree(data?.search);
+  async tree(@Payload() data?: { search?: string; country?: string }): Promise<TaxJurisdictionTreeDto[]> {
+    this.logger.log(`taxJurisdictions.tree — country: ${data?.country ?? 'all'}`);
+    return this.service.tree(data?.search, data?.country);
   }
 
   // Returns paginated child jurisdictions for a given parent ID

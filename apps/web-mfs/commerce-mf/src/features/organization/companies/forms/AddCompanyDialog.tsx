@@ -3,13 +3,13 @@ import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form, FormSection } from '@vritti/quantum-ui/Form';
 import { PhoneField } from '@vritti/quantum-ui/PhoneField';
 import { Switch } from '@vritti/quantum-ui/Switch';
+import { ISOCountrySelect } from '@vritti/quantum-ui/selects/iso-country';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useCreateCompany } from '@/hooks/organization/companies';
 import { type CreateCompanyFormData, createCompanySchema } from '@/schemas/companies';
-import { ISOCountrySelect } from '@/selectors/iso-country';
 import { JurisdictionSelector } from '@/selectors/jurisdiction';
 
 interface AddCompanyDialogProps {
@@ -26,16 +26,15 @@ export const AddCompanyDialog: React.FC<AddCompanyDialogProps> = ({ onSuccess, o
       email: '',
       phone: '',
       website: '',
-      jurisdictionId: undefined,
       isActive: true,
       line1: '',
       line2: '',
       city: '',
       region: '',
       postalCode: '',
-      countryCode: undefined,
     },
   });
+  const countryCode = useWatch({ control: form.control, name: 'countryCode' });
 
   const createMutation = useCreateCompany({ onSuccess });
 
@@ -51,17 +50,18 @@ export const AddCompanyDialog: React.FC<AddCompanyDialogProps> = ({ onSuccess, o
         email: data.email,
         phone: data.phone,
         website: data.website,
-        jurisdictionId: data.jurisdictionId,
+        countryCode: data.countryCode ?? null,
+        jurisdictionId: data.jurisdictionId ?? null,
         isActive: data.isActive,
         address:
-          data.line1 && data.countryCode
+          data.line1 && data.addressCountryCode
             ? {
                 line1: data.line1,
                 line2: data.line2,
                 city: data.city,
                 region: data.region,
                 postalCode: data.postalCode,
-                countryCode: data.countryCode,
+                countryCode: data.addressCountryCode,
               }
             : undefined,
       })}
@@ -70,7 +70,15 @@ export const AddCompanyDialog: React.FC<AddCompanyDialogProps> = ({ onSuccess, o
         <FormSection title="Details">
           <TextField name="displayName" label="Name" placeholder="e.g. Acme Traders" />
           <TextField name="legalName" label="Legal Name" placeholder="e.g. Acme Traders Pvt Ltd" />
-          <JurisdictionSelector name="jurisdictionId" clearable />
+          <ISOCountrySelect
+            name="countryCode"
+            description="Where the company is based for tax"
+            clearable
+            onOptionSelect={(option) => {
+              if (option?.value !== countryCode) form.resetField('jurisdictionId');
+            }}
+          />
+          <JurisdictionSelector name="jurisdictionId" label="State" country={countryCode ?? undefined} clearable />
         </FormSection>
         <FormSection title="Contact">
           <TextField name="email" label="Email" type="email" placeholder="e.g. contact@acme.com" />
@@ -83,7 +91,7 @@ export const AddCompanyDialog: React.FC<AddCompanyDialogProps> = ({ onSuccess, o
           <TextField name="city" label="City" placeholder="e.g. Bengaluru" />
           <TextField name="region" label="State / Region" placeholder="e.g. Karnataka" />
           <TextField name="postalCode" label="Postal Code" placeholder="e.g. 560001" />
-          <ISOCountrySelect name="countryCode" label="Country" />
+          <ISOCountrySelect name="addressCountryCode" />
         </FormSection>
         <FormSection title="Status" contentClassName="grid grid-cols-1 gap-4">
           <Switch name="isActive" label="Active" description="Inactive companies are hidden from selection" />

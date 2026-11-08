@@ -1,13 +1,33 @@
 import { Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
-import { type TaxRegistrationType, taxRegistrationTypeEnum } from '@/db/schema';
+import {
+  IsBoolean,
+  IsIn,
+  IsISO31661Alpha2,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
+import {
+  type TaxRegistrationScheme,
+  type TaxRegistrationType,
+  taxRegistrationSchemeEnum,
+  taxRegistrationTypeEnum,
+} from '@/db/schema';
 
 export class CreatePersonRegistrationDto {
   @IsUUID('7')
   personId: string;
 
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode: string;
+
+  @IsOptional()
   @IsUUID('7')
-  jurisdictionId: string;
+  jurisdictionId?: string | null;
 
   @Trim({ nullify: false })
   @IsString()
@@ -17,6 +37,10 @@ export class CreatePersonRegistrationDto {
 
   @IsIn(taxRegistrationTypeEnum.enumValues)
   registrationType: TaxRegistrationType;
+
+  @IsOptional()
+  @IsIn(taxRegistrationSchemeEnum.enumValues)
+  scheme?: TaxRegistrationScheme;
 
   @IsOptional()
   @IsBoolean()

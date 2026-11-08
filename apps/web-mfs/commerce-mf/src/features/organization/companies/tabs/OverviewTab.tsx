@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@vritti/quantum-ui/Card';
 import { DetailField } from '@vritti/quantum-ui/DetailField';
+import { countryFlag } from '@vritti/quantum-ui/selects/iso-country';
 import type { CompanyData } from '@/schemas/companies';
 
 interface OverviewTabProps {
@@ -25,7 +26,12 @@ export const OverviewTab = ({ company }: OverviewTabProps) => {
             <DetailField label="Email" type="string" value={company.email} />
             <DetailField label="Phone" type="string" value={company.phone} />
             <DetailField label="Website" type="string" value={company.website} />
-            <DetailField label="Jurisdiction" type="string" value={company.jurisdictionName} />
+            <DetailField
+              label="Country"
+              type="string"
+              value={company.countryCode && `${countryFlag(company.countryCode)} ${company.countryCode}`}
+            />
+            <DetailField label="State" type="string" value={company.jurisdictionName} />
             <DetailField label="Created" type="dateTime" value={company.createdAt} />
             <DetailField label="Address" type="string" className="col-span-2 md:col-span-3" value={addressText} />
           </div>

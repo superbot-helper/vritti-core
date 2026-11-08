@@ -6,7 +6,7 @@ import type {
   CompanyData,
   CompanyPeopleTableResponse,
   CompanyPersonRow,
-  CompanyRegistrationFormData,
+  CompanyRegistrationPayload,
   CompanyRegistrationsTableResponse,
   CompanyTaxRegistrationRow,
   CreateCompanyPayload,
@@ -104,7 +104,7 @@ export function createCompanyRegistration({
   data,
 }: {
   companyId: string;
-  data: CompanyRegistrationFormData;
+  data: CompanyRegistrationPayload;
 }): Promise<CompanyTaxRegistrationRow> {
   return axios
     .post<CreateResponse<CompanyTaxRegistrationRow>>(`${BASE}/${companyId}/registrations`, data)
@@ -118,7 +118,7 @@ export function updateCompanyRegistration({
 }: {
   companyId: string;
   registrationId: string;
-  data: CompanyRegistrationFormData;
+  data: CompanyRegistrationPayload;
 }): Promise<SuccessResponse> {
   return axios.patch<SuccessResponse>(`${BASE}/${companyId}/registrations/${registrationId}`, data).then((r) => r.data);
 }

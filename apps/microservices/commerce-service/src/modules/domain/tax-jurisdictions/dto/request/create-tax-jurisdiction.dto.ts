@@ -1,5 +1,16 @@
-import { IsCode, IsCountry, Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, Length, MaxLength } from 'class-validator';
+import { IsCode, Trim } from '@vritti/api-sdk/decorators';
+import {
+  IsBoolean,
+  IsIn,
+  IsISO31661Alpha2,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  IsUUID,
+  Length,
+  MaxLength,
+} from 'class-validator';
 import { type TaxJurisdictionLevel, taxJurisdictionLevelEnum } from '@/db/schema';
 
 export class CreateTaxJurisdictionDto {
@@ -21,9 +32,10 @@ export class CreateTaxJurisdictionDto {
 
   @IsOptional()
   @IsUUID('7')
-  parentId?: string;
+  parentId?: string | null;
 
-  @IsCountry()
+  @IsISO31661Alpha2()
+  @IsUppercase()
   countryCode: string;
 
   @Trim()

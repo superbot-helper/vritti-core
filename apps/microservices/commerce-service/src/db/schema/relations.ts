@@ -102,11 +102,30 @@ export const relations = defineRelations(schema, (r) => ({
     }),
   },
   taxGroups: {
-    taxRates: r.many.taxRates(),
+    rates: r.many.taxGroupRates(),
+    classGroups: r.many.taxClassGroups(),
   },
-  taxRates: {
+  taxGroupRates: {
     taxGroup: r.one.taxGroups({
-      from: r.taxRates.taxGroupId,
+      from: r.taxGroupRates.taxGroupId,
+      to: r.taxGroups.id,
+    }),
+    taxComponent: r.one.taxComponents({
+      from: r.taxGroupRates.taxComponentId,
+      to: r.taxComponents.id,
+    }),
+    jurisdiction: r.one.taxJurisdictions({
+      from: r.taxGroupRates.jurisdictionId,
+      to: r.taxJurisdictions.id,
+    }),
+  },
+  taxClassGroups: {
+    taxClass: r.one.taxClasses({
+      from: r.taxClassGroups.taxClassId,
+      to: r.taxClasses.id,
+    }),
+    taxGroup: r.one.taxGroups({
+      from: r.taxClassGroups.taxGroupId,
       to: r.taxGroups.id,
     }),
   },
@@ -482,36 +501,6 @@ export const relations = defineRelations(schema, (r) => ({
     inventoryItem: r.one.inventoryItems({
       from: r.stockTransfers.inventoryItemId,
       to: r.inventoryItems.id,
-    }),
-  },
-  invoices: {
-    invoiceItems: r.many.invoiceItems(),
-    payments: r.many.payments(),
-    creditNoteApplications: r.many.creditNoteApplications(),
-  },
-  invoiceItems: {
-    invoice: r.one.invoices({
-      from: r.invoiceItems.invoiceId,
-      to: r.invoices.id,
-    }),
-  },
-  payments: {
-    invoice: r.one.invoices({
-      from: r.payments.invoiceId,
-      to: r.invoices.id,
-    }),
-  },
-  creditNotes: {
-    creditNoteApplications: r.many.creditNoteApplications(),
-  },
-  creditNoteApplications: {
-    creditNote: r.one.creditNotes({
-      from: r.creditNoteApplications.creditNoteId,
-      to: r.creditNotes.id,
-    }),
-    invoice: r.one.invoices({
-      from: r.creditNoteApplications.invoiceId,
-      to: r.invoices.id,
     }),
   },
   orders: {

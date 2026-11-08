@@ -4,9 +4,11 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
+  IsISO31661Alpha2,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUppercase,
   IsUUID,
   MaxLength,
   ValidateNested,
@@ -55,10 +57,16 @@ export class CreateCompanyDto {
   @MaxLength(255)
   website?: string | null;
 
-  @ApiPropertyOptional({ description: 'Tax jurisdiction ID' })
+  @ApiPropertyOptional({ description: 'Uppercase ISO 3166-1 alpha-2 country', example: 'IN', nullable: true })
+  @IsOptional()
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode?: string | null;
+
+  @ApiPropertyOptional({ description: "Tax jurisdiction ID — must be in the company's country", nullable: true })
   @IsOptional()
   @IsUUID('7')
-  jurisdictionId?: string;
+  jurisdictionId?: string | null;
 
   @ApiProperty({ description: 'Whether the company is selectable' })
   @IsBoolean()

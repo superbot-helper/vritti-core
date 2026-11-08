@@ -5,10 +5,15 @@ import { type ColumnDef, DataTable, RowActions, StringCell, useDataTable } from 
 import { Dialog } from '@vritti/quantum-ui/Dialog';
 import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
 import { StatusSwitch } from '@vritti/quantum-ui/StatusSwitch';
+import { countryFlag } from '@vritti/quantum-ui/selects/iso-country';
 import { FileText, Pencil, Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
-import { type PartyTaxRegistrationRow, REGISTRATION_TYPE_LABELS } from '@/schemas/party-registrations';
+import {
+  type PartyTaxRegistrationRow,
+  REGISTRATION_SCHEME_LABELS,
+  REGISTRATION_TYPE_LABELS,
+} from '@/schemas/party-registrations';
 import type { RegistrationsBinding } from '../bindings';
 import { AddRegistrationDialog } from '../forms/AddRegistrationDialog';
 import { EditRegistrationDialog } from '../forms/EditRegistrationDialog';
@@ -42,9 +47,16 @@ export const RegistrationsTab: React.FC<RegistrationsTabProps> = ({ partyId, bin
   const columns = useMemo<ColumnDef<PartyTaxRegistrationRow>[]>(
     () => [
       {
+        accessorKey: 'countryCode',
+        header: 'Country',
+        cell: ({ row }) => `${countryFlag(row.original.countryCode)} ${row.original.countryCode}`,
+        enableSorting: false,
+      },
+      {
         accessorKey: 'jurisdictionName',
-        header: 'Jurisdiction',
-        cell: ({ row }) => <StringCell value={row.original.jurisdictionName} />,
+        header: 'State',
+        cell: ({ row }) =>
+          row.original.jurisdictionName ?? <span className="text-muted-foreground">Whole country</span>,
         enableSorting: true,
       },
       {
@@ -58,16 +70,14 @@ export const RegistrationsTab: React.FC<RegistrationsTabProps> = ({ partyId, bin
         cell: ({ row }) => <Badge variant="outline">{REGISTRATION_TYPE_LABELS[row.original.registrationType]}</Badge>,
       },
       {
+        accessorKey: 'scheme',
+        header: 'Scheme',
+        cell: ({ row }) => REGISTRATION_SCHEME_LABELS[row.original.scheme],
+      },
+      {
         accessorKey: 'isPrimary',
         header: 'Primary',
-        cell: ({ row }) =>
-          row.original.isPrimary ? (
-            <Badge variant="secondary" className="bg-success/15 text-success">
-              Primary
-            </Badge>
-          ) : (
-            '—'
-          ),
+        cell: ({ row }) => (row.original.isPrimary ? <Badge variant="success">Primary</Badge> : '—'),
       },
       {
         accessorKey: 'isActive',
@@ -176,7 +186,7 @@ export const RegistrationsTab: React.FC<RegistrationsTabProps> = ({ partyId, bin
         handle={addDialog}
         icon={FileText}
         title="Add Tax Registration"
-        description="Record a tax registration number for this party in a jurisdiction."
+        description="Record a tax registration number for this party, in its country and state."
         content={(close) => (
           <AddRegistrationDialog partyId={partyId} binding={binding} onSuccess={close} onCancel={close} />
         )}

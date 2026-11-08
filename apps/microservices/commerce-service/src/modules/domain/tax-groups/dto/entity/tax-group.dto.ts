@@ -1,37 +1,34 @@
-import type { TaxGroup, TaxRate } from '@/db/schema';
-
-export class TaxRateDto {
-  id: string;
-  name: string;
-  rate: number;
-  sortOrder: number;
-
-  // Maps a TaxRate entity to a TaxRateDto
-  static from(entity: TaxRate): TaxRateDto {
-    const dto = new TaxRateDto();
-    dto.id = entity.id;
-    dto.name = entity.name;
-    dto.rate = entity.rate;
-    dto.sortOrder = entity.sortOrder;
-    return dto;
-  }
-}
+import type { TaxGroup, TaxTreatment } from '@/db/schema';
 
 export class TaxGroupDto {
   id: string;
+  countryCode: string;
+  code: string;
   name: string;
+  treatment: TaxTreatment;
+  legalText: string | null;
   isActive: boolean;
+  rateCount: number;
+  classCount: number;
   canDelete: boolean;
-  taxRates: TaxRateDto[];
+  createdAt: string;
+  updatedAt: string;
 
-  // Maps a TaxGroup entity with its tax rates to a TaxGroupDto
-  static from(entity: TaxGroup, rates: TaxRate[] = [], canDelete = true): TaxGroupDto {
+  // Maps a tax group with its rate and class-mapping counts; a group with mapped classes cannot be deleted
+  static from(entity: TaxGroup & { rateCount: number; classCount: number }): TaxGroupDto {
     const dto = new TaxGroupDto();
     dto.id = entity.id;
+    dto.countryCode = entity.countryCode;
+    dto.code = entity.code;
     dto.name = entity.name;
+    dto.treatment = entity.treatment;
+    dto.legalText = entity.legalText ?? null;
     dto.isActive = entity.isActive;
-    dto.canDelete = canDelete;
-    dto.taxRates = rates.map(TaxRateDto.from);
+    dto.rateCount = entity.rateCount;
+    dto.classCount = entity.classCount;
+    dto.canDelete = entity.classCount === 0;
+    dto.createdAt = entity.createdAt.toISOString();
+    dto.updatedAt = entity.updatedAt.toISOString();
     return dto;
   }
 }

@@ -1,25 +1,6 @@
-import { Trim } from '@vritti/api-sdk/decorators';
-import { Type } from 'class-transformer';
-import {
-  IsArray,
-  IsBoolean,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsUUID,
-  ValidateNested,
-} from 'class-validator';
-
-export class UpdateTaxRateDto {
-  @Trim({ nullify: false })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @IsNumber({ maxDecimalPlaces: 2 })
-  rate: number;
-}
+import { IsCode, Trim } from '@vritti/api-sdk/decorators';
+import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { type TaxTreatment, taxTreatmentEnum } from '@/db/schema';
 
 export class UpdateTaxGroupDto {
   @IsUUID('7')
@@ -28,13 +9,27 @@ export class UpdateTaxGroupDto {
   @Trim({ nullify: false })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  @IsCode()
+  code?: string;
+
+  @Trim({ nullify: false })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   name?: string;
 
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => UpdateTaxRateDto)
-  taxRates?: UpdateTaxRateDto[];
+  @IsIn(taxTreatmentEnum.enumValues)
+  treatment?: TaxTreatment;
+
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  legalText?: string | null;
 
   @IsOptional()
   @IsBoolean()

@@ -1,8 +1,12 @@
 import { IsCode, Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsIn, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsISO31661Alpha2, IsNotEmpty, IsString, IsUppercase, MaxLength } from 'class-validator';
 import { type TaxAuthorityLevel, taxAuthorityLevelEnum } from '@/db/schema';
 
 export class CreateTaxComponentDto {
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode: string;
+
   @Trim({ nullify: false })
   @IsString()
   @IsNotEmpty()

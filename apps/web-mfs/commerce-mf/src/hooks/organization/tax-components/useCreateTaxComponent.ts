@@ -1,8 +1,8 @@
 import type { UseMutationOptions } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
-import type { TaxComponentData } from '@/schemas/tax-components';
-import { type CreateTaxComponentPayload, createTaxComponent } from '@/services/organization/tax-components.service';
+import type { CreateTaxComponentPayload, TaxComponentData } from '@/schemas/tax-components';
+import { createTaxComponent } from '@/services/organization/tax-components.service';
 import { TAX_COMPONENTS_TABLE_KEY } from './keys';
 
 export function useCreateTaxComponent(

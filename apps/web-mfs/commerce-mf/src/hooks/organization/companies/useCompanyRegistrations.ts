@@ -5,7 +5,7 @@ import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
 import type {
-  CompanyRegistrationFormData,
+  CompanyRegistrationPayload,
   CompanyRegistrationsTableResponse,
   CompanyTaxRegistrationRow,
 } from '@/schemas/companies';
@@ -34,10 +34,10 @@ export function useCompanyRegistrationsTable(
 
 export function useCreateCompanyRegistration(
   companyId: string,
-  options?: Omit<UseMutationOptions<CompanyTaxRegistrationRow, AxiosError, CompanyRegistrationFormData>, 'mutationFn'>,
+  options?: Omit<UseMutationOptions<CompanyTaxRegistrationRow, AxiosError, CompanyRegistrationPayload>, 'mutationFn'>,
 ) {
   const queryClient = useQueryClient();
-  return useMutation<CompanyTaxRegistrationRow, AxiosError, CompanyRegistrationFormData>({
+  return useMutation<CompanyTaxRegistrationRow, AxiosError, CompanyRegistrationPayload>({
     ...options,
     mutationFn: (data) => createCompanyRegistration({ companyId, data }),
     onSuccess: (...args) => {
@@ -55,7 +55,7 @@ interface SetRegistrationActiveVars {
 
 interface UpdateRegistrationVars {
   registrationId: string;
-  data: CompanyRegistrationFormData;
+  data: CompanyRegistrationPayload;
 }
 
 export function useUpdateCompanyRegistration(

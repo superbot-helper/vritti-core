@@ -83,3 +83,8 @@ export const SmsProviderSelector = remoteSelector<Omit<SelectProps, 'optionsEndp
   'communications/Selectors/SmsProvider',
   'SmsProviderSelector',
 );
+
+export const TaxGroupSelector = remoteSelector<Omit<SelectProps, 'optionsEndpoint'> & { anyCountry: true }>(
+  'commerce/Selectors/TaxGroup',
+  'TaxGroupSelector',
+);

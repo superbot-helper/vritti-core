@@ -21,7 +21,7 @@ export class TaxComponentsGatewayController {
 
   constructor(private readonly service: TaxComponentsGatewayService) {}
 
-  // Returns paginated tax components for the data table
+  // Returns paginated tax components for the data table, narrowed to the country in the saved table context if any
   @Get('table')
   @RequirePermission(ORG_TAX_COMPONENTS.view)
   getTable(@UserId() userId: string): Promise<TaxComponentTableResponseDto> {
@@ -29,7 +29,7 @@ export class TaxComponentsGatewayController {
     return this.service.findForTable(userId);
   }
 
-  // Creates a new tax component
+  // Creates a tax component for one country
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @RequirePermission(ORG_TAX_COMPONENTS.add)

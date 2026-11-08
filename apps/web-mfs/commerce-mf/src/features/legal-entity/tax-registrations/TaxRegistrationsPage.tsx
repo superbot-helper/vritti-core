@@ -7,6 +7,7 @@ import { Dialog } from '@vritti/quantum-ui/Dialog';
 import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
 import { PageHeader } from '@vritti/quantum-ui/PageHeader';
 import { SelectFilter } from '@vritti/quantum-ui/Select';
+import { countryFlag } from '@vritti/quantum-ui/selects/iso-country';
 import { BadgeCheck, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import {
@@ -61,13 +62,23 @@ export const TaxRegistrationsPage = () => {
         enableSorting: false,
       },
       {
-        accessorKey: 'jurisdictionId',
-        header: () => <div className="text-center">Tax Jurisdiction</div>,
+        accessorKey: 'countryCode',
+        header: () => <div className="text-center">Country</div>,
+        cell: ({ row }) => (
+          <div className="flex justify-center">
+            {countryFlag(row.original.countryCode)} {row.original.countryCode}
+          </div>
+        ),
+        enableSorting: false,
+      },
+      {
+        accessorKey: 'jurisdictionName',
+        header: () => <div className="text-center">State</div>,
         cell: ({ row }) => (
           <div className="flex items-center justify-center gap-2">
-            {row.original.jurisdictionName ?? '—'}
+            {row.original.jurisdictionName ?? <span className="text-muted-foreground">Whole country</span>}
             {row.original.jurisdictionCode && (
-              <span className="font-mono text-muted-foreground text-xs">{row.original.jurisdictionCode}</span>
+              <StringCell value={row.original.jurisdictionCode} mono className="text-muted-foreground text-xs" />
             )}
           </div>
         ),

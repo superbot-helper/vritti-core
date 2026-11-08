@@ -3,16 +3,15 @@ import type { CreateResponse, SuccessResponse, TableResponse } from '@vritti/qua
 import type {
   TaxJurisdictionCountData,
   TaxJurisdictionData,
-  TaxJurisdictionFormData,
+  TaxJurisdictionPayload,
   TaxJurisdictionTreeNode,
+  TaxJurisdictionTreeQuery,
 } from '@/schemas/tax-jurisdictions';
 
-export function getTaxJurisdictionsTree(search?: string): Promise<TaxJurisdictionTreeNode[]> {
+// The jurisdictions as a tree with states at the top, narrowed to one country when it is given
+export function getTaxJurisdictionsTree(query: TaxJurisdictionTreeQuery): Promise<TaxJurisdictionTreeNode[]> {
   return axios
-    .get<TaxJurisdictionTreeNode[]>('commerce-api/tax-jurisdictions/tree', {
-      params: search ? { search } : undefined,
-      showSuccessToast: false,
-    })
+    .get<TaxJurisdictionTreeNode[]>('commerce-api/tax-jurisdictions/tree', { params: query })
     .then((r) => r.data);
 }
 
@@ -30,7 +29,7 @@ export function getTaxJurisdiction(id: string): Promise<TaxJurisdictionData> {
   return axios.get<TaxJurisdictionData>(`commerce-api/tax-jurisdictions/${id}`).then((r) => r.data);
 }
 
-export function createTaxJurisdiction(data: TaxJurisdictionFormData): Promise<CreateResponse<TaxJurisdictionData>> {
+export function createTaxJurisdiction(data: TaxJurisdictionPayload): Promise<CreateResponse<TaxJurisdictionData>> {
   return axios.post<CreateResponse<TaxJurisdictionData>>('commerce-api/tax-jurisdictions', data).then((r) => r.data);
 }
 
@@ -39,7 +38,7 @@ export function updateTaxJurisdiction({
   data,
 }: {
   id: string;
-  data: Partial<TaxJurisdictionFormData>;
+  data: TaxJurisdictionPayload;
 }): Promise<SuccessResponse> {
   return axios.patch<SuccessResponse>(`commerce-api/tax-jurisdictions/${id}`, data).then((r) => r.data);
 }

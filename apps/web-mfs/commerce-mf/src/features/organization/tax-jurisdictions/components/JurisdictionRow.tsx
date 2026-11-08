@@ -1,13 +1,12 @@
 import { Badge } from '@vritti/quantum-ui/Badge';
 import type { TreeDataItem, TreeRenderItemParams } from '@vritti/quantum-ui/TreeView';
 import { Typography } from '@vritti/quantum-ui/Typography';
-import { Building2, Globe, Landmark, type LucideIcon, Map as MapIcon, MapPin } from 'lucide-react';
+import { Building2, Landmark, type LucideIcon, Map as MapIcon, MapPin } from 'lucide-react';
 import type React from 'react';
 import { type TaxJurisdictionLevel, TaxJurisdictionLevelValues } from '@/schemas/tax-jurisdictions';
 
 // Static icon per jurisdiction level, broad to narrow.
 export const JURISDICTION_LEVEL_ICON: Record<TaxJurisdictionLevel, LucideIcon> = {
-  [TaxJurisdictionLevelValues.COUNTRY]: Globe,
   [TaxJurisdictionLevelValues.STATE]: MapIcon,
   [TaxJurisdictionLevelValues.COUNTY]: Landmark,
   [TaxJurisdictionLevelValues.CITY]: Building2,

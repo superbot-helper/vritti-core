@@ -1,14 +1,36 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsISO31661Alpha2,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 const REGISTRATION_TYPES = ['GSTIN', 'VAT', 'TIN', 'OTHER'] as const;
 
 export class UpdateTaxRegistrationDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Uppercase ISO 3166-1 alpha-2 country the registration is issued in',
+    example: 'IN',
+  })
+  @IsOptional()
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Jurisdiction in that country; null makes the registration national (not allowed for a GSTIN)',
+    nullable: true,
+  })
   @IsOptional()
   @IsUUID('7')
-  jurisdictionId?: string;
+  jurisdictionId?: string | null;
 
   @ApiPropertyOptional({ example: '36ABCDE1234F1Z5' })
   @IsOptional()

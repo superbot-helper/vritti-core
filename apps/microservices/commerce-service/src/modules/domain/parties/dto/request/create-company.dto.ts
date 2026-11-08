@@ -3,9 +3,11 @@ import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
+  IsISO31661Alpha2,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUppercase,
   IsUUID,
   MaxLength,
   ValidateNested,
@@ -49,8 +51,13 @@ export class CreateCompanyDto {
   website?: string | null;
 
   @IsOptional()
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode?: string | null;
+
+  @IsOptional()
   @IsUUID('7')
-  jurisdictionId?: string;
+  jurisdictionId?: string | null;
 
   @IsBoolean()
   isActive: boolean;

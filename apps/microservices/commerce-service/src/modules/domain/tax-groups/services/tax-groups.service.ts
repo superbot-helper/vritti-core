@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
-import { and, asc, ilike } from '@vritti/api-sdk/drizzle-orm';
-import { NotFoundException } from '@vritti/api-sdk/exceptions';
+import { and, asc } from '@vritti/api-sdk/drizzle-orm';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import { type SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
 import { taxGroups } from '@/db/schema';
@@ -14,134 +13,99 @@ import { TaxGroupsDomainRepository } from '../repositories/tax-groups.repository
 export class TaxGroupsDomainService {
   private readonly logger = new Logger(TaxGroupsDomainService.name);
 
-  // Whitelist of fields the frontend may filter/search/sort on
   private static readonly FIELD_MAP: FieldMap = {
+    country: { column: taxGroups.countryCode, type: 'string' },
+    code: { column: taxGroups.code, type: 'string' },
     name: { column: taxGroups.name, type: 'string' },
+    treatment: { column: taxGroups.treatment, type: 'string' },
     isActive: { column: taxGroups.isActive, type: 'boolean' },
   };
 
-  constructor(private readonly taxGroupsRepository: TaxGroupsDomainRepository) {}
+  // Search runs ILIKE, which Postgres enums (treatment) don't support — so it only covers the text columns
+  private static readonly SEARCH_FIELD_MAP: FieldMap = {
+    code: TaxGroupsDomainService.FIELD_MAP.code,
+    name: TaxGroupsDomainService.FIELD_MAP.name,
+  };
 
-  // Returns a paginated page of tax groups (with rates + canDelete) for the data table
+  constructor(private readonly repository: TaxGroupsDomainRepository) {}
+
+  // Returns paginated tax groups with their rate and class counts, filtered by the table's panel and context
   async findForTable(state: TableViewState): Promise<{ result: TaxGroupDto[]; count: number }> {
-    const where = and(
-      FilterProcessor.buildWhere(state.filters, TaxGroupsDomainService.FIELD_MAP),
-      FilterProcessor.buildSearch(state.search, TaxGroupsDomainService.FIELD_MAP),
-    );
-    const orderBy = FilterProcessor.buildOrderBy(state.sort, TaxGroupsDomainService.FIELD_MAP);
-    const { limit = 20, offset = 0 } = state.pagination ?? {};
-
-    const { result: groups, count } = await this.taxGroupsRepository.findAllForTable({
-      where: where || undefined,
-      orderBy: orderBy.length > 0 ? orderBy : [asc(taxGroups.name)],
+    const fieldMap = TaxGroupsDomainService.FIELD_MAP;
+    const { limit = 20, offset = 0 } = state.pagination;
+    const orderBy = FilterProcessor.buildOrderBy(state.sort, fieldMap);
+    const { result, count } = await this.repository.findDetailsForTable({
+      where: and(
+        FilterProcessor.buildWhere(state.filters, fieldMap),
+        FilterProcessor.buildSearch(state.search, TaxGroupsDomainService.SEARCH_FIELD_MAP),
+      ),
+      orderBy: orderBy.length > 0 ? orderBy : [asc(taxGroups.countryCode), asc(taxGroups.name)],
       limit,
       offset,
     });
-
-    const ids = groups.map((g) => g.id);
-    const [ratesByGroup, referenced] = await Promise.all([
-      this.taxGroupsRepository.findRatesByGroupIds(ids),
-      this.taxGroupsRepository.findReferencedIds(ids),
-    ]);
-
-    return {
-      result: groups.map((g) => TaxGroupDto.from(g, ratesByGroup.get(g.id) ?? [], !referenced.has(g.id))),
-      count,
-    };
+    return { result: result.map(TaxGroupDto.from), count };
   }
 
-  // Returns all tax groups (with rates + canDelete) for the mobile plain list — base groups first by name.
-  async list(search?: string): Promise<TaxGroupDto[]> {
-    const { result: groups } = await this.taxGroupsRepository.findAllForTable({
-      where: search ? ilike(taxGroups.name, `%${search}%`) : undefined,
-      orderBy: [asc(taxGroups.name)],
-      limit: 500,
-      offset: 0,
-    });
-    const ids = groups.map((g) => g.id);
-    const [ratesByGroup, referenced] = await Promise.all([
-      this.taxGroupsRepository.findRatesByGroupIds(ids),
-      this.taxGroupsRepository.findReferencedIds(ids),
-    ]);
-    return groups.map((g) => TaxGroupDto.from(g, ratesByGroup.get(g.id) ?? [], !referenced.has(g.id)));
-  }
-
-  // Returns tax groups as dropdown options (id → name), searchable + paginated
-  findForSelect(query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
-    return this.taxGroupsRepository.findForSelect({
+  // Returns tax-group options for select dropdowns, only one country's when `country` is given
+  findForSelect(query: SelectOptionsQueryDto, options?: { country?: string }): Promise<SelectQueryResult> {
+    return this.repository.findForSelect({
       value: query.valueKey || 'id',
       label: query.labelKey || 'name',
+      description: query.descriptionKey || 'code',
+      additionalKeys: query.additionalKeys,
+      groupIdKey: query.groupIdKey,
       search: query.search,
       limit: query.limit,
       offset: query.offset,
       values: query.values,
       excludeIds: query.excludeIds,
       orderByKey: query.orderByKey || 'name',
+      orderDirection: query.orderDirection || 'asc',
+      where: options?.country ? { countryCode: options.country } : undefined,
     });
   }
 
-  // Creates a new tax group with associated tax rates
+  // Returns a tax group with its rate and class counts
+  async findById(id: string): Promise<TaxGroupDto> {
+    return TaxGroupDto.from(await this.repository.findDetailOrThrow(id));
+  }
+
+  // Creates a tax group for one country; its code is unique within that country
   async create(data: CreateTaxGroupDto): Promise<CreateResponseDto<TaxGroupDto>> {
-    const entity = await this.taxGroupsRepository.create({
+    await this.repository.assertCodeFree(data.countryCode, data.code);
+    const entity = await this.repository.create({
+      countryCode: data.countryCode,
+      code: data.code,
       name: data.name,
+      treatment: data.treatment,
+      legalText: data.legalText ?? null,
+      isActive: data.isActive,
     });
-
-    const rates = await this.taxGroupsRepository.createTaxRates(
-      entity.id,
-      (data.taxRates ?? []).map((r, i) => ({
-        name: r.name,
-        rate: r.rate,
-        sortOrder: i,
-      })),
-    );
-
-    this.logger.log(`Created tax group: ${entity.name} (${entity.id})`);
+    this.logger.log(`Created tax group: ${entity.countryCode} ${entity.code} (${entity.id})`);
     return {
       success: true,
       message: `Tax group "${entity.name}" created successfully.`,
-      data: TaxGroupDto.from(entity, rates),
+      data: TaxGroupDto.from({ ...entity, rateCount: 0, classCount: 0 }),
     };
   }
 
-  // Finds a tax group by ID with its tax rates or throws NotFoundException
-  async findById(id: string): Promise<TaxGroupDto> {
-    const entity = await this.taxGroupsRepository.findById(id);
-    if (!entity) throw new NotFoundException('Tax group not found.');
-    const rates = await this.taxGroupsRepository.findTaxRatesByGroupId(id);
-    return TaxGroupDto.from(entity, rates);
-  }
-
-  // Updates a tax group and replaces its tax rates
+  // Updates a tax group; its country is fixed, so a new code is checked within the same country
   async update(id: string, data: Omit<UpdateTaxGroupDto, 'id'>): Promise<SuccessResponseDto> {
-    const existing = await this.taxGroupsRepository.findById(id);
-    if (!existing) throw new NotFoundException('Tax group not found.');
-
-    const { taxRates: _taxRates, ...updatePayload } = data;
-    const entity = await this.taxGroupsRepository.update(id, updatePayload);
-
-    // Replace tax rates if provided
-    if (data.taxRates !== undefined) {
-      await this.taxGroupsRepository.deleteTaxRatesByGroupId(id);
-      await this.taxGroupsRepository.createTaxRates(
-        id,
-        data.taxRates.map((r, i) => ({
-          name: r.name,
-          rate: r.rate,
-          sortOrder: i,
-        })),
-      );
+    const existing = await this.repository.findByIdOrThrow(id);
+    if (data.code !== undefined && data.code !== existing.code) {
+      await this.repository.assertCodeFree(existing.countryCode, data.code, id);
     }
-
-    this.logger.log(`Updated tax group: ${entity.name} (${entity.id})`);
-    return { success: true, message: `Tax group "${entity.name}" updated successfully.` };
+    await this.repository.update(id, data);
+    this.logger.log(`Updated tax group: ${existing.countryCode} ${existing.code} (${id})`);
+    return { success: true, message: `Tax group "${data.name ?? existing.name}" updated successfully.` };
   }
 
-  // Deletes a tax group by ID (cascades to tax rates)
-  async delete(id: string): Promise<{ success: boolean; message: string }> {
-    const existing = await this.taxGroupsRepository.findById(id);
-    if (!existing) throw new NotFoundException('Tax group not found.');
-    await this.taxGroupsRepository.delete(id);
-    this.logger.log(`Deleted tax group: ${existing.name} (${id})`);
+  // Deletes a tax group and its rates unless tax classes are mapped to it
+  async delete(id: string): Promise<SuccessResponseDto> {
+    const existing = await this.repository.findDetailOrThrow(id);
+    this.repository.assertDeletable(existing);
+    await this.repository.delete(id);
+    this.logger.log(`Deleted tax group: ${existing.countryCode} ${existing.code} (${id})`);
     return { success: true, message: `Tax group "${existing.name}" deleted successfully.` };
   }
 }

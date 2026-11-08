@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+const TAX_JURISDICTION_LEVELS = ['STATE', 'COUNTY', 'CITY', 'DISTRICT'] as const;
+
 export class TaxJurisdictionResponseDto {
   @ApiProperty({ description: 'Tax jurisdiction ID' })
   id: string;
@@ -12,20 +14,20 @@ export class TaxJurisdictionResponseDto {
 
   @ApiProperty({
     description: 'Hierarchy level of the jurisdiction',
-    enum: ['COUNTRY', 'STATE', 'COUNTY', 'CITY', 'DISTRICT'],
+    enum: TAX_JURISDICTION_LEVELS,
   })
-  level: string;
+  level: (typeof TAX_JURISDICTION_LEVELS)[number];
 
-  @ApiProperty({ description: 'Parent jurisdiction ID, or null for root-level jurisdictions', nullable: true })
+  @ApiProperty({ description: 'Parent jurisdiction ID, or null for a state', nullable: true })
   parentId: string | null;
 
   @ApiProperty({
-    description: 'Resolved parent jurisdiction name, or null for root-level jurisdictions',
+    description: 'Resolved parent jurisdiction name, or null for a state',
     nullable: true,
   })
   parentName: string | null;
 
-  @ApiProperty({ description: 'ISO 3166-1 alpha-2 country code', example: 'US' })
+  @ApiProperty({ description: 'Uppercase ISO 3166-1 alpha-2 country code', example: 'IN' })
   countryCode: string;
 
   @ApiProperty({ description: 'Region/state code within the country', nullable: true })
@@ -40,7 +42,10 @@ export class TaxJurisdictionResponseDto {
   @ApiProperty({ description: 'Whether this jurisdiction has child jurisdictions' })
   hasChildren: boolean;
 
-  @ApiProperty({ description: 'Whether this jurisdiction can be deleted safely' })
+  @ApiProperty({
+    description:
+      'Whether this jurisdiction can be deleted — false while it has children or registrations or companies name it',
+  })
   canDelete: boolean;
 
   @ApiProperty({ description: 'ISO timestamp of creation' })

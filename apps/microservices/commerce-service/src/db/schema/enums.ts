@@ -47,45 +47,11 @@ export const orderItemStatusEnum = commerceSchema.enum('order_item_status', [
   'SERVED',
   'CANCELLED',
 ]);
-export const paymentMethodEnum = commerceSchema.enum('payment_method', [
-  'CASH',
-  'CARD',
-  'UPI',
-  'BANK_TRANSFER',
-  'WALLET',
-  'ONLINE',
-]);
-export const invoiceStatusEnum = commerceSchema.enum('invoice_status', [
-  'DRAFT',
-  'ISSUED',
-  'PARTIALLY_PAID',
-  'PAID',
-  'OVERDUE',
-  'VOID',
-]);
-
-export const invoiceTypeEnum = commerceSchema.enum('invoice_type', ['PAYABLE', 'RECEIVABLE']);
-export const invoicePartyTypeEnum = commerceSchema.enum('invoice_party_type', ['SUPPLIER', 'CUSTOMER', 'AGGREGATOR']);
-export const paymentStatusEnum = commerceSchema.enum('payment_status', ['COMPLETED', 'FAILED', 'REFUNDED']);
-export const creditNoteTypeEnum = commerceSchema.enum('credit_note_type', ['PAYABLE', 'RECEIVABLE']);
-export const creditNoteStatusEnum = commerceSchema.enum('credit_note_status', [
-  'DRAFT',
-  'ISSUED',
-  'PARTIALLY_APPLIED',
-  'FULLY_APPLIED',
-]);
 
 export type OrderSource = (typeof orderSourceEnum.enumValues)[number];
 export type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
 export type CheckoutStatus = (typeof checkoutStatusEnum.enumValues)[number];
 export type OrderItemStatus = (typeof orderItemStatusEnum.enumValues)[number];
-export type PaymentMethod = (typeof paymentMethodEnum.enumValues)[number];
-export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number];
-export type InvoiceType = (typeof invoiceTypeEnum.enumValues)[number];
-export type InvoicePartyType = (typeof invoicePartyTypeEnum.enumValues)[number];
-export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number];
-export type CreditNoteType = (typeof creditNoteTypeEnum.enumValues)[number];
-export type CreditNoteStatus = (typeof creditNoteStatusEnum.enumValues)[number];
 
 export const OrderSourceValues = {
   ONLINE: 'ONLINE' as const,
@@ -115,53 +81,6 @@ export const OrderItemStatusValues = {
   READY: 'READY' as const,
   SERVED: 'SERVED' as const,
   CANCELLED: 'CANCELLED' as const,
-};
-
-export const PaymentMethodValues = {
-  CASH: 'CASH' as const,
-  CARD: 'CARD' as const,
-  UPI: 'UPI' as const,
-  BANK_TRANSFER: 'BANK_TRANSFER' as const,
-  WALLET: 'WALLET' as const,
-  ONLINE: 'ONLINE' as const,
-};
-
-export const InvoiceStatusValues = {
-  DRAFT: 'DRAFT' as const,
-  ISSUED: 'ISSUED' as const,
-  PARTIALLY_PAID: 'PARTIALLY_PAID' as const,
-  PAID: 'PAID' as const,
-  OVERDUE: 'OVERDUE' as const,
-  VOID: 'VOID' as const,
-};
-
-export const InvoiceTypeValues = {
-  PAYABLE: 'PAYABLE' as const,
-  RECEIVABLE: 'RECEIVABLE' as const,
-};
-
-export const InvoicePartyTypeValues = {
-  SUPPLIER: 'SUPPLIER' as const,
-  CUSTOMER: 'CUSTOMER' as const,
-  AGGREGATOR: 'AGGREGATOR' as const,
-};
-
-export const PaymentStatusValues = {
-  COMPLETED: 'COMPLETED' as const,
-  FAILED: 'FAILED' as const,
-  REFUNDED: 'REFUNDED' as const,
-};
-
-export const CreditNoteTypeValues = {
-  PAYABLE: 'PAYABLE' as const,
-  RECEIVABLE: 'RECEIVABLE' as const,
-};
-
-export const CreditNoteStatusValues = {
-  DRAFT: 'DRAFT' as const,
-  ISSUED: 'ISSUED' as const,
-  PARTIALLY_APPLIED: 'PARTIALLY_APPLIED' as const,
-  FULLY_APPLIED: 'FULLY_APPLIED' as const,
 };
 
 export const locationRoleEnum = commerceSchema.enum('location_role', ['STORAGE', 'RESERVED_STORAGE', 'ZONE']);
@@ -277,13 +196,6 @@ export const InventoryItemLedgerReferenceTypeValues = {
 };
 export type InventoryItemLedgerReferenceType = (typeof inventoryItemLedgerReferenceTypeEnum.enumValues)[number];
 
-export const exchangeRateTypeEnum = commerceSchema.enum('exchange_rate_type', ['FIXED', 'VARIABLE']);
-export const ExchangeRateTypeValues = {
-  FIXED: 'FIXED' as const,
-  VARIABLE: 'VARIABLE' as const,
-};
-export type ExchangeRateType = (typeof exchangeRateTypeEnum.enumValues)[number];
-
 export const purchaseOrderStatusEnum = commerceSchema.enum('purchase_order_status', [
   'PENDING_APPROVAL',
   'APPROVED',
@@ -316,6 +228,18 @@ export const GoodsReceiptStatusValues = {
   PUBLISHED: 'PUBLISHED' as const,
 };
 export type GoodsReceiptStatus = (typeof goodsReceiptStatusEnum.enumValues)[number];
+
+export const supplierInvoiceStatusEnum = commerceSchema.enum('supplier_invoice_status', [
+  'DRAFT',
+  'POSTED',
+  'CANCELLED',
+]);
+export const SupplierInvoiceStatusValues = {
+  DRAFT: 'DRAFT' as const,
+  POSTED: 'POSTED' as const,
+  CANCELLED: 'CANCELLED' as const,
+};
+export type SupplierInvoiceStatus = (typeof supplierInvoiceStatusEnum.enumValues)[number];
 
 export const conversionStatusEnum = commerceSchema.enum('conversion_status', [
   'DRAFT',
@@ -401,6 +325,7 @@ export const costSourceTypeEnum = commerceSchema.enum('cost_source_type', [
   'STOCK_ADJUSTMENT',
   'STOCK_TRANSFER',
   'MANUAL_ADJUSTMENT',
+  'SUPPLIER_INVOICE',
 ]);
 export type CostSourceType = (typeof costSourceTypeEnum.enumValues)[number];
 export const CostSourceTypeValues = {
@@ -408,6 +333,7 @@ export const CostSourceTypeValues = {
   STOCK_ADJUSTMENT: 'STOCK_ADJUSTMENT',
   STOCK_TRANSFER: 'STOCK_TRANSFER',
   MANUAL_ADJUSTMENT: 'MANUAL_ADJUSTMENT',
+  SUPPLIER_INVOICE: 'SUPPLIER_INVOICE',
 } as const satisfies Record<CostSourceType, CostSourceType>;
 
 export const costDistributionMethodEnum = commerceSchema.enum('cost_distribution_method', [
@@ -528,15 +454,70 @@ export const TaxRegistrationTypeValues = {
 };
 export type TaxRegistrationType = (typeof taxRegistrationTypeEnum.enumValues)[number];
 
+export const taxRegistrationSchemeEnum = commerceSchema.enum('tax_registration_scheme', [
+  'REGULAR',
+  'COMPOSITION',
+  'SEZ',
+]);
+export type TaxRegistrationScheme = (typeof taxRegistrationSchemeEnum.enumValues)[number];
+export const TaxRegistrationSchemeValues = {
+  REGULAR: 'REGULAR',
+  COMPOSITION: 'COMPOSITION',
+  SEZ: 'SEZ',
+} as const satisfies Record<TaxRegistrationScheme, TaxRegistrationScheme>;
+
+export const taxTreatmentEnum = commerceSchema.enum('tax_treatment', [
+  'TAXABLE',
+  'ZERO_RATED',
+  'EXEMPT',
+  'OUT_OF_SCOPE',
+]);
+export type TaxTreatment = (typeof taxTreatmentEnum.enumValues)[number];
+export const TaxTreatmentValues = {
+  TAXABLE: 'TAXABLE',
+  ZERO_RATED: 'ZERO_RATED',
+  EXEMPT: 'EXEMPT',
+  OUT_OF_SCOPE: 'OUT_OF_SCOPE',
+} as const satisfies Record<TaxTreatment, TaxTreatment>;
+
+export const taxJurisdictionCheckEnum = commerceSchema.enum('tax_jurisdiction_check', ['SAME', 'DIFFERENT']);
+export type TaxJurisdictionCheck = (typeof taxJurisdictionCheckEnum.enumValues)[number];
+export const TaxJurisdictionCheckValues = {
+  SAME: 'SAME',
+  DIFFERENT: 'DIFFERENT',
+} as const satisfies Record<TaxJurisdictionCheck, TaxJurisdictionCheck>;
+
+export const taxCalculationEnum = commerceSchema.enum('tax_calculation', ['PERCENT', 'AMOUNT_PER_MEASURE']);
+export type TaxCalculation = (typeof taxCalculationEnum.enumValues)[number];
+export const TaxCalculationValues = {
+  PERCENT: 'PERCENT',
+  AMOUNT_PER_MEASURE: 'AMOUNT_PER_MEASURE',
+} as const satisfies Record<TaxCalculation, TaxCalculation>;
+
+export const taxMeasureEnum = commerceSchema.enum('tax_measure', ['UNIT', 'LITRE', 'PURE_ALCOHOL_LITRE', 'KG']);
+export type TaxMeasure = (typeof taxMeasureEnum.enumValues)[number];
+export const TaxMeasureValues = {
+  UNIT: 'UNIT',
+  LITRE: 'LITRE',
+  PURE_ALCOHOL_LITRE: 'PURE_ALCOHOL_LITRE',
+  KG: 'KG',
+} as const satisfies Record<TaxMeasure, TaxMeasure>;
+
+export const taxBaseEnum = commerceSchema.enum('tax_base', ['PRICE', 'PRICE_PLUS_PREVIOUS', 'MRP']);
+export type TaxBase = (typeof taxBaseEnum.enumValues)[number];
+export const TaxBaseValues = {
+  PRICE: 'PRICE',
+  PRICE_PLUS_PREVIOUS: 'PRICE_PLUS_PREVIOUS',
+  MRP: 'MRP',
+} as const satisfies Record<TaxBase, TaxBase>;
+
 export const taxJurisdictionLevelEnum = commerceSchema.enum('tax_jurisdiction_level', [
-  'COUNTRY',
   'STATE',
   'COUNTY',
   'CITY',
   'DISTRICT',
 ]);
 export const TaxJurisdictionLevelValues = {
-  COUNTRY: 'COUNTRY' as const,
   STATE: 'STATE' as const,
   COUNTY: 'COUNTY' as const,
   CITY: 'CITY' as const,

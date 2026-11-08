@@ -1,10 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsIn, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsISO31661Alpha2, IsNotEmpty, IsString, IsUppercase, MaxLength } from 'class-validator';
 
 export class CreateTaxComponentDto {
+  @ApiProperty({ description: 'Uppercase ISO 3166-1 alpha-2 country whose tax the component is', example: 'IN' })
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode: string;
+
   @Trim({ nullify: false })
-  @ApiProperty({ description: 'Unique code within the org', example: 'gst-standard' })
+  @ApiProperty({ description: 'Code, unique within the country', example: 'cgst' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(50)

@@ -1,11 +1,11 @@
 import type { UseMutationOptions } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
-import type { SuccessResponse, TaxJurisdictionFormData } from '@/schemas/tax-jurisdictions';
+import type { SuccessResponse, TaxJurisdictionPayload } from '@/schemas/tax-jurisdictions';
 import { updateTaxJurisdiction } from '@/services/organization/tax-jurisdictions.service';
 import { TAX_JURISDICTIONS_KEY } from './keys';
 
-type UpdateTaxJurisdictionVariables = { id: string; data: Partial<TaxJurisdictionFormData> };
+type UpdateTaxJurisdictionVariables = { id: string; data: TaxJurisdictionPayload };
 
 export function useUpdateTaxJurisdiction(
   options?: Omit<UseMutationOptions<SuccessResponse, AxiosError, UpdateTaxJurisdictionVariables>, 'mutationFn'>,

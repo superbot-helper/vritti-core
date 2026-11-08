@@ -1,6 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsISO31661Alpha2,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 const REGISTRATION_TYPES = ['GSTIN', 'VAT', 'TIN', 'OTHER'] as const;
 
@@ -10,9 +20,19 @@ export class CreateTaxRegistrationDto {
   @IsUUID('7')
   legalEntityId?: string;
 
-  @ApiProperty({ description: 'Where the entity is registered — drives origin for tax resolution' })
+  @ApiProperty({ description: 'Uppercase ISO 3166-1 alpha-2 country the registration is issued in', example: 'IN' })
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Jurisdiction in that country the registration is issued in — required (a state) for a GSTIN; omit for a national registration such as a VAT number',
+    nullable: true,
+  })
+  @IsOptional()
   @IsUUID('7')
-  jurisdictionId: string;
+  jurisdictionId?: string | null;
 
   @ApiProperty({ example: '36ABCDE1234F1Z5' })
   @Trim({ nullify: false })

@@ -1,10 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { type FieldMap, FilterProcessor, type TableViewState } from '@vritti/api-sdk/data-table';
 import { and, asc, eq } from '@vritti/api-sdk/drizzle-orm';
-import { BadRequestException, ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import { type SelectOptionsQueryDto, type SelectQueryResult } from '@vritti/api-sdk/select';
-import { type TaxJurisdiction, type TaxJurisdictionLevel, taxJurisdictions } from '@/db/schema';
+import { taxJurisdictions } from '@/db/schema';
 import { TaxJurisdictionDto } from '../dto/entity/tax-jurisdiction.dto';
 import type { TaxJurisdictionCountDto } from '../dto/entity/tax-jurisdiction-count.dto';
 import type { TaxJurisdictionTreeDto } from '../dto/entity/tax-jurisdiction-tree.dto';
@@ -24,6 +23,12 @@ export class TaxJurisdictionsDomainService {
     isActive: { column: taxJurisdictions.isActive, type: 'boolean' },
   };
 
+  // Search runs ILIKE, which Postgres enums (level) don't support — so it only covers the text columns
+  private static readonly SEARCH_FIELD_MAP: FieldMap = {
+    name: TaxJurisdictionsDomainService.FIELD_MAP.name,
+    code: TaxJurisdictionsDomainService.FIELD_MAP.code,
+  };
+
   constructor(private readonly repository: TaxJurisdictionsDomainRepository) {}
 
   // Returns total tax-jurisdiction count
@@ -32,9 +37,9 @@ export class TaxJurisdictionsDomainService {
     return { count };
   }
 
-  // Returns tax jurisdictions as a TreeView-compatible hierarchy from pre-ordered CTE rows
-  async tree(search?: string): Promise<TaxJurisdictionTreeDto[]> {
-    const rows = await this.repository.findHierarchyRows(search?.trim());
+  // Returns tax jurisdictions as a TreeView hierarchy from pre-ordered CTE rows: states at the top, grouped by country
+  async tree(search?: string, country?: string): Promise<TaxJurisdictionTreeDto[]> {
+    const rows = await this.repository.findHierarchyRows(search?.trim(), country);
 
     const nodesById = new Map<string, TaxJurisdictionTreeDto>();
     const roots: TaxJurisdictionTreeDto[] = [];
@@ -44,7 +49,8 @@ export class TaxJurisdictionsDomainService {
         id: row.id,
         name: row.name,
         code: row.code,
-        level: row.level as TaxJurisdictionLevel,
+        level: row.level,
+        countryCode: row.countryCode,
       };
       nodesById.set(row.id, node);
 
@@ -71,28 +77,22 @@ export class TaxJurisdictionsDomainService {
     state: TableViewState,
   ): Promise<{ result: TaxJurisdictionDto[]; count: number }> {
     const filterWhere = FilterProcessor.buildWhere(state.filters, TaxJurisdictionsDomainService.FIELD_MAP);
-    const searchWhere = FilterProcessor.buildSearch(state.search, TaxJurisdictionsDomainService.FIELD_MAP);
+    const searchWhere = FilterProcessor.buildSearch(state.search, TaxJurisdictionsDomainService.SEARCH_FIELD_MAP);
     const where = and(eq(taxJurisdictions.parentId, parentId), filterWhere, searchWhere) || undefined;
     const orderBy = FilterProcessor.buildOrderBy(state.sort, TaxJurisdictionsDomainService.FIELD_MAP);
     const { limit = 20, offset = 0 } = state.pagination;
 
-    const { result: rows, count } = await this.repository.findChildren({
+    const { result, count } = await this.repository.findDetailsForTable({
       where,
       orderBy: orderBy.length > 0 ? orderBy : [asc(taxJurisdictions.name)],
       limit,
       offset,
     });
-
-    const parentIdsWithChildren = await this.repository.findParentIdsWithChildren(rows.map((row) => row.id));
-
-    return {
-      result: rows.map((row) => TaxJurisdictionDto.from(row, !parentIdsWithChildren.has(row.id))),
-      count,
-    };
+    return { result: result.map(TaxJurisdictionDto.from), count };
   }
 
-  // Returns paginated tax-jurisdiction options for select dropdowns
-  findForSelect(query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+  // Returns paginated tax-jurisdiction options for select dropdowns, narrowed to one country when given
+  findForSelect(query: SelectOptionsQueryDto, options?: { country?: string }): Promise<SelectQueryResult> {
     return this.repository.findForSelect({
       value: query.valueKey || 'id',
       label: query.labelKey || 'name',
@@ -106,27 +106,25 @@ export class TaxJurisdictionsDomainService {
       excludeIds: query.excludeIds,
       orderByKey: query.orderByKey || 'name',
       orderDirection: query.orderDirection || 'asc',
+      where: options?.country ? { countryCode: options.country } : undefined,
     });
   }
 
-  // Creates a new tax jurisdiction, rejecting duplicate codes and validating the parent
+  // Creates a tax jurisdiction under a parent of the same country one level up, rejecting duplicate codes
   async create(data: CreateTaxJurisdictionDto): Promise<CreateResponseDto<TaxJurisdictionDto>> {
-    const existing = await this.repository.findByCode(data.code);
-    if (existing) {
-      throw new ConflictException({
-        label: 'Code already exists',
-        detail: `A tax jurisdiction with code "${data.code}" already exists.`,
-      });
-    }
-
-    if (data.parentId) await this.requireById(data.parentId, 'Parent tax jurisdiction not found.');
+    await this.repository.assertCodeFree(data.code);
+    const parent = await this.repository.findParentOrThrow({
+      level: data.level,
+      countryCode: data.countryCode,
+      parentId: data.parentId ?? null,
+    });
 
     const entity = await this.repository.create({
       code: data.code,
       name: data.name,
       level: data.level,
-      parentId: data.parentId ?? null,
-      countryCode: data.countryCode.toUpperCase(),
+      parentId: parent?.id ?? null,
+      countryCode: data.countryCode,
       regionCode: data.regionCode ?? null,
       taxUnion: data.taxUnion ?? null,
       isActive: data.isActive,
@@ -136,57 +134,44 @@ export class TaxJurisdictionsDomainService {
     return {
       success: true,
       message: `Tax jurisdiction "${entity.name}" created successfully.`,
-      data: TaxJurisdictionDto.from(entity, true),
+      data: TaxJurisdictionDto.from({
+        ...entity,
+        parentName: parent?.name ?? null,
+        hasChildren: false,
+        isReferenced: false,
+      }),
     };
   }
 
   // Returns a single tax jurisdiction by ID
   async findById(id: string): Promise<TaxJurisdictionDto> {
-    const entity = await this.repository.findByIdWithParent(id);
-    if (!entity) throw new NotFoundException('Tax jurisdiction not found.');
-    const hasChildren = await this.repository.hasChildren(id);
-    return TaxJurisdictionDto.from(entity, !hasChildren, entity.parentName);
+    return TaxJurisdictionDto.from(await this.repository.findDetailOrThrow(id));
   }
 
-  // Updates a tax jurisdiction's editable fields
+  // Updates a tax jurisdiction; its level and country stay fixed once children, registrations or parties depend on it
   async update(id: string, data: Omit<UpdateTaxJurisdictionDto, 'id'>): Promise<SuccessResponseDto> {
-    const existing = await this.requireById(id);
+    const existing = await this.repository.findDetailOrThrow(id);
+    const placement = {
+      level: data.level ?? existing.level,
+      countryCode: data.countryCode ?? existing.countryCode,
+      parentId: data.parentId === undefined ? existing.parentId : data.parentId,
+    };
+    this.repository.assertPlacementChangeable(existing, placement);
+    await this.repository.findParentOrThrow(placement);
 
-    if (data.parentId !== undefined) {
-      if (data.parentId === id) {
-        throw new BadRequestException('A tax jurisdiction cannot be its own parent.');
-      }
-      await this.requireById(data.parentId, 'Parent tax jurisdiction not found.');
-    }
-
-    const payload = { ...data };
-    if (data.countryCode !== undefined) payload.countryCode = data.countryCode.toUpperCase();
-    await this.repository.update(id, payload);
+    await this.repository.update(id, data);
 
     this.logger.log(`Updated tax jurisdiction: ${existing.code} (${id})`);
     return { success: true, message: `Tax jurisdiction "${data.name ?? existing.name}" updated successfully.` };
   }
 
-  // Deletes a tax jurisdiction; refuses when it still has child jurisdictions
+  // Deletes a tax jurisdiction unless children, registrations or parties still depend on it
   async delete(id: string): Promise<SuccessResponseDto> {
-    const existing = await this.requireById(id);
-    const hasChildren = await this.repository.hasChildren(id);
-    if (hasChildren) {
-      throw new ConflictException({
-        label: 'Jurisdiction In Use',
-        detail: `Cannot delete "${existing.name}" — it still has child jurisdictions. Remove those first.`,
-      });
-    }
+    const existing = await this.repository.findDetailOrThrow(id);
+    this.repository.assertDeletable(existing);
 
     await this.repository.delete(id);
     this.logger.log(`Deleted tax jurisdiction: ${existing.code} (${id})`);
     return { success: true, message: `Tax jurisdiction "${existing.name}" deleted successfully.` };
-  }
-
-  // Loads a tax jurisdiction by ID, throwing if not found
-  private async requireById(id: string, message = 'Tax jurisdiction not found.'): Promise<TaxJurisdiction> {
-    const entity = await this.repository.findById(id);
-    if (!entity) throw new NotFoundException(message);
-    return entity;
   }
 }

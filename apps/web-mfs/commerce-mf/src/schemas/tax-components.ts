@@ -1,5 +1,6 @@
 import type { TableResponse } from '@vritti/quantum-ui/types/api-response';
 import { z, zodCodeField } from '@vritti/quantum-ui/zod';
+import { countryCodeField } from './tax-jurisdictions';
 
 export const AUTHORITY_LEVELS = ['FEDERAL', 'STATE', 'COUNTY', 'CITY', 'SPECIAL'] as const;
 
@@ -19,6 +20,7 @@ export const authorityLevelOptions: { value: AuthorityLevel; label: string }[] =
 }));
 
 export const createTaxComponentSchema = z.object({
+  countryCode: countryCodeField,
   code: zodCodeField({ max: 50 }),
   name: z.string().min(1, 'Name is required').max(255, 'Name must be at most 255 characters'),
   authorityLevel: z.enum(AUTHORITY_LEVELS),
@@ -38,12 +40,16 @@ export const updateTaxComponentSchema = z.object({
 export type CreateTaxComponentFormData = z.infer<typeof createTaxComponentSchema>;
 export type UpdateTaxComponentFormData = z.infer<typeof updateTaxComponentSchema>;
 
-// `code` is immutable but shown disabled in the edit form, so it belongs to the form type only
-export const editTaxComponentFormSchema = updateTaxComponentSchema.extend({ code: z.string() });
+// `countryCode` and `code` are immutable but shown disabled in the edit form, so they belong to the form type only
+export const editTaxComponentFormSchema = updateTaxComponentSchema.extend({
+  countryCode: z.string(),
+  code: z.string(),
+});
 export type EditTaxComponentFormData = z.infer<typeof editTaxComponentFormSchema>;
 
 export interface TaxComponentData {
   id: string;
+  countryCode: string;
   code: string;
   name: string;
   authorityLevel: AuthorityLevel;
@@ -57,3 +63,15 @@ export interface TaxComponentData {
 }
 
 export type TaxComponentsTableResponse = TableResponse<TaxComponentData>;
+
+export interface CreateTaxComponentPayload {
+  countryCode: string;
+  code: string;
+  name: string;
+  authorityLevel: AuthorityLevel;
+  isRecoverable: boolean;
+  isWithholding: boolean;
+  isActive: boolean;
+}
+
+export type UpdateTaxComponentPayload = Partial<Omit<CreateTaxComponentPayload, 'countryCode' | 'code'>>;

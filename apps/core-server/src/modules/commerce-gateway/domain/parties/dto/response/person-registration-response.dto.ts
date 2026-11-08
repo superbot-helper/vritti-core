@@ -7,8 +7,11 @@ export class PersonRegistrationResponseDto {
   @ApiProperty({ description: 'The person (party) ID' })
   partyId: string;
 
-  @ApiProperty({ description: 'Tax jurisdiction ID' })
-  jurisdictionId: string;
+  @ApiProperty({ description: 'Uppercase ISO 3166-1 alpha-2 country', example: 'IN' })
+  countryCode: string;
+
+  @ApiPropertyOptional({ description: 'Tax jurisdiction ID; null for a national registration', nullable: true })
+  jurisdictionId: string | null;
 
   @ApiPropertyOptional({ description: 'Tax jurisdiction name', nullable: true })
   jurisdictionName: string | null;
@@ -18,6 +21,9 @@ export class PersonRegistrationResponseDto {
 
   @ApiProperty({ description: 'Registration type', enum: ['GSTIN', 'VAT', 'TIN', 'OTHER'] })
   registrationType: string;
+
+  @ApiProperty({ description: 'Registration scheme', enum: ['REGULAR', 'COMPOSITION', 'SEZ'] })
+  scheme: string;
 
   @ApiProperty({ description: 'Whether this is the primary registration' })
   isPrimary: boolean;

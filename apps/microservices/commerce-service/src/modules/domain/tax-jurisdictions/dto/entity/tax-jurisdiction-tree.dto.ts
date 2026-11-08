@@ -5,5 +5,6 @@ export interface TaxJurisdictionTreeDto {
   name: string;
   code: string;
   level: TaxJurisdictionLevel;
+  countryCode: string;
   children?: TaxJurisdictionTreeDto[];
 }

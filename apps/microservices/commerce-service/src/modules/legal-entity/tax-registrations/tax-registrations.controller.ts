@@ -4,7 +4,7 @@ import { UpdateTaxRegistrationDto } from '@domain/tax-registrations/dto/request/
 import { TaxRegistrationsDomainService } from '@domain/tax-registrations/services/tax-registrations.service';
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import type { TableViewState } from '@vritti/api-sdk/data-table';
+import type { TablePageRequest } from '@vritti/api-sdk/data-table';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 
 @Controller()
@@ -13,10 +13,13 @@ export class TaxRegistrationsController {
 
   constructor(private readonly service: TaxRegistrationsDomainService) {}
 
+  // The VAP path sends no legal entity; cloud names the one it is viewing
   @MessagePattern({ cmd: 'le.taxRegistrations.table' })
-  table(@Payload() state: TableViewState): Promise<{ result: TaxRegistrationDto[]; count: number }> {
-    this.logger.log('taxRegistrations.table');
-    return this.service.findForTable(state);
+  table(
+    @Payload() data: { page: TablePageRequest; legalEntityId?: string },
+  ): Promise<{ result: TaxRegistrationDto[]; count: number }> {
+    this.logger.log(`taxRegistrations.table — legalEntityId: ${data.legalEntityId ?? 'none'}`);
+    return this.service.findForTable(data.page, data.legalEntityId);
   }
 
   // Every registration a legal entity holds — the origin GSTIN/VAT set tax resolution reads from

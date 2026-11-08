@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrimaryBaseRepository, PrimaryDatabaseService } from '@vritti/api-sdk/database';
-import { eq, inArray, type SQL } from '@vritti/api-sdk/drizzle-orm';
-import { type TaxGroup, type TaxRate, taxGroups, taxRates } from '@/db/schema';
+import { and, eq, getColumns, ne, type SQL } from '@vritti/api-sdk/drizzle-orm';
+import { ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
+import { type FindForSelectConfig, type SelectQueryResult } from '@vritti/api-sdk/select';
+import { type TaxGroup, taxClassGroups, taxGroupRates, taxGroups } from '@/db/schema';
+
+export type TaxGroupDetail = TaxGroup & {
+  rateCount: number;
+  classCount: number;
+};
 
 @Injectable()
 export class TaxGroupsDomainRepository extends PrimaryBaseRepository<typeof taxGroups> {
@@ -9,56 +16,67 @@ export class TaxGroupsDomainRepository extends PrimaryBaseRepository<typeof taxG
     super(database, taxGroups);
   }
 
-  // Returns a paginated page of tax groups + total count for the data table (RLS scopes to org + site)
-  async findAllForTable(options: {
+  // Returns paginated tax-group options for the selector dropdown
+  findForSelect(config: FindForSelectConfig): Promise<SelectQueryResult> {
+    return super.findForSelect(config);
+  }
+
+  // Loads a tax group, throwing when it is out of reach
+  async findByIdOrThrow(id: string): Promise<TaxGroup> {
+    const entity = await this.findById(id);
+    if (!entity) throw new NotFoundException('Tax group not found.');
+    return entity;
+  }
+
+  // Loads a tax group with how many rates and class mappings it has
+  async findDetailOrThrow(id: string): Promise<TaxGroupDetail> {
+    const entity = await this.findById<TaxGroupDetail>(id, { select: this.selection() });
+    if (!entity) throw new NotFoundException('Tax group not found.');
+    return entity;
+  }
+
+  // Returns paginated tax groups with their rate and class counts, filtered by an already-built where clause
+  findDetailsForTable(options: {
     where?: SQL;
     orderBy?: SQL[];
     limit: number;
     offset: number;
-  }): Promise<{ result: TaxGroup[]; count: number }> {
-    return this.findAllAndCount<TaxGroup>(options);
+  }): Promise<{ result: TaxGroupDetail[]; count: number }> {
+    return this.findAllAndCount<TaxGroupDetail>({ select: this.selection(), ...options });
   }
 
-  // Returns tax rates for the given group ids in one query, keyed by group id (ordered by sortOrder)
-  async findRatesByGroupIds(ids: string[]): Promise<Map<string, TaxRate[]>> {
-    const byGroup = new Map<string, TaxRate[]>();
-    if (ids.length === 0) return byGroup;
-    const rows = (await this.db
-      .select()
-      .from(taxRates)
-      .where(inArray(taxRates.taxGroupId, ids))
-      .orderBy(taxRates.sortOrder)) as TaxRate[];
-    for (const row of rows) {
-      const list = byGroup.get(row.taxGroupId) ?? [];
-      list.push(row);
-      byGroup.set(row.taxGroupId, list);
-    }
-    return byGroup;
+  // Codes are unique per organization and country
+  async assertCodeFree(countryCode: string, code: string, excludeId?: string): Promise<void> {
+    const taken = await this.exists(
+      and(
+        eq(taxGroups.countryCode, countryCode),
+        eq(taxGroups.code, code),
+        excludeId ? ne(taxGroups.id, excludeId) : undefined,
+      ) as SQL,
+    );
+    if (!taken) return;
+    throw new ConflictException({
+      label: 'Code Already Used',
+      detail: `A ${countryCode} tax group with code "${code}" already exists.`,
+      errors: [{ field: 'code', message: 'Code already in use' }],
+    });
   }
 
-  // Nothing references a tax group directly any more: products carry a tax CLASS, and a class is mapped to a group per
-  // LE by tax_class_rates — which does not exist yet.
-  async findReferencedIds(_ids: string[]): Promise<Set<string>> {
-    return new Set();
+  // Tax classes mapped to a group are taxed through it, so the group stays until every mapping moves elsewhere
+  assertDeletable(group: TaxGroupDetail): void {
+    if (group.classCount === 0) return;
+    throw new ConflictException({
+      label: 'Tax Group In Use',
+      detail: `Cannot delete "${group.name}" — tax classes are mapped to it. Map them to another group first.`,
+    });
   }
 
-  // Returns tax rates for a specific tax group
-  async findTaxRatesByGroupId(groupId: string): Promise<TaxRate[]> {
-    return this.db.select().from(taxRates).where(eq(taxRates.taxGroupId, groupId)).orderBy(taxRates.sortOrder);
-  }
-
-  // Creates multiple tax rates for a tax group
-  async createTaxRates(
-    groupId: string,
-    rates: { name: string; rate: number; sortOrder: number }[],
-  ): Promise<TaxRate[]> {
-    if (rates.length === 0) return [];
-    const values = rates.map((r) => ({ ...r, taxGroupId: groupId }));
-    return this.db.insert(taxRates).values(values).returning() as Promise<TaxRate[]>;
-  }
-
-  // Deletes all tax rates for a given tax group
-  async deleteTaxRatesByGroupId(groupId: string): Promise<void> {
-    await this.db.delete(taxRates).where(eq(taxRates.taxGroupId, groupId));
+  // Selects a tax group with how many rates and class mappings it has
+  private selection() {
+    return {
+      ...getColumns(taxGroups),
+      rateCount: this.db.$count(taxGroupRates, eq(taxGroupRates.taxGroupId, taxGroups.id)),
+      classCount: this.db.$count(taxClassGroups, eq(taxClassGroups.taxGroupId, taxGroups.id)),
+    };
   }
 }

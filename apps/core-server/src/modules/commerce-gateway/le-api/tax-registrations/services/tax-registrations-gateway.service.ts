@@ -2,8 +2,9 @@ import type { CreateTaxRegistrationDto } from '@commerce/tax-registrations/dto/r
 import type { UpdateTaxRegistrationDto } from '@commerce/tax-registrations/dto/request/update-tax-registration.dto';
 import type { TaxRegistrationResponseDto } from '@commerce/tax-registrations/dto/response/tax-registration-response.dto';
 import type { TaxRegistrationTableResponseDto } from '@commerce/tax-registrations/dto/response/tax-registration-table-response.dto';
+import type { TaxRegistrationsPageResponseDto } from '@commerce/tax-registrations/dto/response/tax-registrations-page-response.dto';
 import { Injectable, Logger } from '@nestjs/common';
-import { DataTableStateService, type TableViewState } from '@vritti/api-sdk/data-table';
+import { DataTableStateService, type TablePageRequest } from '@vritti/api-sdk/data-table';
 import { ConflictException, NotFoundException } from '@vritti/api-sdk/exceptions';
 import { NatsClientService } from '@vritti/api-sdk/nats';
 import { pluralize } from '@vritti/api-sdk/pluralize';
@@ -29,7 +30,7 @@ export class TaxRegistrationsGatewayService {
     const { result, count } = await this.nats.send<{ result: TaxRegistrationResponseDto[]; count: number }>(
       'commerce',
       'le.taxRegistrations.table',
-      state,
+      { page: state },
     );
     return { result, count, state, activeViewId };
   }
@@ -40,10 +41,11 @@ export class TaxRegistrationsGatewayService {
     return this.nats.send('commerce', 'le.taxRegistrations.list', { legalEntityId });
   }
 
-  // Cloud owns its own view state, so it passes one in rather than this reading Redis for a user
-  async findForTableWithState(state: TableViewState): Promise<{ result: TaxRegistrationResponseDto[]; count: number }> {
-    this.logger.log('le.taxRegistrations.table — cloud state');
-    return this.nats.send('commerce', 'le.taxRegistrations.table', state);
+  // Cloud owns its own view state, so it sends the page request rather than this reading Redis for a user, and names
+  // the legal entity it is viewing
+  async findForTablePage(legalEntityId: string, page: TablePageRequest): Promise<TaxRegistrationsPageResponseDto> {
+    this.logger.log(`le.taxRegistrations.table — cloud page, legalEntityId: ${legalEntityId}`);
+    return this.nats.send('commerce', 'le.taxRegistrations.table', { page, legalEntityId });
   }
 
   // The whole organization's registrations, for the cloud structure aggregate

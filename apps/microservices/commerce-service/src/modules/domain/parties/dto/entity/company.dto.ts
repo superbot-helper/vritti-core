@@ -15,6 +15,7 @@ export class CompanyDto {
   email: string | null;
   phone: string | null;
   website: string | null;
+  countryCode: string | null;
   jurisdictionId: string | null;
   isActive: boolean;
   canDelete: boolean;
@@ -37,6 +38,7 @@ export class CompanyDto {
     dto.email = contact?.email ?? null;
     dto.phone = contact?.phone ?? null;
     dto.website = contact?.website ?? null;
+    dto.countryCode = entity.countryCode ?? null;
     dto.jurisdictionId = entity.jurisdictionId ?? null;
     dto.isActive = entity.isActive;
     dto.canDelete = canDelete;

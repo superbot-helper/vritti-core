@@ -2,7 +2,8 @@ import type { UseMutationOptions } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
-import { type UpdateTaxComponentPayload, updateTaxComponent } from '@/services/organization/tax-components.service';
+import type { UpdateTaxComponentPayload } from '@/schemas/tax-components';
+import { updateTaxComponent } from '@/services/organization/tax-components.service';
 import { TAX_COMPONENT_KEY, TAX_COMPONENTS_TABLE_KEY } from './keys';
 
 interface Vars {

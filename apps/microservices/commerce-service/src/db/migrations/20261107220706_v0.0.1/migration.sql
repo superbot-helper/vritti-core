@@ -1,0 +1,2 @@
+CREATE TYPE "commerce"."tax_jurisdiction_check" AS ENUM('SAME', 'DIFFERENT');--> statement-breakpoint
+ALTER TABLE "commerce"."tax_group_rates" ADD COLUMN "jurisdiction_check" "commerce"."tax_jurisdiction_check";

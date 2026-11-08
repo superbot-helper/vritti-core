@@ -1,6 +1,16 @@
 import { Trim } from '@vritti/api-sdk/decorators';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEmail, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsISO31661Alpha2,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  IsUUID,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { CompanyAddressInputDto } from './company-address-input.dto';
 
 export class UpdateCompanyDto {
@@ -43,8 +53,13 @@ export class UpdateCompanyDto {
   website?: string | null;
 
   @IsOptional()
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode?: string | null;
+
+  @IsOptional()
   @IsUUID('7')
-  jurisdictionId?: string;
+  jurisdictionId?: string | null;
 
   @IsOptional()
   @IsBoolean()

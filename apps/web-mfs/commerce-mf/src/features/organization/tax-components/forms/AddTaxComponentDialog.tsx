@@ -3,6 +3,7 @@ import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form } from '@vritti/quantum-ui/Form';
 import { Select } from '@vritti/quantum-ui/Select';
 import { Switch } from '@vritti/quantum-ui/Switch';
+import { ISOCountrySelect } from '@vritti/quantum-ui/selects/iso-country';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
@@ -15,14 +16,16 @@ import {
 } from '@/schemas/tax-components';
 
 interface AddTaxComponentDialogProps {
+  countryCode?: string;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-export const AddTaxComponentDialog: React.FC<AddTaxComponentDialogProps> = ({ onSuccess, onCancel }) => {
+export const AddTaxComponentDialog: React.FC<AddTaxComponentDialogProps> = ({ countryCode, onSuccess, onCancel }) => {
   const form = useForm<CreateTaxComponentFormData>({
     resolver: zodResolver(createTaxComponentSchema),
     defaultValues: {
+      countryCode,
       code: '',
       name: '',
       authorityLevel: 'FEDERAL',
@@ -37,6 +40,7 @@ export const AddTaxComponentDialog: React.FC<AddTaxComponentDialogProps> = ({ on
   return (
     <Form form={form} mutation={createMutation} resetOnSuccess onCancel={onCancel}>
       <div className="space-y-4">
+        <ISOCountrySelect name="countryCode" description="The country whose tax this is. It can't be changed later." />
         <TextField name="code" label="Code" placeholder="e.g. cgst" />
         <TextField name="name" label="Name" placeholder="e.g. Central GST" />
         <Select
@@ -54,7 +58,7 @@ export const AddTaxComponentDialog: React.FC<AddTaxComponentDialogProps> = ({ on
         <Switch
           name="isActive"
           label="Active"
-          description="Inactive tax components are hidden from rate bundle forms"
+          description="Inactive tax components are hidden from tax group rate forms"
         />
       </div>
       <DialogActions>

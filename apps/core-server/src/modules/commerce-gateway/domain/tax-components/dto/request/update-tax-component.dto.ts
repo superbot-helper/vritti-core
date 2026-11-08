@@ -1,8 +1,26 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsISO31661Alpha2,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class UpdateTaxComponentDto {
+  @ApiPropertyOptional({
+    description: 'Uppercase ISO 3166-1 alpha-2 country; fixed once a tax-group rate uses the component',
+    example: 'IN',
+  })
+  @IsOptional()
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode?: string;
+
   @Trim({ nullify: false })
   @ApiPropertyOptional({ description: 'Human-readable name' })
   @IsOptional()

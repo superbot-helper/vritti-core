@@ -7,7 +7,15 @@ export const TaxJurisdictionsPageSkeleton = () => (
   <div className="flex flex-col gap-6">
     <PageHeaderSkeleton showActions />
     <PageContent>
-      <PageContentPanel header={<Skeleton className="h-9 w-full rounded-md" />} headerClassName="shrink-0">
+      <PageContentPanel
+        header={
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-9 w-40 rounded-md" />
+            <Skeleton className="h-9 w-full rounded-md" />
+          </div>
+        }
+        headerClassName="shrink-0"
+      >
         <PanelSkeleton />
       </PageContentPanel>
 

@@ -45,12 +45,12 @@ export class TaxJurisdictionsGatewayController {
     return this.service.count();
   }
 
-  // Returns tax jurisdictions as a tree hierarchy for TreeView
+  // Returns tax jurisdictions as a tree hierarchy for TreeView, states at the top grouped by country
   @Get('tree')
   @RequirePermission(ORG_TAX_JURISDICTIONS.view)
   findTree(@Query() query: TaxJurisdictionTreeQueryDto): Promise<TaxJurisdictionTreeResponseDto[]> {
     this.logger.log('GET /commerce-api/tax-jurisdictions/tree');
-    return this.service.findTree(query.search);
+    return this.service.findTree(query);
   }
 
   // Returns paginated child jurisdictions for a given parent jurisdiction

@@ -31,6 +31,7 @@ import { RepositorySwitcher } from './switchers/RepositorySwitcher';
 import { SmsProviderSwitcher } from './switchers/SmsProviderSwitcher';
 import { SupplierItemSwitcher } from './switchers/SupplierItemSwitcher';
 import { SupplierSwitcher } from './switchers/SupplierSwitcher';
+import { TaxGroupSwitcher } from './switchers/TaxGroupSwitcher';
 import { VariantSwitcher } from './switchers/VariantSwitcher';
 import { WhatsappAccountSwitcher } from './switchers/WhatsappAccountSwitcher';
 import { UserMenu } from './UserMenu';
@@ -60,6 +61,7 @@ const DETAIL_SWITCHERS: Record<string, ComponentType<{ segment: string; basePath
   suppliers: SupplierSwitcher,
   'payment-terms': PaymentTermSwitcher,
   'inventory-items': InventoryItemSwitcher,
+  'tax-groups': TaxGroupSwitcher,
 };
 
 const SITE_TYPE_ICONS: Record<string, LucideIcon> = {
@@ -158,6 +160,12 @@ export const TopBar = () => {
                   // A site supplier's quotation — `/site/<id>/suppliers/<supplier>/quotations/<quotation>` — has no page at
                   // `quotations` itself; the LE one does (its supplier's Quotations tab)
                   (segment.raw === 'quotations' &&
+                    all[0]?.raw === 'site' &&
+                    all[index - 2]?.raw === 'suppliers' &&
+                    !!all[index + 1]) ||
+                  // A site supplier's invoice — `/site/<id>/suppliers/<supplier>/invoices/<invoice>` — has no page at
+                  // `invoices` itself
+                  (segment.raw === 'invoices' &&
                     all[0]?.raw === 'site' &&
                     all[index - 2]?.raw === 'suppliers' &&
                     !!all[index + 1])

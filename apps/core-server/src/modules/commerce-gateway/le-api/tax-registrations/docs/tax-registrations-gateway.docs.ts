@@ -9,7 +9,8 @@ export function ApiFindForTableTaxRegistrations() {
   return applyDecorators(
     ApiOperation({
       summary: 'Tax registrations table',
-      description: 'Every tax registration held by legal entities in reach, with the jurisdiction each is issued in.',
+      description:
+        'Every tax registration held by legal entities in reach, with the country and, unless it is national, the jurisdiction each is issued in.',
     }),
     ApiResponse({ status: 200, type: TaxRegistrationTableResponseDto }),
   );
@@ -38,19 +39,38 @@ export function ApiCreateTaxRegistration() {
   return applyDecorators(
     ApiOperation({
       summary: 'Add a tax registration',
-      description: 'The number is unique per organization. Marking it primary clears the flag on the others.',
+      description:
+        'Registers the entity in a country and, optionally, one of its jurisdictions — a GSTIN must name a state; VAT, TIN and other numbers may be national. The jurisdiction must be in the same country. One registration per country and jurisdiction; the number is unique per organization. Marking it primary clears the flag on the others.',
     }),
     ApiResponse({ status: 201, description: 'Registration added.' }),
-    ApiResponse({ status: 409, description: 'That number is already registered.' }),
+    ApiResponse({
+      status: 400,
+      description: 'A GSTIN without a state, or a jurisdiction outside the registration country.',
+    }),
+    ApiResponse({
+      status: 409,
+      description: 'The entity is already registered there, or the number is already registered.',
+    }),
   );
 }
 
 export function ApiUpdateTaxRegistration() {
   return applyDecorators(
-    ApiOperation({ summary: 'Update a tax registration' }),
+    ApiOperation({
+      summary: 'Update a tax registration',
+      description:
+        'The resulting country, jurisdiction and type are checked together. `jurisdictionId: null` makes the registration national.',
+    }),
     ApiParam(ID),
     ApiResponse({ status: 200, description: 'Registration updated.' }),
-    ApiResponse({ status: 409, description: 'That number is already registered.' }),
+    ApiResponse({
+      status: 400,
+      description: 'A GSTIN without a state, or a jurisdiction outside the registration country.',
+    }),
+    ApiResponse({
+      status: 409,
+      description: 'The entity is already registered there, or the number is already registered.',
+    }),
   );
 }
 

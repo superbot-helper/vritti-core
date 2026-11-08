@@ -3,13 +3,13 @@ import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form, FormSection } from '@vritti/quantum-ui/Form';
 import { PhoneField } from '@vritti/quantum-ui/PhoneField';
 import { Switch } from '@vritti/quantum-ui/Switch';
+import { ISOCountrySelect } from '@vritti/quantum-ui/selects/iso-country';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useUpdateCompany } from '@/hooks/organization/companies';
 import { type CompanyData, type UpdateCompanyFormData, updateCompanySchema } from '@/schemas/companies';
-import { ISOCountrySelect } from '@/selectors/iso-country';
 import { JurisdictionSelector } from '@/selectors/jurisdiction';
 
 interface EditCompanyDialogProps {
@@ -27,16 +27,18 @@ export const EditCompanyDialog: React.FC<EditCompanyDialogProps> = ({ company, o
       email: company.email ?? '',
       phone: company.phone ?? '',
       website: company.website ?? '',
-      jurisdictionId: company.jurisdictionId ?? undefined,
+      countryCode: company.countryCode,
+      jurisdictionId: company.jurisdictionId,
       isActive: company.isActive,
       line1: company.primaryAddress?.line1 ?? '',
       line2: company.primaryAddress?.line2 ?? '',
       city: company.primaryAddress?.city ?? '',
       region: company.primaryAddress?.region ?? '',
       postalCode: company.primaryAddress?.postalCode ?? '',
-      countryCode: company.primaryAddress?.countryCode ?? undefined,
+      addressCountryCode: company.primaryAddress?.countryCode,
     },
   });
+  const countryCode = useWatch({ control: form.control, name: 'countryCode' });
 
   const updateMutation = useUpdateCompany({ onSuccess });
 
@@ -53,17 +55,18 @@ export const EditCompanyDialog: React.FC<EditCompanyDialogProps> = ({ company, o
           email: data.email,
           phone: data.phone,
           website: data.website,
-          jurisdictionId: data.jurisdictionId || null,
+          countryCode: data.countryCode ?? null,
+          jurisdictionId: data.jurisdictionId ?? null,
           isActive: data.isActive,
           address:
-            data.line1 && data.countryCode
+            data.line1 && data.addressCountryCode
               ? {
                   line1: data.line1,
                   line2: data.line2,
                   city: data.city,
                   region: data.region,
                   postalCode: data.postalCode,
-                  countryCode: data.countryCode,
+                  countryCode: data.addressCountryCode,
                 }
               : undefined,
         },
@@ -73,7 +76,16 @@ export const EditCompanyDialog: React.FC<EditCompanyDialogProps> = ({ company, o
         <FormSection title="Details">
           <TextField name="displayName" label="Name" placeholder="e.g. Acme Traders" />
           <TextField name="legalName" label="Legal Name" placeholder="e.g. Acme Traders Pvt Ltd" />
-          <JurisdictionSelector name="jurisdictionId" clearable />
+          <ISOCountrySelect
+            name="countryCode"
+            description="Where the company is based for tax"
+            clearable
+            onOptionSelect={(option) => {
+              // The state belongs to the old country; null replaces the default so it cannot come back
+              if (option?.value !== countryCode) form.resetField('jurisdictionId', { defaultValue: null });
+            }}
+          />
+          <JurisdictionSelector name="jurisdictionId" label="State" country={countryCode ?? undefined} clearable />
         </FormSection>
         <FormSection title="Contact">
           <TextField name="email" label="Email" type="email" placeholder="e.g. contact@acme.com" />
@@ -86,7 +98,7 @@ export const EditCompanyDialog: React.FC<EditCompanyDialogProps> = ({ company, o
           <TextField name="city" label="City" placeholder="e.g. Bengaluru" />
           <TextField name="region" label="State / Region" placeholder="e.g. Karnataka" />
           <TextField name="postalCode" label="Postal Code" placeholder="e.g. 560001" />
-          <ISOCountrySelect name="countryCode" label="Country" />
+          <ISOCountrySelect name="addressCountryCode" />
         </FormSection>
         <FormSection title="Status" contentClassName="grid grid-cols-1 gap-4">
           <Switch name="isActive" label="Active" description="Inactive companies are hidden from selection" />

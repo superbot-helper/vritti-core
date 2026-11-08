@@ -1,4 +1,5 @@
 import { CreateTaxJurisdictionDto } from '@commerce/tax-jurisdictions/dto/request/create-tax-jurisdiction.dto';
+import { TaxJurisdictionSelectQueryDto } from '@commerce/tax-jurisdictions/dto/request/tax-jurisdiction-select-query.dto';
 import { UpdateTaxJurisdictionDto } from '@commerce/tax-jurisdictions/dto/request/update-tax-jurisdiction.dto';
 import type { TaxJurisdictionResponseDto } from '@commerce/tax-jurisdictions/dto/response/tax-jurisdiction-response.dto';
 import { Body, Controller, Get, HttpCode, HttpStatus, Logger, Param, Patch, Post, Query } from '@nestjs/common';
@@ -6,7 +7,6 @@ import { ApiTags } from '@nestjs/swagger';
 import { AuthType, Require } from '@vritti/api-sdk/auth';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
 import type { SelectQueryResult } from '@vritti/api-sdk/select';
-import { SelectOptionsQueryDto } from '@vritti/api-sdk/select';
 import { TaxJurisdictionsGatewayService } from '@/modules/commerce-gateway/org-api/tax-jurisdictions/services/tax-jurisdictions-gateway.service';
 
 // The cloud-facing surface.
@@ -18,12 +18,14 @@ export class TaxJurisdictionInternalController {
 
   constructor(private readonly service: TaxJurisdictionsGatewayService) {}
 
+  // Returns jurisdiction options for cloud's pickers, optionally of one country
   @Get('select')
-  select(@Query() query: SelectOptionsQueryDto): Promise<SelectQueryResult> {
+  select(@Query() query: TaxJurisdictionSelectQueryDto): Promise<SelectQueryResult> {
     this.logger.log('GET /tax-jurisdictions/internal/select');
     return this.service.findForSelect(query);
   }
 
+  // Creates a jurisdiction under a parent of the same country one level up
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(@Body() dto: CreateTaxJurisdictionDto): Promise<CreateResponseDto<TaxJurisdictionResponseDto>> {
@@ -31,6 +33,7 @@ export class TaxJurisdictionInternalController {
     return this.service.create(dto);
   }
 
+  // Updates a jurisdiction; its level and country stay fixed once anything depends on it
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateTaxJurisdictionDto): Promise<SuccessResponseDto> {
     this.logger.log(`PATCH /tax-jurisdictions/internal/${id}`);

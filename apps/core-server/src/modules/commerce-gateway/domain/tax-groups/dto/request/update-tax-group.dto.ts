@@ -1,35 +1,39 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Trim } from '@vritti/api-sdk/decorators';
-import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
-
-export class UpdateTaxRateDto {
-  @Trim({ nullify: false })
-  @ApiPropertyOptional({ description: 'Tax rate name', example: 'CGST' })
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @ApiPropertyOptional({ description: 'Tax rate percentage', example: 9 })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  rate: number;
-}
+import { IsCode, Trim } from '@vritti/api-sdk/decorators';
+import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { TAX_TREATMENTS } from '../response/tax-group-response.dto';
 
 export class UpdateTaxGroupDto {
+  @ApiPropertyOptional({ description: 'Code, unique within the group’s country', example: 'gst-5' })
   @Trim({ nullify: false })
-  @ApiPropertyOptional({ description: 'Updated tax group name' })
   @IsOptional()
   @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  @IsCode()
+  code?: string;
+
+  @ApiPropertyOptional({ description: 'Tax group name' })
+  @Trim({ nullify: false })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   name?: string;
 
-  @ApiPropertyOptional({ description: 'Updated tax rates (replaces all existing rates)', type: [UpdateTaxRateDto] })
+  @ApiPropertyOptional({ description: 'How supplies in the group are treated', enum: TAX_TREATMENTS })
   @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => UpdateTaxRateDto)
-  taxRates?: UpdateTaxRateDto[];
+  @IsIn(TAX_TREATMENTS)
+  treatment?: (typeof TAX_TREATMENTS)[number];
 
-  @ApiPropertyOptional({ description: 'Updated active status' })
+  @ApiPropertyOptional({ description: 'Text printed on documents; null clears it', nullable: true })
+  @Trim()
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  legalText?: string | null;
+
+  @ApiPropertyOptional({ description: 'Whether the group can be picked' })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

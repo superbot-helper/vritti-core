@@ -1,32 +1,44 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class TaxRateResponseDto {
-  @ApiProperty({ description: 'Tax rate ID' })
-  id: string;
-
-  @ApiProperty({ description: 'Tax rate name', example: 'CGST' })
-  name: string;
-
-  @ApiProperty({ description: 'Tax rate percentage', example: 9 })
-  rate: number;
-
-  @ApiProperty({ description: 'Sort order' })
-  sortOrder: number;
-}
+export const TAX_TREATMENTS = ['TAXABLE', 'ZERO_RATED', 'EXEMPT', 'OUT_OF_SCOPE'] as const;
 
 export class TaxGroupResponseDto {
   @ApiProperty({ description: 'Tax group ID' })
   id: string;
 
-  @ApiProperty({ description: 'Tax group name' })
+  @ApiProperty({
+    description: 'Uppercase ISO 3166-1 alpha-2 country whose tax law the group belongs to',
+    example: 'IN',
+  })
+  countryCode: string;
+
+  @ApiProperty({ description: 'Code, unique within the country', example: 'gst-5' })
+  code: string;
+
+  @ApiProperty({ description: 'Tax group name', example: 'GST 5%' })
   name: string;
 
-  @ApiProperty({ description: 'Whether the tax group is active' })
+  @ApiProperty({ description: 'How supplies in the group are treated', enum: TAX_TREATMENTS })
+  treatment: (typeof TAX_TREATMENTS)[number];
+
+  @ApiProperty({ description: 'Text printed on documents, e.g. an exemption reason', type: String, nullable: true })
+  legalText: string | null;
+
+  @ApiProperty({ description: 'Whether the group can be picked' })
   isActive: boolean;
 
-  @ApiProperty({ description: 'Whether this tax group can be deleted (not referenced by items or offerings)' })
+  @ApiProperty({ description: 'Number of rates in the group' })
+  rateCount: number;
+
+  @ApiProperty({ description: 'Number of tax classes mapped to the group' })
+  classCount: number;
+
+  @ApiProperty({ description: 'Whether the group can be deleted (no tax class is mapped to it)' })
   canDelete: boolean;
 
-  @ApiProperty({ description: 'Tax rates in this group', type: [TaxRateResponseDto] })
-  taxRates: TaxRateResponseDto[];
+  @ApiProperty({ description: 'ISO timestamp of creation' })
+  createdAt: string;
+
+  @ApiProperty({ description: 'ISO timestamp of last update' })
+  updatedAt: string;
 }

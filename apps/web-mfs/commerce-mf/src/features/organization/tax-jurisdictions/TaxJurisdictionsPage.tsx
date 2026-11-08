@@ -6,6 +6,7 @@ import { useDialog } from '@vritti/quantum-ui/hooks';
 import { PageContent } from '@vritti/quantum-ui/PageContent';
 import { PageHeader } from '@vritti/quantum-ui/PageHeader';
 import { PermissionGate } from '@vritti/quantum-ui/PermissionGate';
+import { pluralize } from '@vritti/quantum-ui/pluralize';
 import { Map as MapIcon, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { TAX_JURISDICTIONS_KEY, useTaxJurisdictionCount } from '@/hooks/organization/tax-jurisdictions';
@@ -15,6 +16,7 @@ import { AddJurisdictionDialog } from './forms/AddJurisdictionDialog';
 export const TaxJurisdictionsPage = () => {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [country, setCountry] = useState<string>();
   const { data: jurisdictionCount } = useTaxJurisdictionCount();
   const formDialog = useDialog();
 
@@ -24,8 +26,8 @@ export const TaxJurisdictionsPage = () => {
         title="Tax Jurisdictions"
         description={
           jurisdictionCount
-            ? `${jurisdictionCount.count} total jurisdictions`
-            : 'The geography your registrations and rates key off — country, state, city…'
+            ? pluralize('jurisdiction', jurisdictionCount.count, true)
+            : 'The states, counties and cities your registrations and rates key off, per country'
         }
         actions={
           <Button
@@ -40,7 +42,15 @@ export const TaxJurisdictionsPage = () => {
 
       <PageContent>
         <PermissionGate permission={ORG_TAX_JURISDICTIONS.view}>
-          <JurisdictionTreePanel selectedId={selectedId} onSelect={setSelectedId} />
+          <JurisdictionTreePanel
+            country={country}
+            onCountryChange={(code) => {
+              setCountry(code);
+              setSelectedId(null);
+            }}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
           <JurisdictionDetailPanel jurisdictionId={selectedId} onSelectJurisdiction={setSelectedId} />
         </PermissionGate>
       </PageContent>
@@ -52,6 +62,7 @@ export const TaxJurisdictionsPage = () => {
         description="Enter the details for the new tax jurisdiction."
         content={(close) => (
           <AddJurisdictionDialog
+            countryCode={country}
             onSuccess={() => {
               queryClient.invalidateQueries({ queryKey: TAX_JURISDICTIONS_KEY });
               close();

@@ -4,7 +4,10 @@ export class TaxComponentResponseDto {
   @ApiProperty({ description: 'Tax component ID' })
   id: string;
 
-  @ApiProperty({ description: 'Unique code within the org', example: 'gst-standard' })
+  @ApiProperty({ description: 'Uppercase ISO 3166-1 alpha-2 country whose tax the component is', example: 'IN' })
+  countryCode: string;
+
+  @ApiProperty({ description: 'Code, unique within the country', example: 'cgst' })
   code: string;
 
   @ApiProperty({ description: 'Human-readable name' })
@@ -25,7 +28,7 @@ export class TaxComponentResponseDto {
   @ApiProperty({ description: 'System-reserved (cannot be deleted)' })
   isSystem: boolean;
 
-  @ApiProperty({ description: 'Whether hard-delete is allowed (not system)' })
+  @ApiProperty({ description: 'Whether hard-delete is allowed (not system, and no tax-group rate uses it)' })
   canDelete: boolean;
 
   @ApiProperty({ description: 'ISO timestamp of creation' })

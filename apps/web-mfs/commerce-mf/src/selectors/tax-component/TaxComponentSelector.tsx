@@ -1,18 +1,24 @@
 import { Select, type SelectProps } from '@vritti/quantum-ui/Select';
 import { forwardRef } from 'react';
 
-export type TaxComponentSelectorProps = Omit<SelectProps, 'optionsEndpoint'>;
+export type TaxComponentSelectorProps = Omit<SelectProps, 'optionsEndpoint'> & {
+  country: string | undefined;
+};
 
-// Pre-configured Select for tax-component selection (id → name, code as description); org-scoped server-side via RLS
-export const TaxComponentSelector = forwardRef<HTMLButtonElement, TaxComponentSelectorProps>((props, ref) => (
-  <Select
-    ref={ref}
-    label="Tax Component"
-    placeholder="Select tax component"
-    searchable
-    optionsEndpoint="commerce-api/select-api/tax-components"
-    fieldKeys={{ valueKey: 'id', labelKey: 'name', descriptionKey: 'code' }}
-    {...props}
-  />
-));
+// Pre-configured Select over one country's tax components (id → name, code as description); inert until the country is known
+export const TaxComponentSelector = forwardRef<HTMLButtonElement, TaxComponentSelectorProps>(
+  ({ country, params, ...props }, ref) => (
+    <Select
+      ref={ref}
+      label="Tax Component"
+      placeholder={country ? 'Select tax component' : 'Select a country first'}
+      searchable
+      fieldKeys={{ valueKey: 'id', labelKey: 'name', descriptionKey: 'code' }}
+      {...props}
+      disabled={!country || props.disabled}
+      optionsEndpoint={country ? 'commerce-api/select-api/tax-components' : undefined}
+      params={country ? { ...params, country } : undefined}
+    />
+  ),
+);
 TaxComponentSelector.displayName = 'TaxComponentSelector';

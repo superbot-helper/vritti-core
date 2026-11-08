@@ -9,6 +9,7 @@ export const taxComponents = commerceSchema.table(
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     organizationId: organizationIdColumn,
+    countryCode: varchar('country_code', { length: 2 }).notNull(),
     code: varchar('code', { length: 50 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     authorityLevel: taxAuthorityLevelEnum('authority_level').notNull(),
@@ -23,8 +24,8 @@ export const taxComponents = commerceSchema.table(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    unique('uq_tax_components_org_code').on(table.organizationId, table.code),
-    index('idx_tax_components_org').on(table.organizationId),
+    unique('uq_tax_components_org_country_code').on(table.organizationId, table.countryCode, table.code),
+    index('idx_tax_components_org_country').on(table.organizationId, table.countryCode),
     codeCheck('tax_components_code_chk', table.code),
     orgIsolationPolicy(),
   ],

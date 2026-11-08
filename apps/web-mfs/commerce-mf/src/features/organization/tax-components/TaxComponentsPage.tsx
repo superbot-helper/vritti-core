@@ -13,6 +13,7 @@ import {
 import { Dialog } from '@vritti/quantum-ui/Dialog';
 import { useConfirm, useDialog } from '@vritti/quantum-ui/hooks';
 import { PageHeader } from '@vritti/quantum-ui/PageHeader';
+import { countryFlag, ISOCountryFilter } from '@vritti/quantum-ui/selects/iso-country';
 import { Blocks, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import {
@@ -21,12 +22,13 @@ import {
   useTaxComponentsTable,
 } from '@/hooks/organization/tax-components';
 import { AUTHORITY_LEVEL_LABELS, type TaxComponentData } from '@/schemas/tax-components';
+import { contextValue } from '@/utils/tableContext';
 import { AddTaxComponentDialog } from './forms/AddTaxComponentDialog';
 import { EditTaxComponentDialog } from './forms/EditTaxComponentDialog';
 
 export const TaxComponentsPage = () => {
   const queryClient = useQueryClient();
-  const { data: response, isLoading } = useTaxComponentsTable();
+  const { data: response, isLoading, isFetching } = useTaxComponentsTable();
   const addDialog = useDialog();
   const confirm = useConfirm();
 
@@ -48,6 +50,12 @@ export const TaxComponentsPage = () => {
   const columns = useMemo<ColumnDef<TaxComponentData>[]>(
     () => [
       {
+        accessorKey: 'countryCode',
+        header: 'Country',
+        cell: ({ row }) => `${countryFlag(row.original.countryCode)} ${row.original.countryCode}`,
+        enableSorting: true,
+      },
+      {
         accessorKey: 'code',
         header: 'Code',
         cell: ({ row }) => <StringCell value={row.original.code} mono />,
@@ -63,14 +71,12 @@ export const TaxComponentsPage = () => {
       {
         accessorKey: 'isRecoverable',
         header: 'Recoverable',
-        cell: ({ row }) => (
-          <Badge
-            variant={row.original.isRecoverable ? 'secondary' : 'outline'}
-            className={row.original.isRecoverable ? 'bg-success/15 text-success' : ''}
-          >
-            {row.original.isRecoverable ? 'Recoverable' : 'Non-recoverable'}
-          </Badge>
-        ),
+        cell: ({ row }) =>
+          row.original.isRecoverable ? (
+            <Badge variant="success">Recoverable</Badge>
+          ) : (
+            <Badge variant="outline">Non-recoverable</Badge>
+          ),
         enableSorting: true,
       },
       {
@@ -82,14 +88,8 @@ export const TaxComponentsPage = () => {
       {
         accessorKey: 'isActive',
         header: 'Status',
-        cell: ({ row }) => (
-          <Badge
-            variant={row.original.isActive ? 'secondary' : 'outline'}
-            className={row.original.isActive ? 'bg-success/15 text-success' : ''}
-          >
-            {row.original.isActive ? 'Active' : 'Inactive'}
-          </Badge>
-        ),
+        cell: ({ row }) =>
+          row.original.isActive ? <Badge variant="success">Active</Badge> : <Badge variant="outline">Inactive</Badge>,
         enableSorting: true,
       },
       {
@@ -111,7 +111,7 @@ export const TaxComponentsPage = () => {
               permission: ORG_TAX_COMPONENTS.edit,
               dialog: {
                 title: 'Edit Tax Component',
-                description: 'Update the tax component or toggle its status. Code is immutable.',
+                description: 'Update the tax component or toggle its status. Country and code are fixed.',
                 content: (close) => <EditTaxComponentDialog taxComponent={r} onSuccess={close} onCancel={close} />,
               },
             },
@@ -134,7 +134,7 @@ export const TaxComponentsPage = () => {
     [handleDelete],
   );
 
-  const { table } = useDataTable({
+  const { table, context } = useDataTable({
     columns,
     slug: 'commerce-org-tax-components',
     label: 'tax component',
@@ -144,18 +144,21 @@ export const TaxComponentsPage = () => {
     enableMultiSort: false,
     onStatePush: () => queryClient.invalidateQueries({ queryKey: TAX_COMPONENTS_TABLE_KEY }),
   });
+  const country = contextValue(context, 'country');
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Tax Components"
-        description="Define the atomic tax parts (CGST, VAT, excise…) that rate bundles are built from."
+        description="The atomic taxes of each country (CGST, VAT, excise…) that tax group rates are built from."
       />
 
       <DataTable
         table={table}
         isLoading={isLoading}
+        isFetching={isFetching}
         permission={ORG_TAX_COMPONENTS.view}
+        contextBar={<ISOCountryFilter name="country" mode="context" placeholder="All countries" />}
         searchConfig={{
           columns: [
             { id: 'name', label: 'Name' },
@@ -178,7 +181,7 @@ export const TaxComponentsPage = () => {
         emptyStateConfig={{
           icon: Blocks,
           title: 'No tax components',
-          description: 'Add a tax component to start building rate bundles from atomic tax parts.',
+          description: 'Add a tax component to start building tax group rates from atomic tax parts.',
           action: (
             <Button
               startAdornment={<Plus className="size-4" />}
@@ -195,8 +198,8 @@ export const TaxComponentsPage = () => {
         handle={addDialog}
         icon={Blocks}
         title="Add Tax Component"
-        description="Create a new atomic tax component for building rate bundles."
-        content={(close) => <AddTaxComponentDialog onSuccess={close} onCancel={close} />}
+        description="Create an atomic tax component of one country for building tax group rates."
+        content={(close) => <AddTaxComponentDialog countryCode={country} onSuccess={close} onCancel={close} />}
       />
     </div>
   );

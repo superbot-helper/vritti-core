@@ -3,6 +3,7 @@ import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form } from '@vritti/quantum-ui/Form';
 import { Select } from '@vritti/quantum-ui/Select';
 import { Switch } from '@vritti/quantum-ui/Switch';
+import { ISOCountrySelect } from '@vritti/quantum-ui/selects/iso-country';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
@@ -29,6 +30,7 @@ export const EditTaxComponentDialog: React.FC<EditTaxComponentDialogProps> = ({
   const form = useForm<EditTaxComponentFormData>({
     resolver: zodResolver(editTaxComponentFormSchema),
     defaultValues: {
+      countryCode: taxComponent.countryCode,
       code: taxComponent.code,
       name: taxComponent.name,
       authorityLevel: taxComponent.authorityLevel,
@@ -57,6 +59,7 @@ export const EditTaxComponentDialog: React.FC<EditTaxComponentDialogProps> = ({
       })}
     >
       <div className="space-y-4">
+        <ISOCountrySelect name="countryCode" disabled description="Country cannot be changed" />
         <TextField name="code" label="Code" disabled description="Code cannot be changed" />
         <TextField name="name" label="Name" placeholder="e.g. Central GST" />
         <Select
@@ -74,7 +77,7 @@ export const EditTaxComponentDialog: React.FC<EditTaxComponentDialogProps> = ({
         <Switch
           name="isActive"
           label="Active"
-          description="Inactive tax components are hidden from rate bundle forms"
+          description="Inactive tax components are hidden from tax group rate forms"
         />
       </div>
       <DialogActions>

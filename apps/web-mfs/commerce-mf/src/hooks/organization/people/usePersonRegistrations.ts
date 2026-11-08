@@ -5,7 +5,7 @@ import { usePermission } from '@vritti/quantum-ui/PermissionGate';
 import type { SuccessResponse } from '@vritti/quantum-ui/types/api-response';
 import type { AxiosError } from 'axios';
 import type {
-  PartyRegistrationFormData,
+  PartyRegistrationPayload,
   PartyRegistrationsTableResponse,
   PartyTaxRegistrationRow,
 } from '@/schemas/party-registrations';
@@ -34,10 +34,10 @@ export function usePersonRegistrationsTable(
 
 export function useCreatePersonRegistration(
   personId: string,
-  options?: Omit<UseMutationOptions<PartyTaxRegistrationRow, AxiosError, PartyRegistrationFormData>, 'mutationFn'>,
+  options?: Omit<UseMutationOptions<PartyTaxRegistrationRow, AxiosError, PartyRegistrationPayload>, 'mutationFn'>,
 ) {
   const queryClient = useQueryClient();
-  return useMutation<PartyTaxRegistrationRow, AxiosError, PartyRegistrationFormData>({
+  return useMutation<PartyTaxRegistrationRow, AxiosError, PartyRegistrationPayload>({
     ...options,
     mutationFn: (data) => createPersonRegistration({ personId, data }),
     onSuccess: (...args) => {
@@ -55,7 +55,7 @@ interface SetRegistrationActiveVars {
 
 interface UpdateRegistrationVars {
   registrationId: string;
-  data: PartyRegistrationFormData;
+  data: PartyRegistrationPayload;
 }
 
 export function useUpdatePersonRegistration(

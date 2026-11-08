@@ -29,6 +29,7 @@ export class CompaniesService {
       email: dto.email,
       phone: dto.phone,
       website: dto.website,
+      countryCode: dto.countryCode,
       jurisdictionId: dto.jurisdictionId,
       isActive: dto.isActive,
     });

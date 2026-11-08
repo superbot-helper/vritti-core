@@ -1,6 +1,7 @@
 import { sql } from '@vritti/api-sdk/drizzle-orm';
-import { boolean, pgPolicy, timestamp, uniqueIndex, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
+import { boolean, codeCheck, index, text, timestamp, unique, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
 import { commerceSchema } from './commerce-schema';
+import { taxTreatmentEnum } from './enums';
 import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
 
 export const taxGroups = commerceSchema.table(
@@ -8,30 +9,23 @@ export const taxGroups = commerceSchema.table(
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     organizationId: organizationIdColumn,
-    legalEntityId: uuid('legal_entity_id').notNull().default(sql.raw("cast(current_setting('app.le_id') as uuid)")),
+    countryCode: varchar('country_code', { length: 2 }).notNull(),
+    code: varchar('code', { length: 50 }).notNull(),
     name: varchar('name', { length: 100 }).notNull(),
+    treatment: taxTreatmentEnum('treatment').notNull(),
+    legalText: text('legal_text'),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
   },
   (table) => [
-    uniqueIndex('tax_groups_le_name_unique').on(table.legalEntityId, table.name),
+    unique('uq_tax_groups_org_country_code').on(table.organizationId, table.countryCode, table.code),
+    index('idx_tax_groups_org_country').on(table.organizationId, table.countryCode),
+    codeCheck('tax_groups_code_chk', table.code),
     orgIsolationPolicy(),
-    pgPolicy('le_read', {
-      for: 'select',
-      using: sql`legal_entity_id = (select current_setting('app.le_id', true)::uuid)`,
-    }),
-    pgPolicy('le_write', {
-      for: 'insert',
-      withCheck: sql`legal_entity_id = (select current_setting('app.le_id', true)::uuid)`,
-    }),
-    pgPolicy('le_update', {
-      for: 'update',
-      using: sql`legal_entity_id = (select current_setting('app.le_id', true)::uuid)`,
-    }),
-    pgPolicy('le_delete', {
-      for: 'delete',
-      using: sql`legal_entity_id = (select current_setting('app.le_id', true)::uuid)`,
-    }),
   ],
 );
 

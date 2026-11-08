@@ -1,10 +1,24 @@
 import { Trim } from '@vritti/api-sdk/decorators';
-import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsISO31661Alpha2,
+  IsOptional,
+  IsString,
+  IsUppercase,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { type TaxAuthorityLevel, taxAuthorityLevelEnum } from '@/db/schema';
 
 export class UpdateTaxComponentDto {
   @IsUUID('7')
   id: string;
+
+  @IsOptional()
+  @IsISO31661Alpha2()
+  @IsUppercase()
+  countryCode?: string;
 
   @Trim({ nullify: false })
   @IsOptional()

@@ -6,6 +6,7 @@ import { type ColumnDef, DataTable, RowActions, StringCell, useDataTable } from 
 import { Dialog } from '@vritti/quantum-ui/Dialog';
 import { useDialog } from '@vritti/quantum-ui/hooks';
 import { PageHeader } from '@vritti/quantum-ui/PageHeader';
+import { countryFlag } from '@vritti/quantum-ui/selects/iso-country';
 import { buildSlug } from '@vritti/quantum-ui/slug';
 import { Building2, Eye, Plus } from 'lucide-react';
 import { useMemo } from 'react';
@@ -34,8 +35,18 @@ export const CompaniesPage = () => {
         enableSorting: false,
       },
       {
+        accessorKey: 'countryCode',
+        header: 'Country',
+        cell: ({ row }) => (
+          <StringCell
+            value={row.original.countryCode && `${countryFlag(row.original.countryCode)} ${row.original.countryCode}`}
+          />
+        ),
+        enableSorting: false,
+      },
+      {
         accessorKey: 'jurisdictionName',
-        header: 'Jurisdiction',
+        header: 'State',
         cell: ({ row }) => <StringCell value={row.original.jurisdictionName} />,
         enableSorting: false,
       },
@@ -43,10 +54,7 @@ export const CompaniesPage = () => {
         accessorKey: 'isActive',
         header: 'Status',
         cell: ({ row }) => (
-          <Badge
-            variant={row.original.isActive ? 'secondary' : 'outline'}
-            className={row.original.isActive ? 'bg-success/15 text-success' : ''}
-          >
+          <Badge variant={row.original.isActive ? 'success' : 'outline'}>
             {row.original.isActive ? 'Active' : 'Inactive'}
           </Badge>
         ),

@@ -16,7 +16,7 @@ export class TaxComponentsGatewayService {
     private readonly dataTableStateService: DataTableStateService,
   ) {}
 
-  // Returns paginated, filtered, and sorted tax components for the data table
+  // Returns paginated, filtered, and sorted tax components; the country comes from the saved table context
   async findForTable(userId: string): Promise<TaxComponentTableResponseDto> {
     this.logger.log('org.taxComponents.table');
     const { state, activeViewId } = await this.dataTableStateService.getCurrentState(
@@ -35,7 +35,7 @@ export class TaxComponentsGatewayService {
 
   // Creates a new tax component
   create(dto: CreateTaxComponentDto): Promise<CreateResponseDto<TaxComponentResponseDto>> {
-    this.logger.log(`taxComponents.create — code: ${dto.code}`);
+    this.logger.log(`taxComponents.create — country: ${dto.countryCode}, code: ${dto.code}`);
     return this.nats.send('commerce', 'org.taxComponents.create', dto);
   }
 

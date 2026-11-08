@@ -3,17 +3,19 @@ import { DialogActions } from '@vritti/quantum-ui/Dialog';
 import { Form } from '@vritti/quantum-ui/Form';
 import { Select } from '@vritti/quantum-ui/Select';
 import { Switch } from '@vritti/quantum-ui/Switch';
+import { ISOCountrySelect } from '@vritti/quantum-ui/selects/iso-country';
 import { TextField } from '@vritti/quantum-ui/TextField';
 import { zodResolver } from '@vritti/quantum-ui/zod';
 import type React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useUpdateTaxRegistration } from '@/hooks/legal-entity/tax-registrations';
 import {
-  type CreateTaxRegistrationFormData,
-  createTaxRegistrationSchema,
   REGISTRATION_TYPE_OPTIONS,
   type TaxRegistrationData,
+  type TaxRegistrationFormData,
+  taxRegistrationSchema,
 } from '@/schemas/tax-registrations';
+import { JurisdictionSelector } from '@/selectors/jurisdiction';
 
 interface EditTaxRegistrationDialogProps {
   registration: TaxRegistrationData;
@@ -26,15 +28,17 @@ export const EditTaxRegistrationDialog: React.FC<EditTaxRegistrationDialogProps>
   onSuccess,
   onCancel,
 }) => {
-  const form = useForm<CreateTaxRegistrationFormData>({
-    resolver: zodResolver(createTaxRegistrationSchema),
+  const form = useForm<TaxRegistrationFormData>({
+    resolver: zodResolver(taxRegistrationSchema),
     defaultValues: {
+      countryCode: registration.countryCode,
       jurisdictionId: registration.jurisdictionId,
       registrationNumber: registration.registrationNumber,
       registrationType: registration.registrationType,
       isPrimary: registration.isPrimary,
     },
   });
+  const countryCode = useWatch({ control: form.control, name: 'countryCode' });
 
   const updateMutation = useUpdateTaxRegistration({ onSuccess });
 
@@ -43,25 +47,34 @@ export const EditTaxRegistrationDialog: React.FC<EditTaxRegistrationDialogProps>
       form={form}
       mutation={updateMutation}
       onCancel={onCancel}
-      transformSubmit={(data) => ({ id: registration.id, data })}
+      transformSubmit={(data: TaxRegistrationFormData) => ({
+        id: registration.id,
+        data: { ...data, jurisdictionId: data.jurisdictionId ?? null },
+      })}
     >
       <div className="flex flex-col gap-4">
-        <Select
-          name="jurisdictionId"
-          label="Registered in"
-          placeholder="Select a jurisdiction"
-          optionsEndpoint="commerce-api/select-api/tax-jurisdictions"
-          fieldKeys={{ valueKey: 'id', labelKey: 'name' }}
-          searchable
-          description="Where the number was issued — it decides the origin for tax on every sale."
+        <ISOCountrySelect
+          name="countryCode"
+          description="The country that issued the number."
+          onOptionSelect={(option) => {
+            // The state belongs to the old country; null replaces the default so it cannot come back
+            if (option?.value !== countryCode) form.resetField('jurisdictionId', { defaultValue: null });
+          }}
         />
-        <Select name="registrationType" label="Type" options={REGISTRATION_TYPE_OPTIONS} />
+        <JurisdictionSelector
+          name="jurisdictionId"
+          label="State"
+          country={countryCode}
+          clearable
+          description="Required for a GSTIN. Leave empty for a national registration, like a VAT number."
+        />
         <TextField
           name="registrationNumber"
           label="Registration Number"
           placeholder="e.g. 36BPNPL2271K2ZH"
           description="As issued — the first two digits of a GSTIN are its state code."
         />
+        <Select name="registrationType" label="Type" options={REGISTRATION_TYPE_OPTIONS} />
         <Switch
           name="isPrimary"
           label="Primary registration"

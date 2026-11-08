@@ -20,6 +20,7 @@ import {
   partyLicenseTypeEnum,
   partyTypeEnum,
   socialPlatformEnum,
+  taxRegistrationSchemeEnum,
   taxRegistrationTypeEnum,
 } from './enums';
 import { taxJurisdictions } from './tax-jurisdictions';
@@ -34,6 +35,7 @@ export const parties = commerceSchema.table(
     displayName: varchar('display_name', { length: 255 }).notNull(),
     isActive: boolean('is_active').notNull().default(true),
     legalName: varchar('legal_name', { length: 255 }),
+    countryCode: varchar('country_code', { length: 2 }),
     jurisdictionId: uuid('jurisdiction_id').references(() => taxJurisdictions.id),
     firstName: varchar('first_name', { length: 120 }),
     lastName: varchar('last_name', { length: 120 }),
@@ -151,11 +153,11 @@ export const partyTaxRegistrations = commerceSchema.table(
     partyId: uuid('party_id')
       .notNull()
       .references(() => parties.id, { onDelete: 'cascade' }),
-    jurisdictionId: uuid('jurisdiction_id')
-      .notNull()
-      .references(() => taxJurisdictions.id),
+    countryCode: varchar('country_code', { length: 2 }).notNull(),
+    jurisdictionId: uuid('jurisdiction_id').references(() => taxJurisdictions.id),
     registrationNumber: varchar('registration_number', { length: 50 }).notNull(),
     registrationType: taxRegistrationTypeEnum('registration_type').notNull(),
+    scheme: taxRegistrationSchemeEnum('scheme').notNull().default('REGULAR'),
     isPrimary: boolean('is_primary').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -165,7 +167,9 @@ export const partyTaxRegistrations = commerceSchema.table(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    unique('uq_party_tax_reg_party_juris').on(table.partyId, table.jurisdictionId),
+    unique('uq_party_tax_reg_party_country_juris')
+      .on(table.partyId, table.countryCode, table.jurisdictionId)
+      .nullsNotDistinct(),
     unique('uq_party_tax_reg_org_number').on(table.organizationId, table.registrationNumber),
     index('idx_party_tax_reg_party').on(table.partyId),
     orgIsolationPolicy(),

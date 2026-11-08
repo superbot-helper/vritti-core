@@ -1,10 +1,9 @@
+import { ISO_COUNTRIES } from '@vritti/quantum-ui/selects/iso-country';
 import type { CreateResponse, SuccessResponse, TableResponse } from '@vritti/quantum-ui/types/api-response';
-import { z, zodCodeField, zodResolver } from '@vritti/quantum-ui/zod';
-import type { Resolver } from 'react-hook-form';
+import { z, zodCodeField } from '@vritti/quantum-ui/zod';
 
-// Geographic hierarchy levels a jurisdiction can occupy, broad to narrow.
+// Sub-national levels a jurisdiction can occupy, broad to narrow; the whole country is its country code alone
 export const TaxJurisdictionLevelValues = {
-  COUNTRY: 'COUNTRY',
   STATE: 'STATE',
   COUNTY: 'COUNTY',
   CITY: 'CITY',
@@ -15,7 +14,6 @@ export type TaxJurisdictionLevel = (typeof TaxJurisdictionLevelValues)[keyof typ
 export const LEVELS = Object.values(TaxJurisdictionLevelValues) as [TaxJurisdictionLevel, ...TaxJurisdictionLevel[]];
 
 export const LEVEL_LABELS: Record<TaxJurisdictionLevel, string> = {
-  COUNTRY: 'Country',
   STATE: 'State',
   COUNTY: 'County',
   CITY: 'City',
@@ -24,32 +22,57 @@ export const LEVEL_LABELS: Record<TaxJurisdictionLevel, string> = {
 
 export const levelOptions = LEVELS.map((value) => ({ value, label: LEVEL_LABELS[value] }));
 
-const _taxJurisdictionSchema = z.object({
-  code: zodCodeField({ max: 50 }),
-  name: z.string().min(1, 'Name is required').max(255),
-  level: z.enum(LEVELS),
-  parentId: z.uuid().optional().nullable(),
-  countryCode: z.string({ error: 'Country is required' }).length(2, 'Country is required'),
-  regionCode: z.string().max(10).optional(),
-  taxUnion: z.string().max(50).optional(),
-  isActive: z.boolean(),
-});
+export const PARENT_LEVEL_HINTS: Record<TaxJurisdictionLevel, string> = {
+  STATE: 'A state sits at the top of its country',
+  COUNTY: 'The state it sits in',
+  CITY: 'The state or county it sits in',
+  DISTRICT: 'The jurisdiction it sits in',
+};
 
-export type TaxJurisdictionFormData = {
+export const CHILD_LEVEL: Record<TaxJurisdictionLevel, TaxJurisdictionLevel> = {
+  STATE: 'COUNTY',
+  COUNTY: 'CITY',
+  CITY: 'DISTRICT',
+  DISTRICT: 'DISTRICT',
+};
+
+const ISO_COUNTRY_CODES = new Set(ISO_COUNTRIES.map(({ code }) => code));
+
+export const countryCodeField = z
+  .string({ error: 'Country is required' })
+  .refine((code) => ISO_COUNTRY_CODES.has(code), 'Country is required');
+
+const parentBelowState = {
+  check: (data: { level: TaxJurisdictionLevel; parentId?: string | null }) =>
+    data.level === TaxJurisdictionLevelValues.STATE || !!data.parentId,
+  params: { path: ['parentId'], message: 'Select the jurisdiction this one sits under' },
+};
+
+export const taxJurisdictionSchema = z
+  .object({
+    code: zodCodeField({ max: 50 }),
+    name: z.string({ error: 'Name is required' }).min(1, 'Name is required').max(255),
+    countryCode: countryCodeField,
+    level: z.enum(LEVELS, { error: 'Level is required' }),
+    parentId: z.uuid('Select the jurisdiction this one sits under').nullish(),
+    regionCode: z.string().max(10).optional(),
+    taxUnion: z.string().max(50).optional(),
+    isActive: z.boolean(),
+  })
+  .refine(parentBelowState.check, parentBelowState.params);
+
+export type TaxJurisdictionFormData = z.infer<typeof taxJurisdictionSchema>;
+
+export interface TaxJurisdictionPayload {
   code: string;
   name: string;
-  level: TaxJurisdictionLevel;
-  parentId?: string | null;
   countryCode: string;
+  level: TaxJurisdictionLevel;
+  parentId: string | null;
   regionCode?: string;
   taxUnion?: string;
   isActive: boolean;
-};
-
-// Pre-typed resolver — casts once here so no `as any` leaks into components
-export const taxJurisdictionFormResolver = zodResolver(
-  _taxJurisdictionSchema,
-) as unknown as Resolver<TaxJurisdictionFormData>;
+}
 
 export interface TaxJurisdictionData {
   id: string;
@@ -66,6 +89,11 @@ export interface TaxJurisdictionData {
   hasChildren?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TaxJurisdictionTreeQuery {
+  search?: string;
+  country?: string;
 }
 
 export interface TaxJurisdictionTreeNode {
