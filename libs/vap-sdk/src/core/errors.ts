@@ -7,7 +7,16 @@ export class VapError extends Error {
     super(message);
     this.name = 'VapError';
   }
+
+  // Core could not be reached or failed on its side (a network failure, a timeout, a 5xx) — as opposed to core refusing
+  // this request. A storefront degrades the part that needed core rather than failing the page
+  get unavailable(): boolean {
+    return this.code === UNAVAILABLE_CODE || (this.status !== undefined && this.status >= 500);
+  }
 }
+
+// The code a VapError carries when core could not be reached at all
+export const UNAVAILABLE_CODE = 'Unavailable';
 
 export class PartyRollbackError extends Error {
   constructor(

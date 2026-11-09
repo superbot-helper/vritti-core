@@ -1,99 +1,13 @@
-import { graphql } from '../gql/index.js';
-
-export const MoneyFieldsFragment = graphql(`
-  fragment MoneyFields on Money {
-    currency
-    value
-  }
-`);
-
-export const CartItemFieldsFragment = graphql(`
-  fragment CartItemFields on CartItem {
-    id
-    catalogListingId
-    quantity
-    name
-    code
-    isAvailable
-    unitPrice {
-      ...MoneyFields
-    }
-    lineTotal {
-      ...MoneyFields
-    }
-  }
-`);
-
-export const CartFieldsFragment = graphql(`
-  fragment CartFields on Cart {
-    currencyCode
-    itemCount
-    subtotal {
-      ...MoneyFields
-    }
-    sites {
-      siteId
-      siteName
-      itemCount
-      subtotal {
-        ...MoneyFields
-      }
-      gateways
-      items {
-        ...CartItemFields
-      }
-    }
-    checkout {
-      gateways
-    }
-  }
-`);
-
-export const CART_QUERY = graphql(`
-  query Cart($input: CartScopeInput!) {
-    cart(input: $input) {
-      ...CartFields
-    }
-  }
-`);
-
-export const ADD_TO_CART = graphql(`
-  mutation AddToCart($input: AddCartItemInput!) {
-    addToCart(input: $input) {
-      ...CartFields
-    }
-  }
-`);
-
-export const UPDATE_CART_ITEM = graphql(`
-  mutation UpdateCartItem($input: UpdateCartItemInput!) {
-    updateCartItem(input: $input) {
-      ...CartFields
-    }
-  }
-`);
-
-export const REMOVE_FROM_CART = graphql(`
-  mutation RemoveFromCart($input: CartItemRefInput!) {
-    removeFromCart(input: $input) {
-      ...CartFields
-    }
-  }
-`);
-
-export const CLEAR_CART = graphql(`
-  mutation ClearCart($input: CartScopeInput!) {
-    clearCart(input: $input) {
-      ...CartFields
-    }
-  }
-`);
-
-export const CART_QUANTITIES_QUERY = graphql(`
-  query CartQuantities {
-    cartQuantities {
-      code
-      quantity
-    }
-  }
-`);
+// The cart documents, as codegen generates them from cart.graphql. Each is its own export of the generated
+// module, so a bundle keeps only the documents it sends.
+export {
+  AddToCartDocument as ADD_TO_CART,
+  CartDocument as CART_QUERY,
+  CartFieldsFragmentDoc as CartFieldsFragment,
+  CartItemFieldsFragmentDoc as CartItemFieldsFragment,
+  CartQuantitiesDocument as CART_QUANTITIES_QUERY,
+  ClearCartDocument as CLEAR_CART,
+  MoneyFieldsFragmentDoc as MoneyFieldsFragment,
+  RemoveFromCartDocument as REMOVE_FROM_CART,
+  UpdateCartItemDocument as UPDATE_CART_ITEM,
+} from '../gql/graphql.js';

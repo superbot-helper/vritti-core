@@ -17,6 +17,7 @@ import {
   type VerifyCheckoutSignatureInput,
   type VerifyCredentialsResult,
 } from '../gateway-transport';
+import { pickOrderPayment } from '../order-payment-pick';
 import { toMinorUnitsNumber } from './hdfc-razorpay-amount';
 
 const KEY_ID_FIELD = 'key_id';
@@ -37,6 +38,7 @@ interface HdfcRazorpayOrder {
 interface HdfcRazorpayPayment {
   id: string;
   order_id?: string | null;
+  created_at?: number;
   status?: string;
   amount: number;
   currency: string;
@@ -70,6 +72,8 @@ const PAYMENT_STATUSES: ReadonlySet<NormalizedPaymentStatus> = new Set([
 // it has no split capability and refuses an order that carries transfers
 export class HdfcRazorpayTransport implements PaymentGatewayTransport {
   readonly credentialFields = [KEY_ID_FIELD, KEY_SECRET_FIELD] as const;
+  // HDFC's SmartGateway kit takes no wallets
+  readonly methods = ['upi', 'card', 'netbanking'] as const;
   protected readonly logger: Logger;
 
   readonly code = GatewayCodeValues.HDFC_RAZORPAY;
@@ -116,12 +120,26 @@ export class HdfcRazorpayTransport implements PaymentGatewayTransport {
         order_id: order.id,
         amount: order.amount,
         currency: order.currency,
-        ...(input.customer
-          ? { prefill: { name: input.customer.name, email: input.customer.email, contact: input.customer.phone } }
-          : {}),
+        ...hdfcPrefill(input),
       },
       transfers: [],
     };
+  }
+
+  // Every payment attempted on the order — GET /orders/:id/payments — and the one that decides it: captured, else
+  // authorized, else the latest. Lets a checkout ask whether its payment went through without waiting for the webhook
+  async fetchOrderPayment(
+    credentials: Record<string, string>,
+    providerOrderId: string,
+  ): Promise<NormalizedPayment | null> {
+    const auth = this.auth(credentials);
+    const page = await this.http.get<{ items?: HdfcRazorpayPayment[] }>(
+      auth,
+      `/orders/${encodeURIComponent(providerOrderId)}/payments`,
+    );
+    return pickOrderPayment(
+      (page.items ?? []).map((payment) => ({ payment: this.normalizePayment(payment), at: payment.created_at ?? 0 })),
+    );
   }
 
   async fetchPayment(credentials: Record<string, string>, providerPaymentId: string): Promise<NormalizedPayment> {
@@ -276,4 +294,15 @@ function safeEqualHex(expected: string, actual: string): boolean {
   const actualBuffer = Buffer.from(actual, 'utf8');
   if (expectedBuffer.length !== actualBuffer.length) return false;
   return timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+// The checkout's prefill: the shopper's details, and the method picked on the hosted page
+function hdfcPrefill(input: CreateOrderInput): { prefill?: Record<string, string> } {
+  const prefill = {
+    ...(input.customer?.name ? { name: input.customer.name } : {}),
+    ...(input.customer?.email ? { email: input.customer.email } : {}),
+    ...(input.customer?.phone ? { contact: input.customer.phone } : {}),
+    ...(input.method ? { method: input.method } : {}),
+  };
+  return Object.keys(prefill).length > 0 ? { prefill } : {};
 }

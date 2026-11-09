@@ -52,6 +52,8 @@ export type Cart = {
     // be checked out as one until a store's lines are removed
     gateways: string[];
   };
+  // Each gateway code above, once, with its logo as uploaded to the gateway catalog (null when none is)
+  gatewayLogos: { gatewayCode: string; logoUrl: string | null }[];
 };
 
 // Core's cart, with the stores' lines also flattened into one list
@@ -71,6 +73,7 @@ export function toCart(raw: CartFieldsFragment): Cart {
     subtotal: { currency: raw.subtotal.currency, value: raw.subtotal.value },
     itemCount: raw.itemCount,
     checkout: { gateways: [...raw.checkout.gateways] },
+    gatewayLogos: raw.gatewayLogos.map((entry) => ({ gatewayCode: entry.gatewayCode, logoUrl: entry.logoUrl ?? null })),
   };
 }
 

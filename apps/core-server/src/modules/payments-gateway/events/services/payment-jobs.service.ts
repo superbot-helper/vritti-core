@@ -13,6 +13,7 @@ export interface PaymentJobsOptions {
   eventSweepMs: number;
   expireSweepMs: number;
   deliveryWorkerMs: number;
+  checkoutExpiryMs: number;
   batchSize: number;
 }
 
@@ -22,10 +23,11 @@ const DEFAULT_OPTIONS: PaymentJobsOptions = {
   eventSweepMs: 60_000,
   expireSweepMs: 5 * 60_000,
   deliveryWorkerMs: 30_000,
+  checkoutExpiryMs: 5 * 60_000,
   batchSize: 100,
 };
 
-type JobName = 'event-sweep' | 'expire-sweep' | 'delivery-worker';
+type JobName = 'event-sweep' | 'expire-sweep' | 'delivery-worker' | 'checkout-expiry';
 
 // The payments safety nets, run in-process on timers: drain events payments-service still holds unacknowledged, expire
 // intents nobody completed, and send due outbound webhooks.
@@ -52,6 +54,7 @@ export class PaymentJobsService implements OnModuleInit, OnModuleDestroy {
     this.schedule('event-sweep', this.options.eventSweepMs, () => this.sweepPendingEvents());
     this.schedule('expire-sweep', this.options.expireSweepMs, () => this.expireStaleIntents());
     this.schedule('delivery-worker', this.options.deliveryWorkerMs, () => this.deliverWebhooks());
+    this.schedule('checkout-expiry', this.options.checkoutExpiryMs, () => this.expireStaleCheckouts());
     this.logger.log('Payment background jobs started');
   }
 
@@ -86,6 +89,15 @@ export class PaymentJobsService implements OnModuleInit, OnModuleDestroy {
           { limit: this.options.batchSize },
         );
         await this.dispatcher.dispatch(orgId, events);
+      }),
+    );
+  }
+
+  // Cancels the open checkouts whose 30-minute window closed unpaid, whatever payments were opened for them
+  expireStaleCheckouts(): Promise<void> {
+    return this.runExclusive('checkout-expiry', () =>
+      this.forEachOrganization('checkout-expiry', true, async (orgId) => {
+        await this.nats.send({ orgId }, 'commerce', 'org.checkouts.expireStale', { limit: this.options.batchSize });
       }),
     );
   }

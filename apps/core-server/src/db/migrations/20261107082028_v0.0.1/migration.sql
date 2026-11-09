@@ -1,0 +1,2 @@
+CREATE TYPE "core"."payment_checkout_mode" AS ENUM('HOSTED', 'MODAL');--> statement-breakpoint
+ALTER TABLE "core"."payment_gateway_configs" ADD COLUMN "checkout_mode" "core"."payment_checkout_mode" DEFAULT 'HOSTED'::"core"."payment_checkout_mode" NOT NULL;

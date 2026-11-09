@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsCode, Trim } from '@vritti/api-sdk/decorators';
-import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { type PaymentCheckoutMode, PaymentCheckoutModeValues } from '@/db/schema';
 
 export class CreatePaymentGatewayConfigDto {
   @ApiProperty({ description: 'Gateway provider code', example: 'razorpay' })
@@ -42,4 +43,14 @@ export class CreatePaymentGatewayConfigDto {
   @IsString()
   @MaxLength(1000)
   logoDarkUrl?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      "How the gateway's checkout opens for shoppers. MODAL is taken by razorpay, cashfree and easebuzz only; HOSTED when left out",
+    enum: Object.values(PaymentCheckoutModeValues),
+    example: 'HOSTED',
+  })
+  @IsOptional()
+  @IsEnum(PaymentCheckoutModeValues)
+  checkoutMode?: PaymentCheckoutMode;
 }

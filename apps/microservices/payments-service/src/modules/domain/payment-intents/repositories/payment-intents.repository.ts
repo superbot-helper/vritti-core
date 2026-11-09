@@ -19,6 +19,16 @@ export class PaymentIntentsDomainRepository extends PrimaryBaseRepository<typeof
     return this.model.findFirst({ where: { idempotencyKey } });
   }
 
+  // Every intent opened for a checkout, newest first; RLS scopes it to the organization
+  async findByCheckout(checkoutId: string): Promise<PaymentIntent[]> {
+    return this.model.findMany({ where: { checkoutId }, orderBy: { createdAt: 'desc' } });
+  }
+
+  // The intents opened for one thing being paid for, newest first
+  async findByReference(referenceType: string, referenceId: string): Promise<PaymentIntent[]> {
+    return this.model.findMany({ where: { referenceType, referenceId }, orderBy: { createdAt: 'desc' } });
+  }
+
   // Reads the intent and holds its row until the surrounding transaction ends, so two completions of the same
   // payment (the browser's confirm and the gateway's webhook) cannot both act on the status they read
   async lockById(id: string): Promise<PaymentIntent | undefined> {

@@ -15,6 +15,7 @@ import {
   type VerifyCheckoutSignatureInput,
   type VerifyCredentialsResult,
 } from '../gateway-transport';
+import { pickOrderPayment } from '../order-payment-pick';
 import { toMinorUnitsNumber } from './razorpay-amount';
 import { RazorpaySplit, type RazorpayTransfer } from './razorpay-split';
 
@@ -38,6 +39,7 @@ interface RazorpayOrder {
 interface RazorpayPayment {
   id: string;
   order_id?: string | null;
+  created_at?: number;
   status?: string;
   amount: number;
   currency: string;
@@ -70,6 +72,7 @@ const PAYMENT_STATUSES: ReadonlySet<NormalizedPaymentStatus> = new Set([
 // change on either side never reaches the other
 export class RazorpayTransport implements PaymentGatewayTransport {
   readonly credentialFields = [KEY_ID_FIELD, KEY_SECRET_FIELD] as const;
+  readonly methods = ['upi', 'card', 'netbanking', 'wallet'] as const;
   readonly split: GatewaySplitCapability;
   protected readonly logger: Logger;
   protected readonly route: RazorpaySplit;
@@ -117,14 +120,29 @@ export class RazorpayTransport implements PaymentGatewayTransport {
         order_id: order.id,
         amount: order.amount,
         currency: order.currency,
-        ...(input.customer
-          ? { prefill: { name: input.customer.name, email: input.customer.email, contact: input.customer.phone } }
-          : {}),
+        ...razorpayPrefill(input),
+        ...razorpayOpening(input),
       },
       transfers: (order.transfers ?? []).map((item, index) =>
         this.route.toTransferResult(item, input.transfers?.[index]),
       ),
     };
+  }
+
+  // Every payment attempted on the order — GET /orders/:id/payments — and the one that decides it: captured, else
+  // authorized, else the latest. Lets a checkout ask whether its payment went through without waiting for the webhook
+  async fetchOrderPayment(
+    credentials: Record<string, string>,
+    providerOrderId: string,
+  ): Promise<NormalizedPayment | null> {
+    const auth = this.auth(credentials);
+    const page = await this.http.get<{ items?: RazorpayPayment[] }>(
+      auth,
+      `/orders/${encodeURIComponent(providerOrderId)}/payments`,
+    );
+    return pickOrderPayment(
+      (page.items ?? []).map((payment) => ({ payment: this.normalizePayment(payment), at: payment.created_at ?? 0 })),
+    );
   }
 
   async fetchPayment(credentials: Record<string, string>, providerPaymentId: string): Promise<NormalizedPayment> {
@@ -282,4 +300,33 @@ function safeEqualHex(expected: string, actual: string): boolean {
   const actualBuffer = Buffer.from(actual, 'utf8');
   if (expectedBuffer.length !== actualBuffer.length) return false;
   return timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+// How the browser opens the checkout. In the modal, checkout.js takes a display config, so the method picked on the
+// checkout page is the only one shown; Razorpay's hosted page only opens on it (the prefill)
+function razorpayOpening(input: CreateOrderInput): Record<string, unknown> {
+  const checkoutMode = input.checkoutMode ?? 'HOSTED';
+  if (checkoutMode !== 'MODAL' || !input.method) return { checkout_mode: checkoutMode };
+  return {
+    checkout_mode: checkoutMode,
+    config: {
+      display: {
+        blocks: { chosen: { name: 'Pay', instruments: [{ method: input.method }] } },
+        sequence: ['block.chosen'],
+        preferences: { show_default_blocks: false },
+      },
+    },
+  };
+}
+
+// The checkout's prefill: the shopper's details, and the method picked on the hosted page — Razorpay's page opens on
+// that method (its method names are the platform's)
+function razorpayPrefill(input: CreateOrderInput): { prefill?: Record<string, string> } {
+  const prefill = {
+    ...(input.customer?.name ? { name: input.customer.name } : {}),
+    ...(input.customer?.email ? { email: input.customer.email } : {}),
+    ...(input.customer?.phone ? { contact: input.customer.phone } : {}),
+    ...(input.method ? { method: input.method } : {}),
+  };
+  return Object.keys(prefill).length > 0 ? { prefill } : {};
 }

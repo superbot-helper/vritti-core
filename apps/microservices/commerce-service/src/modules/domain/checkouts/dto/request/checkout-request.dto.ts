@@ -4,13 +4,18 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsEmail,
+  IsInt,
   IsISO8601,
   IsOptional,
   IsString,
   IsUUID,
   Length,
   Matches,
+  Max,
   MaxLength,
+  Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -27,14 +32,23 @@ export class StartCheckoutDto {
   @Length(3, 3)
   currencyCode: string;
 
-  // The gateway the shopper picked, e.g. razorpay; core has already checked every store takes it
+  // Accepted for older callers and ignored: the gateway is chosen per payment intent, not per checkout
+  @IsOptional()
   @IsCode()
-  gatewayCode: string;
+  gatewayCode?: string;
 
-  // The storefront's key for this attempt. A repeat with the same key returns the checkout already opened for it
+  // Accepted for older callers and ignored: the checkout's key is the cart's own fingerprint, so the same cart reaches
+  // the same open checkout
+  @IsOptional()
   @IsString()
   @MaxLength(100)
-  checkoutKey: string;
+  checkoutKey?: string;
+
+  // The party's open checkout core has cleared to be replaced (no payment under way, none paid at the gateway). An open
+  // checkout of a different cart is replaced only when it is this one
+  @IsOptional()
+  @IsUUID()
+  replaceCheckoutId?: string;
 
   // The stores to check out; absent means every store the shopper holds lines at
   @IsOptional()
@@ -48,11 +62,6 @@ export class StartCheckoutDto {
   @IsUUID()
   addressId?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
-  notes?: string;
-
   // The stores the storefront sells from; each cart is read under its own store's reach
   @IsArray()
   @ArrayMaxSize(200)
@@ -61,12 +70,13 @@ export class StartCheckoutDto {
   sites: CartSiteScopeDto[];
 }
 
-export class BindCheckoutIntentDto {
-  @IsUUID()
-  checkoutId: string;
-
-  @IsUUID()
-  paymentIntentId: string;
+// Expires the open checkouts whose window closed unpaid
+export class ExpireStaleCheckoutsDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  limit?: number;
 }
 
 export class CompleteCheckoutDto {
@@ -104,7 +114,7 @@ export class CancelCheckoutDto {
   @IsUUID()
   checkoutId: string;
 
-  // The intent the cancellation came from; a checkout bound to another intent is left alone
+  // The intent the cancellation came from. A payment intent ending no longer ends its checkout, so this is ignored
   @IsOptional()
   @IsUUID()
   paymentIntentId?: string;
@@ -119,6 +129,38 @@ export class CheckoutRefDto {
   checkoutId: string;
 
   // Whose checkout it must be; another party's is not found
+  @IsUUID()
+  partyId: string;
+}
+
+// Delivers an open checkout to another of the party's saved addresses
+export class ChangeCheckoutAddressDto extends CheckoutRefDto {
+  @IsUUID()
+  addressId: string;
+}
+
+// Changes who the checkout's orders are for — the name, phone and email the checkout holds, which the orders and the
+// gateway's page show. The party's own profile is left as it is
+export class ChangeCheckoutContactDto extends CheckoutRefDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  name: string;
+
+  // E.164, as the party's communications hold it
+  @IsString()
+  @Matches(/^\+[1-9]\d{6,14}$/, { message: 'phone must be an international number such as +919876543210' })
+  @MaxLength(20)
+  phone: string;
+
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(200)
+  email?: string;
+}
+
+// The party's open checkout, if any
+export class FindOpenCheckoutDto {
   @IsUUID()
   partyId: string;
 }

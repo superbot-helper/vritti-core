@@ -10,6 +10,8 @@
     "lib": ["ES2022", "DOM"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    // The VAP checkout page (`next/checkout-ui`) is React: server components and 'use client' ones
+    "jsx": "react-jsx",
     "declaration": true,
     "outDir": "dist/next",
     "rootDir": "src/next",

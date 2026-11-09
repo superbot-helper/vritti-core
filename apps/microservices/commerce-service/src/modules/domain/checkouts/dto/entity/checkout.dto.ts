@@ -1,6 +1,6 @@
 import type { CheckoutCustomerDto } from '@domain/orders/dto/entity/order-checkout.dto';
 import { CurrencyAmountDto } from '@vritti/api-sdk/money';
-import type { Checkout, CheckoutLine, CheckoutStatus } from '@/db/schema';
+import { type Checkout, type CheckoutLine, type CheckoutStatus, CheckoutStatusValues } from '@/db/schema';
 
 // One store's share of a checkout — what its payout leg is sized from
 export class CheckoutSiteShareDto {
@@ -26,7 +26,7 @@ export class CheckoutSiteShareDto {
   }
 }
 
-// A checkout as the payment is opened for it
+// A checkout as it was frozen; payment intents are opened for it afterwards
 export class CheckoutStartedDto {
   checkoutId: string;
   status: CheckoutStatus;
@@ -34,7 +34,7 @@ export class CheckoutStartedDto {
   total: CurrencyAmountDto;
   // The same total in minor units, as a string so the payment intent is created for the exact amount
   totalMinor: string;
-  // When the payment window closes; the intent is given the same deadline
+  // When the payment window closes; every intent opened for it is given the same deadline
   expiresAt: string;
   customer: CheckoutCustomerDto | null;
   sites: CheckoutSiteShareDto[];
@@ -66,6 +66,8 @@ export class CheckoutOrderRefDto {
   siteId: string;
   orderId: string;
   orderNumber: string;
+  // The payment intent that paid it
+  paymentIntentId: string | null;
 }
 
 // Where a checkout stands: its stores' shares, and the orders it has become
@@ -75,7 +77,14 @@ export class CheckoutStatusDto {
   currencyCode: string;
   total: CurrencyAmountDto;
   totalMinor: string;
-  paymentIntentId: string | null;
+  // When the window closes (OPEN), or closed: the deadline that passed (EXPIRED), the moment it was ended (CANCELLED)
+  // or the moment it was paid (PAID, CONVERTED)
+  expiresAt: string;
+  // The same moment, named: set once the checkout is paid
+  paidAt: string | null;
+  customer: CheckoutCustomerDto;
+  // The party's saved address the orders are delivered to
+  partyAddressId: string | null;
   sites: CheckoutSiteShareDto[];
   orders: CheckoutOrderRefDto[];
 
@@ -86,9 +95,17 @@ export class CheckoutStatusDto {
     dto.currencyCode = entity.currencyCode;
     dto.total = CurrencyAmountDto.from(entity.totalAmount, entity.currencyCode);
     dto.totalMinor = entity.totalAmount.toString();
-    dto.paymentIntentId = entity.paymentIntentId;
+    dto.expiresAt = entity.expiresAt.toISOString();
+    dto.paidAt = isPaid(entity.status) ? entity.expiresAt.toISOString() : null;
+    dto.customer = { name: entity.customerName, phone: entity.customerPhone, email: entity.customerEmail };
+    dto.partyAddressId = entity.partyAddressId;
     dto.sites = CheckoutSiteShareDto.fromLines(lines);
     dto.orders = orders;
     return dto;
   }
+}
+
+// A checkout the money has landed for, whether or not its orders are made yet
+function isPaid(status: CheckoutStatus): boolean {
+  return status === CheckoutStatusValues.PAID || status === CheckoutStatusValues.CONVERTED;
 }

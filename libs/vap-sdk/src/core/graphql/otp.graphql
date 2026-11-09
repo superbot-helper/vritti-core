@@ -1,0 +1,31 @@
+mutation SendWhatsappOtp($input: SendWhatsappOtpInput!) {
+  sendWhatsappOtp(input: $input) {
+    sent
+    expiresAt
+    resendAvailableAt
+    codeLength
+  }
+}
+
+mutation VerifyWhatsappOtp($input: VerifyWhatsappOtpInput!) {
+  verifyWhatsappOtp(input: $input) {
+    verified
+  }
+}
+
+# The SMS siblings — same shapes, delivered through the credential's configured SMS provider
+
+mutation SendSmsOtp($input: SendSmsOtpInput!) {
+  sendSmsOtp(input: $input) {
+    sent
+    expiresAt
+    resendAvailableAt
+    codeLength
+  }
+}
+
+mutation VerifySmsOtp($input: VerifySmsOtpInput!) {
+  verifySmsOtp(input: $input) {
+    verified
+  }
+}

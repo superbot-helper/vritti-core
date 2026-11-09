@@ -26,6 +26,7 @@ import type {
   CreatePaymentIntentDto,
   ExecuteTransfersDto,
   RefundPaymentIntentDto,
+  SyncPaymentIntentDto,
 } from '../dto/payment-intent-requests.dto';
 
 // How long a customer has to pay before an untouched intent expires
@@ -55,6 +56,8 @@ const ENDED_UNPAID = [
 
 // The unique constraint a concurrent create with the same idempotency key collides on
 const IDEMPOTENCY_KEY_CONSTRAINT = 'uq_payment_intents_org_idempotency_key';
+const ONE_ACTIVE_PER_CHECKOUT_CONSTRAINT = 'uq_payment_intents_one_active_per_checkout';
+const ONE_ACTIVE_PER_REFERENCE_CONSTRAINT = 'uq_payment_intents_one_active_per_reference';
 const PG_UNIQUE_VIOLATION = '23505';
 
 // The store's return page with the attempt in its query, spelled as the SDK's checkoutAttemptUrl reads it
@@ -102,6 +105,16 @@ export class PaymentLifecycleService {
       try {
         intent = await this.openIntent(dto, amount);
       } catch (error) {
+        // Another payment of the same checkout, or of the same thing paid for, is still active: two requests raced
+        if (
+          isUniqueViolation(error, ONE_ACTIVE_PER_CHECKOUT_CONSTRAINT) ||
+          isUniqueViolation(error, ONE_ACTIVE_PER_REFERENCE_CONSTRAINT)
+        ) {
+          throw new ConflictException({
+            label: 'Payment Already Open',
+            detail: 'A payment for this is already open. Finish it, or wait a moment and try again.',
+          });
+        }
         // A concurrent create with the same key inserted first; carry on with the intent it opened
         if (!isIdempotencyKeyConflict(error)) throw error;
         const existing = await this.intents.findByIdempotencyKey(dto.idempotencyKey);
@@ -127,6 +140,8 @@ export class PaymentLifecycleService {
       ...(dto.notifyUrl && { notifyUrl: dto.notifyUrl }),
       ...(dto.checkoutCallbackBase && { callbackUrl: `${dto.checkoutCallbackBase}/${intent.id}/callback` }),
       ...(dto.mainAccountId && { mainAccountId: dto.mainAccountId }),
+      ...(dto.paymentMethod && { method: dto.paymentMethod }),
+      ...(dto.checkoutMode && { checkoutMode: dto.checkoutMode }),
       ...(dto.customer && { customer: dto.customer }),
       ...(legs.length > 0 && {
         transfers: legs.map((leg) => ({
@@ -149,7 +164,7 @@ export class PaymentLifecycleService {
 
     const updated = await this.intents.update(intent.id, {
       providerOrderId: order.providerOrderId,
-      checkout: { gateway: intent.gatewayCode, ...order.checkout },
+      launch: { gateway: intent.gatewayCode, ...order.checkout },
       status: PaymentIntentStatusValues.REQUIRES_ACTION,
     });
     this.logger.log(
@@ -228,6 +243,24 @@ export class PaymentLifecycleService {
     return this.applyPayment(intent.id, payment);
   }
 
+  // Asks the gateway whether the intent's order was paid, and applies what it says exactly as its webhook would — so a
+  // checkout can learn of a payment before the webhook arrives, and the webhook later changes nothing. An intent with
+  // no gateway order yet, already paid, or on a gateway that cannot be asked is answered as it stands
+  async sync(dto: SyncPaymentIntentDto): Promise<IntentWithEvents> {
+    const intent = await this.requireIntent(dto.paymentIntentId);
+    if (intent.status === PaymentIntentStatusValues.SUCCEEDED || !intent.providerOrderId) {
+      return { intent: PaymentIntentDto.from(intent), events: [] };
+    }
+    const transport = this.registry.resolve(intent.gatewayCode);
+    if (!transport.fetchOrderPayment) return { intent: PaymentIntentDto.from(intent), events: [] };
+
+    const read = await transport.fetchOrderPayment(dto.credentials, intent.providerOrderId);
+    if (!read) return { intent: PaymentIntentDto.from(intent), events: [] };
+    assertPaymentMatches(intent, read, 'paymentIntentId');
+    this.logger.log(`Synced intent ${intent.id} from ${intent.gatewayCode}: ${read.status}`);
+    return this.applyPayment(intent.id, read);
+  }
+
   // Applies a verified gateway webhook's payment to the intent its order belongs to; null when the order is not one
   // this platform opened (a payment taken outside checkout, say), which the caller records as ignored
   async applyWebhookPayment(event: NormalizedWebhookEvent): Promise<IntentWithEvents | null> {
@@ -245,6 +278,18 @@ export class PaymentLifecycleService {
   // Returns one intent
   async get(paymentIntentId: string): Promise<PaymentIntentDto> {
     return PaymentIntentDto.from(await this.requireIntent(paymentIntentId));
+  }
+
+  // The payment intents opened for a checkout, newest first — a retry or another gateway each adds one
+  async listByCheckout(checkoutId: string): Promise<PaymentIntentDto[]> {
+    const intents = await this.intents.findByCheckout(checkoutId);
+    return intents.map((intent) => PaymentIntentDto.from(intent));
+  }
+
+  // The payment intents opened for one thing being paid for, newest first
+  async listByReference(referenceType: string, referenceId: string): Promise<PaymentIntentDto[]> {
+    const intents = await this.intents.findByReference(referenceType, referenceId);
+    return intents.map((intent) => PaymentIntentDto.from(intent));
   }
 
   // Cancels an intent the customer has not paid yet, with its event; one already cancelled is returned as it is
@@ -439,10 +484,10 @@ export class PaymentLifecycleService {
         partyId: dto.partyId ?? null,
         configId: dto.configId,
         gatewayCode: dto.gatewayCode,
-        bankAccountId: dto.bankAccountId ?? null,
         type: dto.type,
         referenceType: dto.referenceType,
         referenceId: dto.referenceId,
+        checkoutId: dto.checkoutId ?? null,
         description: dto.description ?? null,
         idempotencyKey: dto.idempotencyKey,
         receipt: dto.referenceId.slice(0, RECEIPT_MAX_LENGTH),
@@ -452,7 +497,7 @@ export class PaymentLifecycleService {
         customer: dto.customer ?? null,
         metadata: dto.metadata ?? null,
         returnUrl: dto.returnUrl ?? null,
-        checkoutUrl: dto.checkoutUrl ?? null,
+        retryUrl: dto.retryUrl ?? null,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : new Date(Date.now() + INTENT_TTL_MS),
       });
 
@@ -574,10 +619,10 @@ function assertSameRequest(intent: PaymentIntent, dto: CreatePaymentIntentDto, a
 function changedCheckoutUrls(
   intent: PaymentIntent,
   dto: CreatePaymentIntentDto,
-): Pick<Partial<PaymentIntent>, 'returnUrl' | 'checkoutUrl'> | null {
-  const changes: Pick<Partial<PaymentIntent>, 'returnUrl' | 'checkoutUrl'> = {};
+): Pick<Partial<PaymentIntent>, 'returnUrl' | 'retryUrl'> | null {
+  const changes: Pick<Partial<PaymentIntent>, 'returnUrl' | 'retryUrl'> = {};
   if (dto.returnUrl !== undefined && dto.returnUrl !== intent.returnUrl) changes.returnUrl = dto.returnUrl;
-  if (dto.checkoutUrl !== undefined && dto.checkoutUrl !== intent.checkoutUrl) changes.checkoutUrl = dto.checkoutUrl;
+  if (dto.retryUrl !== undefined && dto.retryUrl !== intent.retryUrl) changes.retryUrl = dto.retryUrl;
   return Object.keys(changes).length > 0 ? changes : null;
 }
 
@@ -594,13 +639,18 @@ function assertPaymentMatches(intent: PaymentIntent, payment: NormalizedPayment,
 
 // Whether an insert failed on the (organization, idempotency key) constraint; the pg error may sit under the
 // ORM's wrapper as its cause
-function isIdempotencyKeyConflict(error: unknown, depth = 0): boolean {
+function isIdempotencyKeyConflict(error: unknown): boolean {
+  return isUniqueViolation(error, IDEMPOTENCY_KEY_CONSTRAINT);
+}
+
+// A Postgres unique violation of one constraint or unique index, however deep the driver wrapped it
+function isUniqueViolation(error: unknown, constraint: string, depth = 0): boolean {
   if (typeof error !== 'object' || error === null || depth > 5) return false;
   const code: unknown = Reflect.get(error, 'code');
   if (typeof code === 'string') {
-    return code === PG_UNIQUE_VIOLATION && Reflect.get(error, 'constraint') === IDEMPOTENCY_KEY_CONSTRAINT;
+    return code === PG_UNIQUE_VIOLATION && Reflect.get(error, 'constraint') === constraint;
   }
-  return isIdempotencyKeyConflict(Reflect.get(error, 'cause'), depth + 1);
+  return isUniqueViolation(Reflect.get(error, 'cause'), constraint, depth + 1);
 }
 
 function mismatch(detail: string, field: string): BadRequestException {

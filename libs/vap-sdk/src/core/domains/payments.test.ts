@@ -13,6 +13,9 @@ function rawIntent(payload = JSON.stringify({ key_id: 'rzp_test', order_id: 'ord
     amount: { __typename: 'Money', currency: 'INR', value: '499.00' },
     reference: { __typename: 'PaymentReference', type: 'booking', id: 'b_1' },
     description: null,
+    gatewayCode: 'razorpay',
+    method: null,
+    checkoutId: null,
     checkout: { __typename: 'PaymentCheckout', gateway: 'razorpay', payload },
     failure: null,
     paidAt: null,
@@ -30,6 +33,27 @@ function fakeClient(data: Record<string, unknown>) {
 }
 
 describe('payments', () => {
+  it('pays a checkout by its id, with the chosen method and no amount or reference', async () => {
+    const { client, mutate } = fakeClient({
+      createPaymentIntent: { ...rawIntent(), checkoutId: 'chk_1', method: 'upi' },
+    });
+    const payments = createPaymentsOperations(client, { siteId: 'site_1', partyId: 'p_1' });
+
+    const intent = await payments.createPaymentIntent({
+      checkoutId: 'chk_1',
+      gatewayCode: 'razorpay',
+      paymentMethod: 'upi',
+      idempotencyKey: 'pay-1',
+    });
+
+    const input = (mutate.mock.calls[0]?.[0].variables as { input: Record<string, unknown> }).input;
+    expect(input).toMatchObject({ checkoutId: 'chk_1', gatewayCode: 'razorpay', paymentMethod: 'upi' });
+    expect(input).not.toHaveProperty('amount');
+    expect(input).not.toHaveProperty('reference');
+    expect(intent.checkoutId).toBe('chk_1');
+    expect(intent.method).toBe('upi');
+  });
+
   it('maps money and metadata into core’s input shape, at the site', async () => {
     const { client, mutate } = fakeClient({ createPaymentIntent: rawIntent() });
     const payments = createPaymentsOperations(client, { siteId: 'site_1', legalEntityId: 'le_1', partyId: 'p_1' });
@@ -135,7 +159,7 @@ describe('payments', () => {
 });
 
 describe('checkout.start', () => {
-  // A checkout as core answers it the moment the payment opens: no orders yet, the intent bound
+  // A checkout as core answers it on Continue: no orders and no payment yet
   const rawCheckout = {
     __typename: 'Checkout',
     id: 'chk_1',
@@ -156,17 +180,19 @@ describe('checkout.start', () => {
         subtotal: { __typename: 'Money', currency: 'INR', value: '199.00' },
       },
     ],
+    expiresAt: '2026-10-09T10:30:00.000Z',
+    paidAt: null,
+    customer: { name: 'Ananya Rao', phone: '+919845012345', email: null },
     orders: [],
-    paymentIntent: rawIntent(),
+    paymentIntent: null,
   };
   const started = { startCheckout: rawCheckout };
   const context = { siteId: 'site_1', legalEntityId: 'le_1', partyId: 'p_1' };
 
-  it('checks every store out at the organization, in the configured currency, and parses the checkout', async () => {
-    const { client, mutate } = fakeClient(started);
+  it('checks every store out in the configured currency, with no gateway, and parses the checkout', async () => {
+    const { client, mutate, query } = fakeClient(started);
     const result = await createCheckoutOperations(client, context, 'INR').start({
       idempotencyKey: 'k',
-      gatewayCode: 'cashfree',
       addressId: 'addr_1',
     });
 
@@ -175,14 +201,13 @@ describe('checkout.start', () => {
       input: {
         currencyCode: 'INR',
         siteId: undefined,
-        gatewayCode: 'cashfree',
         addressId: 'addr_1',
         notes: undefined,
         idempotencyKey: 'k',
-        returnUrl: undefined,
-        checkoutUrl: undefined,
       },
     });
+    // Nothing is read first: the gateway is picked later, per payment
+    expect(query).not.toHaveBeenCalled();
     // Under the visitor's store, where the permission check resolves — core reads every store's cart regardless
     expect(call?.context?.requestContext).toEqual({ partyId: 'p_1', siteId: 'site_1' });
 
@@ -190,58 +215,20 @@ describe('checkout.start', () => {
     expect(result.status).toBe('OPEN');
     expect(result.sites.map((share) => share.subtotal.value)).toEqual(['300.00', '199.00']);
     expect(result.orders).toEqual([]);
-    expect(result.paymentIntent?.checkout?.options.order_id).toBe('order_1');
-  });
-
-  it('refuses without a pick when the cart offers several gateways, or none', async () => {
-    const several = fakeClient({ ...started, cart: { checkout: { gateways: ['razorpay', 'cashfree'] } } });
-    await expect(
-      createCheckoutOperations(several.client, context, 'INR').start({ idempotencyKey: 'k' }),
-    ).rejects.toMatchObject({
-      code: 'Payment Gateway Required',
-    });
-    const none = fakeClient({ ...started, cart: { checkout: { gateways: [] } } });
-    await expect(
-      createCheckoutOperations(none.client, context, 'INR').start({ idempotencyKey: 'k' }),
-    ).rejects.toMatchObject({
-      code: 'Payments Not Set Up',
-    });
-    expect(several.mutate).not.toHaveBeenCalled();
-    expect(none.mutate).not.toHaveBeenCalled();
-  });
-
-  it("uses the named store's only gateway when one store is checked out", async () => {
-    const { client, mutate } = fakeClient({
-      ...started,
-      cart: { sites: [{ siteId: 'site_2', gateways: ['cashfree'] }], checkout: { gateways: [] } },
-    });
-    await createCheckoutOperations(client, context, 'INR').start({ idempotencyKey: 'k', siteId: 'site_2' });
-    const input = (mutate.mock.calls[0]?.[0].variables as { input: { gatewayCode: string; siteId: string } }).input;
-    expect(input).toMatchObject({ gatewayCode: 'cashfree', siteId: 'site_2' });
-  });
-
-  it("uses the cart's only checkout gateway when none was picked", async () => {
-    const { client, query, mutate } = fakeClient({ ...started, cart: { checkout: { gateways: ['cashfree'] } } });
-    await createCheckoutOperations(client, context, 'INR').start({ idempotencyKey: 'k' });
-    expect(query).toHaveBeenCalledTimes(1);
-    expect((mutate.mock.calls[0]?.[0].variables as { input: { gatewayCode: string } }).input.gatewayCode).toBe(
-      'cashfree',
-    );
+    expect(result.expiresAt).toBe('2026-10-09T10:30:00.000Z');
+    expect(result.paymentIntent).toBeNull();
   });
 
   it('refuses without a configured currency, without a party, and without a store to ask from', async () => {
     const { client, mutate } = fakeClient(started);
-    await expect(
-      createCheckoutOperations(client, context).start({ idempotencyKey: 'k', gatewayCode: 'cashfree' }),
-    ).rejects.toMatchObject({ code: 'Not Configured' });
+    await expect(createCheckoutOperations(client, context).start({ idempotencyKey: 'k' })).rejects.toMatchObject({
+      code: 'Not Configured',
+    });
     await expect(
       createCheckoutOperations(client, { siteId: 'site_1' }, 'INR').start({ idempotencyKey: 'k' }),
     ).rejects.toMatchObject({ code: 'No Party' });
     await expect(
-      createCheckoutOperations(client, { partyId: 'p_1' }, 'INR').start({
-        idempotencyKey: 'k',
-        gatewayCode: 'cashfree',
-      }),
+      createCheckoutOperations(client, { partyId: 'p_1' }, 'INR').start({ idempotencyKey: 'k' }),
     ).rejects.toMatchObject({ code: 'Not Configured' });
     expect(mutate).not.toHaveBeenCalled();
   });

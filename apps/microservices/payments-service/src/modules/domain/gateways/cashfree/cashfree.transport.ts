@@ -12,6 +12,7 @@ import {
   type PaymentGatewayTransport,
   type VerifyCredentialsResult,
 } from '../gateway-transport';
+import { pickOrderPayment } from '../order-payment-pick';
 import { CASHFREE_CURRENCY, toMajorUnits, toMinorUnits } from './cashfree-amount';
 import { CashfreeSplit } from './cashfree-split';
 
@@ -44,6 +45,8 @@ interface CashfreePayment {
   cf_payment_id?: string | number;
   order_id?: string;
   payment_status?: string;
+  payment_time?: string | null;
+  error_details?: CashfreeErrorDetails | null;
   payment_amount?: number;
   payment_currency?: string;
   payment_group?: string | null;
@@ -64,6 +67,14 @@ interface CashfreeWebhookBody {
     error_details?: CashfreeErrorDetails | null;
   };
 }
+
+// The platform's methods as Cashfree's payment_methods lists them; wallets are Cashfree's `app`
+const CASHFREE_METHODS: Readonly<Record<NonNullable<CreateOrderInput['method']>, string>> = {
+  upi: 'upi',
+  card: 'cc,dc',
+  netbanking: 'nb',
+  wallet: 'app',
+};
 
 // Cashfree's payment states, as the platform's. A dropped, cancelled or voided payment did not take the money, so it
 // is a failure of that attempt; the intent stays payable by another
@@ -86,6 +97,7 @@ const PAYMENT_STATUSES: Readonly<Record<string, NormalizedPaymentStatus>> = {
 export class CashfreeTransport implements PaymentGatewayTransport {
   readonly code = GatewayCodeValues.CASHFREE;
   readonly credentialFields = [APP_ID_FIELD, SECRET_KEY_FIELD] as const;
+  readonly methods = ['upi', 'card', 'netbanking', 'wallet'] as const;
   readonly split: CashfreeSplit;
   private readonly logger = new Logger(CashfreeTransport.name);
 
@@ -124,6 +136,8 @@ export class CashfreeTransport implements PaymentGatewayTransport {
     const orderMeta = {
       ...(returnUrl ? { return_url: returnUrl } : {}),
       ...(notifyUrl ? { notify_url: notifyUrl } : {}),
+      // The method picked on the hosted page: Cashfree's checkout shows only these
+      ...(input.method ? { payment_methods: CASHFREE_METHODS[input.method] } : {}),
     };
 
     const created = await this.http.post<CashfreeOrder>(
@@ -156,9 +170,31 @@ export class CashfreeTransport implements PaymentGatewayTransport {
         order_id: order.order_id,
         payment_session_id: order.payment_session_id,
         mode: this.http.environmentOf(auth),
+        // Cashfree's page in the store's tab, or its popup on the store's page
+        checkout_mode: input.checkoutMode ?? 'HOSTED',
       },
       transfers: this.split.sentTransfers(order.order_id, input.transfers),
     };
+  }
+
+  // Every payment attempted on the order — GET /orders/{order_id}/payments — and the one that decides it: SUCCESS,
+  // else the latest attempt; [] while the shopper has not tried to pay. Lets a checkout ask whether its payment went
+  // through without waiting for the webhook
+  async fetchOrderPayment(
+    credentials: Record<string, string>,
+    providerOrderId: string,
+  ): Promise<NormalizedPayment | null> {
+    const auth = this.auth(credentials);
+    const attempts = await this.http.get<CashfreePayment[]>(
+      auth,
+      `/orders/${encodeURIComponent(providerOrderId)}/payments`,
+    );
+    return pickOrderPayment(
+      (Array.isArray(attempts) ? attempts : []).map((payment) => ({
+        payment: this.normalizePayment(payment, providerOrderId, payment.error_details ?? null),
+        at: payment.payment_time ? Date.parse(payment.payment_time) || 0 : 0,
+      })),
+    );
   }
 
   // Cashfree reads a payment only under its order, which this call is not given; its payments arrive by webhook

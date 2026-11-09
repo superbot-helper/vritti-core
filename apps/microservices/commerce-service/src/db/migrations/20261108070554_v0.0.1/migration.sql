@@ -1,0 +1,1 @@
+ALTER TABLE "commerce"."checkouts" DROP COLUMN "cancelled_at";

@@ -1,0 +1,3 @@
+ALTER TABLE "payments"."payment_intents" DROP COLUMN "bank_account_id";--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_payment_intents_provider_order" ON "payments"."payment_intents" ("config_id","provider_order_id") WHERE provider_order_id IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_payment_intents_one_active_per_reference" ON "payments"."payment_intents" ("organization_id","reference_type","reference_id") WHERE status IN ('CREATED', 'REQUIRES_ACTION', 'PROCESSING');

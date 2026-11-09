@@ -8,10 +8,11 @@ export class PaymentIntentDto {
   appId: string | null;
   partyId: string | null;
   reference: { type: string; id: string };
+  // The commerce checkout this payment pays for, when it pays one
+  checkoutId: string | null;
   description: string | null;
   configId: string;
   gatewayCode: string;
-  bankAccountId: string | null;
   type: PaymentChannelType;
   idempotencyKey: string;
   receipt: string;
@@ -21,13 +22,14 @@ export class PaymentIntentDto {
   status: PaymentIntentStatus;
   providerOrderId: string | null;
   providerPaymentId: string | null;
-  // Public launch data for the gateway's checkout, null until the gateway order exists
-  checkout: Record<string, unknown> | null;
+  // What the browser needs to open the gateway's page or popup, null until the gateway order exists
+  launch: Record<string, unknown> | null;
   method: string | null;
   customer: PaymentIntentCustomer | null;
   metadata: Record<string, string> | null;
   returnUrl: string | null;
-  checkoutUrl: string | null;
+  // Where the shopper goes back to after a failed or cancelled payment
+  retryUrl: string | null;
   failureCode: string | null;
   failureMessage: string | null;
   succeededAt: Date | null;
@@ -43,10 +45,10 @@ export class PaymentIntentDto {
     dto.appId = entity.appId ?? null;
     dto.partyId = entity.partyId ?? null;
     dto.reference = { type: entity.referenceType, id: entity.referenceId };
+    dto.checkoutId = entity.checkoutId ?? null;
     dto.description = entity.description ?? null;
     dto.configId = entity.configId;
     dto.gatewayCode = entity.gatewayCode;
-    dto.bankAccountId = entity.bankAccountId ?? null;
     dto.type = entity.type;
     dto.idempotencyKey = entity.idempotencyKey;
     dto.receipt = entity.receipt;
@@ -56,12 +58,12 @@ export class PaymentIntentDto {
     dto.status = entity.status;
     dto.providerOrderId = entity.providerOrderId ?? null;
     dto.providerPaymentId = entity.providerPaymentId ?? null;
-    dto.checkout = entity.checkout ?? null;
+    dto.launch = entity.launch ?? null;
     dto.method = entity.method ?? null;
     dto.customer = entity.customer ?? null;
     dto.metadata = entity.metadata ?? null;
     dto.returnUrl = entity.returnUrl ?? null;
-    dto.checkoutUrl = entity.checkoutUrl ?? null;
+    dto.retryUrl = entity.retryUrl ?? null;
     dto.failureCode = entity.failureCode ?? null;
     dto.failureMessage = entity.failureMessage ?? null;
     dto.succeededAt = entity.succeededAt ?? null;

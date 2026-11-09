@@ -1,6 +1,7 @@
 import type { PaymentGatewayConfigDto } from '@domain/payment-gateway-config/dto/entity/payment-gateway-config.dto';
 import { CreatePaymentGatewayConfigDto } from '@domain/payment-gateway-config/dto/request/create-payment-gateway-config.dto';
 import { CreatePlatformPaymentGatewayConfigDto } from '@domain/payment-gateway-config/dto/request/create-platform-payment-gateway-config.dto';
+import { UpdatePaymentGatewayCheckoutModeDto } from '@domain/payment-gateway-config/dto/request/update-payment-gateway-checkout-mode.dto';
 import { UpdatePlatformPaymentGatewayConfigDto } from '@domain/payment-gateway-config/dto/request/update-platform-payment-gateway-config.dto';
 import { VerificationPaymentRequestDto } from '@domain/payment-gateway-config/dto/request/verification-payment-request.dto';
 import type { PaymentGatewayConfigVerificationResponseDto } from '@domain/payment-gateway-config/dto/response/payment-gateway-config-verification-response.dto';
@@ -37,6 +38,7 @@ import {
   ApiListPaymentGatewaysInternal,
   ApiListPlatformPaymentGatewayConfigsInternal,
   ApiStartWebhookCheckInternal,
+  ApiUpdatePaymentGatewayCheckoutModeInternal,
   ApiUpdatePlatformPaymentGatewayConfigInternal,
   ApiVerifyPaymentGatewayConfigInternal,
   ApiVerifyPlatformPaymentGatewayConfigInternal,
@@ -162,6 +164,17 @@ export class PaymentGatewayConfigInternalController {
   findById(@Param('id', ParseUUIDPipe) id: string): Promise<PaymentGatewayConfigDto> {
     this.logger.log(`GET /payment-gateway-configs/internal/${id}`);
     return this.paymentGatewayConfigService.findById(id);
+  }
+
+  // Sets how an own gateway's checkout opens for shoppers: its own page or a popup on the store's
+  @Patch(':id/checkout-mode')
+  @ApiUpdatePaymentGatewayCheckoutModeInternal()
+  updateCheckoutMode(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePaymentGatewayCheckoutModeDto,
+  ): Promise<SuccessResponseDto> {
+    this.logger.log(`PATCH /payment-gateway-configs/internal/${id}/checkout-mode — ${dto.checkoutMode}`);
+    return this.paymentGatewayConfigService.updateCheckoutMode(id, dto.checkoutMode);
   }
 
   // Has the provider check an own gateway's credentials

@@ -7486,6 +7486,88 @@
         ]
       }
     },
+    "/payment-gateway-configs/internal/{id}/checkout-mode": {
+      "patch": {
+        "description": "HOSTED sends the shopper to the gateway's own page; MODAL opens its payment window on the store's page. Only razorpay, cashfree and easebuzz take MODAL. Applies to payments opened from now on.",
+        "operationId": "PaymentGatewayConfigInternalController_updateCheckoutMode",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Payment gateway config ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-timestamp",
+            "in": "header",
+            "description": "Unix seconds when the request was signed",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-signature",
+            "in": "header",
+            "description": "Ed25519 signature of the canonical request (base64)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-org-id",
+            "in": "header",
+            "description": "Organization ID scoping the request",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePaymentGatewayCheckoutModeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout mode saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The gateway cannot open its checkout in a popup."
+          },
+          "401": {
+            "description": "Invalid or missing request signature."
+          },
+          "403": {
+            "description": "Vritti's gateways cannot be changed from here."
+          },
+          "404": {
+            "description": "Payment gateway config not found."
+          }
+        },
+        "summary": "Set how an own gateway's checkout opens",
+        "tags": [
+          "Structure - Payment Gateway Configs (internal)"
+        ]
+      }
+    },
     "/payment-gateway-configs/internal/{id}/verify": {
       "post": {
         "description": "Has the provider check the stored credentials. A pass records verifiedAt and the merchant id the provider reports; a rejection names the credential field at fault.",
@@ -52834,6 +52916,15 @@
             "description": "The catalog gateway's logo for dark backgrounds",
             "nullable": true
           },
+          "checkoutMode": {
+            "type": "string",
+            "description": "How the gateway's checkout opens for shoppers: HOSTED on the gateway's own page, MODAL in a window on the store's page",
+            "enum": [
+              "HOSTED",
+              "MODAL"
+            ],
+            "example": "HOSTED"
+          },
           "verifiedAt": {
             "type": "object",
             "description": "When the stored credentials last passed the provider check",
@@ -52877,6 +52968,7 @@
           "hasWebhookSecret",
           "gatewayAccountId",
           "platformFeeBps",
+          "checkoutMode",
           "status",
           "createdAt",
           "updatedAt"
@@ -52922,12 +53014,32 @@
             "type": "boolean",
             "description": "Whether the gateway can split a collected payment to linked accounts",
             "example": true
+          },
+          "methods": {
+            "description": "The payment methods its page takes, in the order the hosted checkout page offers them",
+            "example": [
+              "upi",
+              "card",
+              "netbanking",
+              "wallet"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "supportsModalCheckout": {
+            "type": "boolean",
+            "description": "Whether the gateway's checkout can open as a popup on the store's page (checkout mode MODAL)",
+            "example": true
           }
         },
         "required": [
           "code",
           "credentialFields",
-          "supportsSplit"
+          "supportsSplit",
+          "methods",
+          "supportsModalCheckout"
         ]
       },
       "CreatePlatformPaymentGatewayConfigDto": {
@@ -52962,6 +53074,15 @@
           "logoDarkUrl": {
             "type": "object",
             "description": "The catalog gateway's logo for dark backgrounds, set by Vritti Cloud"
+          },
+          "checkoutMode": {
+            "type": "string",
+            "description": "How the gateway's checkout opens for shoppers. MODAL is taken by razorpay, cashfree and easebuzz only; HOSTED when left out",
+            "enum": [
+              "HOSTED",
+              "MODAL"
+            ],
+            "example": "HOSTED"
           },
           "platformFeeBps": {
             "type": "number",
@@ -53007,6 +53128,15 @@
           "logoDarkUrl": {
             "type": "object",
             "description": "The catalog gateway's logo for dark backgrounds, set by Vritti Cloud"
+          },
+          "checkoutMode": {
+            "type": "string",
+            "description": "How the gateway's checkout opens for shoppers. MODAL is taken by razorpay, cashfree and easebuzz only; HOSTED when left out",
+            "enum": [
+              "HOSTED",
+              "MODAL"
+            ],
+            "example": "HOSTED"
           },
           "platformFeeBps": {
             "type": "number",
@@ -53087,12 +53217,38 @@
           "logoDarkUrl": {
             "type": "object",
             "description": "The catalog gateway's logo for dark backgrounds, set by Vritti Cloud"
+          },
+          "checkoutMode": {
+            "type": "string",
+            "description": "How the gateway's checkout opens for shoppers. MODAL is taken by razorpay, cashfree and easebuzz only; HOSTED when left out",
+            "enum": [
+              "HOSTED",
+              "MODAL"
+            ],
+            "example": "HOSTED"
           }
         },
         "required": [
           "gatewayCode",
           "credentials",
           "gatewayAccountId"
+        ]
+      },
+      "UpdatePaymentGatewayCheckoutModeDto": {
+        "type": "object",
+        "properties": {
+          "checkoutMode": {
+            "type": "string",
+            "description": "HOSTED opens the gateway's own page; MODAL opens its payment window on the store's page (razorpay, cashfree and easebuzz only)",
+            "enum": [
+              "HOSTED",
+              "MODAL"
+            ],
+            "example": "MODAL"
+          }
+        },
+        "required": [
+          "checkoutMode"
         ]
       },
       "VerificationPayerDto": {

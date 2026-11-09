@@ -71,6 +71,14 @@ interface EasebuzzRefundResponse {
   message?: string;
 }
 
+// The platform's methods as Easebuzz's show_payment_mode lists them; wallets are its `MW`
+const EASEBUZZ_MODES: Readonly<Record<NonNullable<CreateOrderInput['method']>, string>> = {
+  upi: 'UPI',
+  card: 'CC,DC',
+  netbanking: 'NB',
+  wallet: 'MW',
+};
+
 // Easebuzz's transaction states, as the platform's. A dropped, cancelled or bounced attempt did not take the money, so
 // it is a failure of that attempt; the intent stays payable by another
 const PAYMENT_STATUSES: Readonly<Record<string, NormalizedPaymentStatus>> = {
@@ -92,6 +100,7 @@ const PAYMENT_STATUSES: Readonly<Record<string, NormalizedPaymentStatus>> = {
 export class EasebuzzTransport implements PaymentGatewayTransport {
   readonly code = GatewayCodeValues.EASEBUZZ;
   readonly credentialFields = [KEY_FIELD, SALT_FIELD, ENVIRONMENT_FIELD] as const;
+  readonly methods = ['upi', 'card', 'netbanking', 'wallet'] as const;
   readonly split = new EasebuzzSplit();
   private readonly logger = new Logger(EasebuzzTransport.name);
 
@@ -167,6 +176,8 @@ export class EasebuzzTransport implements PaymentGatewayTransport {
         surl: input.callbackUrl,
         furl: input.callbackUrl,
         ...(splitPayments ? { split_payments: JSON.stringify(splitPayments) } : {}),
+        // The method picked on the hosted page: Easebuzz's page shows only these modes (not part of the hash)
+        ...(input.method ? { show_payment_mode: EASEBUZZ_MODES[input.method] } : {}),
       },
     );
     if (response.status !== OPENED || !response.data) {
@@ -185,6 +196,9 @@ export class EasebuzzTransport implements PaymentGatewayTransport {
         access_key: response.data,
         url: this.http.checkoutUrl(auth.environment, response.data),
         environment: auth.environment,
+        checkout_mode: input.checkoutMode ?? 'HOSTED',
+        // Easebuzz's popup script is opened with the merchant key beside the access key
+        ...(input.checkoutMode === 'MODAL' ? { key: auth.key } : {}),
       },
       transfers: this.split.sentTransfers(txnid, input.transfers),
     };

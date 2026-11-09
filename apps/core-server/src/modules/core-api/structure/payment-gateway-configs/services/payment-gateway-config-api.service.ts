@@ -14,6 +14,7 @@ import { Injectable } from '@nestjs/common';
 import type { TablePageRequest } from '@vritti/api-sdk/data-table';
 import { BadRequestException, ConflictException } from '@vritti/api-sdk/exceptions';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
+import type { PaymentCheckoutMode } from '@/db/schema';
 import type { PaymentGatewayOptionDto } from '@/modules/payments-gateway/gateways/dto/response/payment-gateway-option.dto';
 import {
   PaymentGatewaysGatewayService,
@@ -78,6 +79,12 @@ export class PaymentGatewayConfigService {
       if (isForeignKeyViolation(error)) throw gatewayInUse('Payout accounts pay out through this gateway.');
       throw error;
     }
+  }
+
+  // Sets how an own gateway's checkout opens; Vritti's gateways are refused by the guard
+  async updateCheckoutMode(id: string, checkoutMode: PaymentCheckoutMode): Promise<SuccessResponseDto> {
+    const existing = await this.gatewayConfigService.requireWritable('organization', id);
+    return this.gatewayConfigService.updateCheckoutMode(existing, checkoutMode);
   }
 
   // Has the provider check an own gateway's credentials

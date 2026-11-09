@@ -1,3 +1,4 @@
+import { PaymentGatewayConfigDomainService } from '@domain/payment-gateway-config/services/payment-gateway-config.service';
 import { Injectable, Logger } from '@nestjs/common';
 import { type CurrencyCode, majorToMinor } from '@vritti/api-sdk/money';
 import { ScopedNatsClientService } from '@/services/scoped-nats-client.service';
@@ -6,26 +7,38 @@ import {
   PaymentEventTypeValues,
 } from '../../intents/dto/response/payment-event-response.dto';
 import type { PaymentEventHandler } from '../payment-event-handler';
+import { isDefinitiveRejection } from '../payment-rejection';
 
 export const COMMERCE_CHECKOUT_REFERENCE_TYPE = 'commerce.checkout';
 
-// Settles a commerce checkout from its payment: a success turns it into one paid order per store, an expiry or a
-// cancellation cancels the unpaid checkout, a failure leaves it open for another attempt. Organization-scoped, since
-// a checkout reaches across stores
+// Settles a commerce checkout from its payments: a success turns it into one paid order per store. A checkout may
+// have several payments (a retry, another gateway), so one payment expiring, failing or being cancelled leaves the
+// checkout alone — it ends by its own deadline. A success commerce refuses for good (the checkout was already paid by
+// another payment, or the amount does not match) is refunded in full, so no money is kept without an order.
+// Organization-scoped, since a checkout reaches across stores
 @Injectable()
 export class CheckoutPaymentHandlerService implements PaymentEventHandler {
   readonly referenceType = COMMERCE_CHECKOUT_REFERENCE_TYPE;
   private readonly logger = new Logger(CheckoutPaymentHandlerService.name);
 
-  constructor(private readonly nats: ScopedNatsClientService) {}
+  constructor(
+    private readonly nats: ScopedNatsClientService,
+    private readonly configService: PaymentGatewayConfigDomainService,
+  ) {}
 
-  // Routes one event by type; every branch is idempotent on the commerce side
+  // Every branch is idempotent: commerce answers a repeated completion as before, and the gateway refuses a second
+  // refund, which the dispatcher treats as final
   async handle(orgId: string, event: PaymentEventResponseDto): Promise<void> {
-    if (event.type === PaymentEventTypeValues.SUCCEEDED) return this.complete(orgId, event);
-    if (event.type === PaymentEventTypeValues.EXPIRED) {
-      return this.cancel(orgId, event, 'Payment expired before it was completed.');
+    if (event.type !== PaymentEventTypeValues.SUCCEEDED) return;
+    try {
+      await this.complete(orgId, event);
+    } catch (error: unknown) {
+      if (!isDefinitiveRejection(error)) throw error;
+      this.logger.error(
+        `Checkout ${event.payload.reference.id} refused payment ${event.payload.paymentIntentId} (${error instanceof Error ? error.message : String(error)}) — refunding it`,
+      );
+      await this.refund(orgId, event);
     }
-    if (event.type === PaymentEventTypeValues.CANCELED) return this.cancel(orgId, event, 'Payment was cancelled.');
   }
 
   private async complete(orgId: string, event: PaymentEventResponseDto): Promise<void> {
@@ -43,13 +56,12 @@ export class CheckoutPaymentHandlerService implements PaymentEventHandler {
     });
   }
 
-  private async cancel(orgId: string, event: PaymentEventResponseDto, reason: string): Promise<void> {
-    const { payload } = event;
-    this.logger.log(`org.checkouts.cancel — checkout: ${payload.reference.id} intent: ${payload.paymentIntentId}`);
-    await this.nats.send({ orgId }, 'commerce', 'org.checkouts.cancel', {
-      checkoutId: payload.reference.id,
-      reason,
-      paymentIntentId: payload.paymentIntentId,
+  private async refund(orgId: string, event: PaymentEventResponseDto): Promise<void> {
+    const { credentials } = await this.configService.getDecryptedCredentials(event.payload.configId);
+    this.logger.log(`payments.intents.refund — refused checkout payment ${event.payload.paymentIntentId}`);
+    await this.nats.send({ orgId }, 'payments', 'payments.intents.refund', {
+      paymentIntentId: event.payload.paymentIntentId,
+      credentials,
     });
   }
 }

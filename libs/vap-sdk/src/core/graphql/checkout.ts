@@ -1,43 +1,11 @@
-import { graphql } from '../gql/index.js';
-
-export const CheckoutFieldsFragment = graphql(`
-  fragment CheckoutFields on Checkout {
-    id
-    status
-    currencyCode
-    total {
-      ...MoneyFields
-    }
-    sites {
-      siteId
-      legalEntityId
-      subtotal {
-        ...MoneyFields
-      }
-    }
-    orders {
-      siteId
-      orderId
-      orderNumber
-    }
-    paymentIntent {
-      ...PaymentIntentFields
-    }
-  }
-`);
-
-export const START_CHECKOUT = graphql(`
-  mutation StartCheckout($input: CheckoutStartInput!) {
-    startCheckout(input: $input) {
-      ...CheckoutFields
-    }
-  }
-`);
-
-export const CHECKOUT_QUERY = graphql(`
-  query Checkout($input: CheckoutRefInput!) {
-    checkout(input: $input) {
-      ...CheckoutFields
-    }
-  }
-`);
+// The checkout documents, as codegen generates them from checkout.graphql. Each is its own export of the generated
+// module, so a bundle keeps only the documents it sends.
+export {
+  ActiveCheckoutDocument as ACTIVE_CHECKOUT,
+  CancelCheckoutDocument as CANCEL_CHECKOUT,
+  ChangeCheckoutAddressDocument as CHANGE_CHECKOUT_ADDRESS,
+  ChangeCheckoutContactDocument as CHANGE_CHECKOUT_CONTACT,
+  CheckoutDocument as CHECKOUT_QUERY,
+  CheckoutFieldsFragmentDoc as CheckoutFieldsFragment,
+  StartCheckoutDocument as START_CHECKOUT,
+} from '../gql/graphql.js';

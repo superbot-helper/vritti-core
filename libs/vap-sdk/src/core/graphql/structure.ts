@@ -1,29 +1,6 @@
-import { graphql } from '../gql/index.js';
-
-export const APP_SITES_QUERY = graphql(`
-  query AppSites($types: [AppSiteType!]) {
-    appSites(types: $types) {
-      id
-      code
-      name
-      type
-      timezone
-      legalEntityId
-      currencyCode
-      sortOrder
-    }
-  }
-`);
-
-export const APP_LEGAL_ENTITIES_QUERY = graphql(`
-  query AppLegalEntities {
-    appLegalEntities {
-      id
-      code
-      name
-      currencyCode
-      country
-      sortOrder
-    }
-  }
-`);
+// The structure documents, as codegen generates them from structure.graphql. Each is its own export of the generated
+// module, so a bundle keeps only the documents it sends.
+export {
+  AppLegalEntitiesDocument as APP_LEGAL_ENTITIES_QUERY,
+  AppSitesDocument as APP_SITES_QUERY,
+} from '../gql/graphql.js';

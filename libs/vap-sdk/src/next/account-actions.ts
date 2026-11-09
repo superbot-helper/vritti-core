@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireParty } from './party.js';
 import { resolvePayload, vapNextConfig } from './payload-adapter.js';
-import { formField, type PartyActionState, withPartyErrors } from './state.js';
+import { formField, type PartyActionState, returnToFrom, withPartyErrors } from './state.js';
 import { vapSdk } from './visitor-session.js';
 
 // A party's own details and address book, as server actions a storefront imports directly.
@@ -56,6 +56,28 @@ export async function removeAddressAction(_previous: PartyActionState, formData:
   );
   revalidatePath(route);
   return result;
+}
+
+// Makes the address the form names (`addressId`) the party's delivery address — the "Deliver to" in a storefront's
+// header. A plain form action, so it works with JavaScript off; the page it was pressed on (`returnTo`) and the layout
+// revalidate, so every header shows the new address
+export async function setDeliveryAddressAction(formData: FormData): Promise<void> {
+  const payload = await resolvePayload();
+  const returnTo = returnToFrom(formData);
+  const party = await requireParty(returnTo);
+  const id = formField(formData, 'addressId');
+  if (!id) return;
+
+  await withPartyErrors(payload, async () =>
+    (await vapSdk(payload, { partyId: party.partyId })).people.setDefaultAddress(id).then(() => ({ ok: true })),
+  );
+  revalidatePath(localPath(returnTo));
+  revalidatePath('/', 'layout');
+}
+
+// A path on this storefront, never another site's URL
+function localPath(value: string): string {
+  return value.startsWith('/') && !value.startsWith('//') ? value : '/';
 }
 
 // The party's own name and contact details.

@@ -28,6 +28,14 @@ const WEBHOOK_URL_PER_PAYMENT: ReadonlySet<string> = new Set(['cashfree', 'hdfc-
 // entered, and a wrong one only fails when a payment is split to it
 const PAYOUT_ACCOUNT_NOT_LOOKED_UP: ReadonlySet<string> = new Set(['easebuzz']);
 
+// Gateways whose payment window can open on the store's page (checkout mode MODAL); every other one opens its own page
+const MODAL_CHECKOUT_GATEWAYS: ReadonlySet<string> = new Set(['razorpay', 'cashfree', 'easebuzz']);
+
+// Whether a gateway's checkout can open as a window on the store's page
+export function supportsModalCheckout(gatewayCode: string): boolean {
+  return MODAL_CHECKOUT_GATEWAYS.has(gatewayCode);
+}
+
 // Returns the credential a gateway signs webhooks with, when it has no webhook secret of its own
 export function webhookSigningCredential(gatewayCode: string): string | undefined {
   return WEBHOOK_SIGNING_CREDENTIAL[gatewayCode];

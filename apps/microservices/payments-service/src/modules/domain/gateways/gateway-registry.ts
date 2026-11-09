@@ -42,6 +42,7 @@ export class GatewayRegistry {
       code: transport.code,
       credentialFields: [...transport.credentialFields],
       supportsSplit: transport.split !== undefined,
+      methods: [...transport.methods],
     }));
   }
 }

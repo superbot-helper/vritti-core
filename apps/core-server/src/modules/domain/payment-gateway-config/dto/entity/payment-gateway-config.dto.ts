@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { type PaymentGatewayConfig, type PaymentGatewayConfigKind, PaymentGatewayConfigKindValues } from '@/db/schema';
+import {
+  type PaymentCheckoutMode,
+  PaymentCheckoutModeValues,
+  type PaymentGatewayConfig,
+  type PaymentGatewayConfigKind,
+  PaymentGatewayConfigKindValues,
+} from '@/db/schema';
 import {
   type PaymentGatewayConfigStatus,
   PaymentGatewayConfigStatusValues,
@@ -41,6 +47,14 @@ export class PaymentGatewayConfigDto {
 
   @ApiPropertyOptional({ description: "The catalog gateway's logo for dark backgrounds", nullable: true })
   logoDarkUrl: string | null;
+
+  @ApiProperty({
+    description:
+      "How the gateway's checkout opens for shoppers: HOSTED on the gateway's own page, MODAL in a window on the store's page",
+    enum: Object.values(PaymentCheckoutModeValues),
+    example: 'HOSTED',
+  })
+  checkoutMode: PaymentCheckoutMode;
 
   @ApiPropertyOptional({
     description: 'When the stored credentials last passed the provider check',
@@ -85,6 +99,7 @@ export class PaymentGatewayConfigDto {
     dto.platformFeeBps = row.platformFeeBps;
     dto.logoLightUrl = row.logoLightUrl ?? null;
     dto.logoDarkUrl = row.logoDarkUrl ?? null;
+    dto.checkoutMode = row.checkoutMode;
     dto.verifiedAt = row.verifiedAt?.toISOString() ?? null;
     dto.webhookVerifiedAt = row.webhookVerifiedAt?.toISOString() ?? null;
     dto.lastWebhookAt = row.lastWebhookAt?.toISOString() ?? null;

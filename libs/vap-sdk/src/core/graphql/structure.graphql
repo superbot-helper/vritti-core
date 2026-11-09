@@ -1,0 +1,23 @@
+query AppSites($types: [AppSiteType!]) {
+  appSites(types: $types) {
+    id
+    code
+    name
+    type
+    timezone
+    legalEntityId
+    currencyCode
+    sortOrder
+  }
+}
+
+query AppLegalEntities {
+  appLegalEntities {
+    id
+    code
+    name
+    currencyCode
+    country
+    sortOrder
+  }
+}

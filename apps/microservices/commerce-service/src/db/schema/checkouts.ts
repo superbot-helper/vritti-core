@@ -1,15 +1,24 @@
 import { sql } from '@vritti/api-sdk/drizzle-orm';
-import { bigint, index, integer, text, timestamp, unique, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
+import {
+  type AnyPgColumn,
+  bigint,
+  index,
+  integer,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from '@vritti/api-sdk/drizzle-pg-core';
 import { commerceSchema } from './commerce-schema';
 import { checkoutStatusEnum } from './enums';
 import { offeringVariants } from './offering-variants';
 import { offerings } from './offerings';
-import { parties } from './parties';
+import { parties, partyAddresses } from './parties';
 import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
 
 // A checkout is the cart frozen at the moment the shopper pays: the lines of every store they are buying from, priced
-// as they were, and the one payment that covers them all. Orders are made from it only once the payment lands, one per
-// store. Organization-owned, since one checkout reaches across stores and legal entities
+// as they were. Payment intents point at it (payments.payment_intents.checkout_id); orders are made from it once one of
+// them pays, one per store. Organization-owned, since one checkout reaches across stores and legal entities
 export const checkouts = commerceSchema.table(
   'checkouts',
   {
@@ -24,23 +33,25 @@ export const checkouts = commerceSchema.table(
     currencyCode: varchar('currency_code', { length: 3 }).notNull(),
     // Every line added up, in minor units — what the payment is opened for
     totalAmount: bigint('total_amount', { mode: 'bigint' }).notNull(),
-    // The gateway the shopper picked, e.g. razorpay; core resolves the account it charges through
-    gatewayCode: varchar('gateway_code', { length: 100 }).notNull(),
-    // The storefront's key for this attempt: pressing Pay twice reaches the same checkout
+    // The cart's fingerprint: a hash of the currency, the stores and every frozen line (variant, quantity, price).
+    // Checkout pressed again on the same cart reaches the same open checkout; any edit to the cart gives a new one
     checkoutKey: varchar('checkout_key', { length: 100 }).notNull(),
-    // Set once the payment opens; a late event for it still finds this checkout
-    paymentIntentId: uuid('payment_intent_id'),
     // Who is paying, as the orders and the gateway's page will show them
     customerName: varchar('customer_name', { length: 255 }),
     customerPhone: varchar('customer_phone', { length: 20 }),
     customerEmail: varchar('customer_email', { length: 200 }),
-    deliveryAddress: text('delivery_address'),
-    notes: text('notes'),
-    // When the payment window closes; the payment intent expires at the same moment
+    // The party's saved address the orders are delivered to; none makes them takeaway orders. The address itself is
+    // read when the orders are made, so the checkout holds no copy of it
+    partyAddressId: uuid('party_address_id').references(() => partyAddresses.id, { onDelete: 'set null' }),
+    // When the checkout's window closes, or closed — the status says which: while OPEN the deadline, which every
+    // payment intent opened for it shares; EXPIRED the deadline that passed; CANCELLED the moment the shopper ended
+    // it; PAID and CONVERTED the moment the payment landed. One column instead of paid_at and cancelled_at
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    paidAt: timestamp('paid_at', { withTimezone: true }),
-    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-    cancellationReason: text('cancellation_reason'),
+    // The newer checkout that replaced this one when the party checked out an edited cart. A payment that still lands
+    // on a replaced checkout is refused and refunded: the party moved on to the newer cart
+    replacedByCheckoutId: uuid('replaced_by_checkout_id').references((): AnyPgColumn => checkouts.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -48,10 +59,13 @@ export const checkouts = commerceSchema.table(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    unique('uq_checkouts_party_key').on(table.organizationId, table.partyId, table.checkoutKey),
-    unique('uq_checkouts_payment_intent').on(table.paymentIntentId),
+    // A party has at most one OPEN checkout: checking out an edited cart replaces the open one
+    uniqueIndex('uq_checkouts_one_open_per_party').on(table.organizationId, table.partyId).where(sql`status = 'OPEN'`),
+    index('idx_checkouts_party_key').on(table.organizationId, table.partyId, table.checkoutKey),
     index('idx_checkouts_party').on(table.organizationId, table.partyId, table.createdAt),
     index('idx_checkouts_status').on(table.status),
+    // The expiry sweep reads open checkouts by deadline
+    index('idx_checkouts_open_expiry').on(table.status, table.expiresAt),
     orgIsolationPolicy(),
   ],
 );

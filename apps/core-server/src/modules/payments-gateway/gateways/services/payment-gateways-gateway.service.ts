@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PaymentGatewayConfigVerificationResponseDto } from '@domain/payment-gateway-config/dto/response/payment-gateway-config-verification-response.dto';
+import { supportsModalCheckout } from '@domain/payment-gateway-config/gateway-credential-fields';
 import type { PaymentGatewayConfigDetail } from '@domain/payment-gateway-config/repositories/payment-gateway-config.repository';
 import { PaymentGatewayConfigDomainService } from '@domain/payment-gateway-config/services/payment-gateway-config.service';
 import { Injectable, Logger } from '@nestjs/common';
@@ -75,12 +76,13 @@ export class PaymentGatewaysGatewayService {
   // Lists the gateways payments-service can charge through, with the credential fields each one takes
   async listGateways(): Promise<PaymentGatewayOptionDto[]> {
     this.logger.log('payments.gateways.list');
-    const { gateways } = await this.nats.send<{ gateways: PaymentGatewayOptionDto[] }>(
+    const { gateways } = await this.nats.send<{ gateways: Omit<PaymentGatewayOptionDto, 'supportsModalCheckout'>[] }>(
       'payments',
       'payments.gateways.list',
       {},
     );
-    return gateways;
+    // Whether the storefront can open each one as a popup is core's to say: it is the browser plugin, not the gateway
+    return gateways.map((gateway) => ({ ...gateway, supportsModalCheckout: supportsModalCheckout(gateway.code) }));
   }
 
   // Looks a linked account up at the config's gateway under its keys; null when the gateway has none
@@ -239,7 +241,7 @@ function payerOf(options: VerificationPaymentOptions): {
 
 // What the browser opens a verification payment with, refused when the gateway gave neither form of it
 function verificationCheckout(intent: PaymentIntentResponseDto, gatewayCode: string): VerificationCheckout {
-  const checkout = intent.checkout ?? {};
+  const checkout = intent.launch ?? {};
   const keyId = typeof checkout.key_id === 'string' ? checkout.key_id : null;
   const orderId = typeof checkout.order_id === 'string' ? checkout.order_id : intent.providerOrderId;
   const url = typeof checkout.url === 'string' ? checkout.url : null;

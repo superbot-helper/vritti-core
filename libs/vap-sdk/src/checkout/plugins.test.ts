@@ -97,7 +97,12 @@ describe('Cashfree session', () => {
 
   it('reads the payment session and mode core sent, defaulting to sandbox', () => {
     expect(cashfree().gateways).toEqual(['cashfree']);
-    expect(cashfreeSession(checkout)).toEqual({ paymentSessionId: 'session_1', orderId: 'vp_1', mode: 'production' });
+    expect(cashfreeSession(checkout)).toEqual({
+      paymentSessionId: 'session_1',
+      orderId: 'vp_1',
+      mode: 'production',
+      checkoutMode: 'HOSTED',
+    });
     expect(cashfreeSession({ ...checkout, options: { order_id: 'vp_1', payment_session_id: 's' } }).mode).toBe(
       'sandbox',
     );

@@ -17,7 +17,9 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
  */
 const config: CodegenConfig = {
   schema: '../../apps/core-server/src/schema.app.gql',
-  documents: ['src/**/*.ts', '!src/**/*.test.ts', '!src/core/gql/**'],
+  // The documents live in .graphql files beside the modules that re-export them, rather than in graphql() calls: the
+  // client preset's graphql() looks documents up in one map of all of them, so any import of it kept every document
+  documents: ['src/**/*.graphql', 'src/**/*.ts', '!src/**/*.test.ts', '!src/core/gql/**'],
   ignoreNoDocuments: true,
   emitLegacyCommonJSImports: false,
   generates: {

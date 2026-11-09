@@ -201,12 +201,23 @@ type CartCheckout {
   gateways: [String!]!
 }
 
+type CartGatewayLogo {
+  """The gateway code, e.g. razorpay."""
+  gatewayCode: String!
+
+  """Its logo for light backgrounds; null when none is uploaded."""
+  logoUrl: String
+}
+
 type Cart {
   currencyCode: String!
   sites: [CartSite!]!
   subtotal: Money!
   itemCount: Int!
   checkout: CartCheckout!
+
+  """Each gateway the cart can be paid through, with its logo."""
+  gatewayLogos: [CartGatewayLogo!]!
 }
 
 type CartQuantity {
@@ -650,6 +661,17 @@ type PaymentIntent {
   amount: Money!
   reference: PaymentReference!
   description: String
+
+  """The gateway the payment goes through, e.g. razorpay."""
+  gatewayCode: String!
+
+  """
+  The payment method: the one the shopper chose before paying, then the one they actually paid with.
+  """
+  method: String
+
+  """The checkout this payment is for, when it pays one."""
+  checkoutId: ID
   checkout: PaymentCheckout
   failure: PaymentFailure
   paidAt: String
@@ -679,23 +701,52 @@ type CheckoutStoreOrder {
   orderNumber: String!
 }
 
+type CheckoutCustomer {
+  name: String
+
+  """In international form, e.g. +919876543210."""
+  phone: String
+  email: String
+}
+
 type Checkout {
   id: ID!
   status: CheckoutStatus!
   currencyCode: String!
   total: Money!
   sites: [CheckoutStoreShare!]!
+
+  """
+  ISO 8601. When the checkout closes if it is not paid; once closed (EXPIRED, CANCELLED, PAID), when it did.
+  """
+  expiresAt: String!
+
+  """ISO 8601. When it was paid."""
+  paidAt: String
+
+  """
+  The party’s saved address the orders are delivered to; null for takeaway.
+  """
+  partyAddressId: ID
+
+  """Who the orders are for; the gateway’s page is prefilled from this."""
+  customer: CheckoutCustomer!
   orders: [CheckoutStoreOrder!]!
+
+  """
+  The payment that paid it, else the latest one opened for it; null until Pay is pressed.
+  """
   paymentIntent: PaymentIntent
 }
 
 """
-OPEN: awaiting payment. PAID: the payment landed, orders being made. CONVERTED: one order per store exists. CANCELLED: expired or cancelled unpaid.
+OPEN: awaiting payment. PAID: the payment landed, orders being made. CONVERTED: one order per store exists. EXPIRED: its 30-minute window closed unpaid. CANCELLED: the shopper cancelled it.
 """
 enum CheckoutStatus {
   OPEN
   PAID
   CONVERTED
+  EXPIRED
   CANCELLED
 }
 

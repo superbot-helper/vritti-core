@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_payment_intents_one_active_per_checkout" ON "payments"."payment_intents" ("organization_id","checkout_id") WHERE checkout_id IS NOT NULL AND status IN ('CREATED', 'REQUIRES_ACTION', 'PROCESSING');

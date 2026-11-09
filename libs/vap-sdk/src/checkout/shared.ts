@@ -10,6 +10,15 @@ export function asText(value: unknown): string | undefined {
   return undefined;
 }
 
+// How core said the gateway's checkout opens, from the gateway config: its own page (HOSTED) or a window on the
+// store's page (MODAL). Undefined on a payment opened before the setting existed
+export type CheckoutMode = 'HOSTED' | 'MODAL';
+
+export function checkoutModeOf(options: Record<string, unknown>): CheckoutMode | undefined {
+  const value = options.checkout_mode;
+  return value === 'HOSTED' || value === 'MODAL' ? value : undefined;
+}
+
 // Throws unless running in a browser — the plugins open pages, which a server cannot
 export function requireBrowser(what: string): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') {

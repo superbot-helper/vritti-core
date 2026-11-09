@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { CartItemDto, type CartItemRow } from '@domain/carts/dto/entity/cart.dto';
 import { CartsDomainService } from '@domain/carts/services/carts.service';
 import type { CheckoutCustomerDto } from '@domain/orders/dto/entity/order-checkout.dto';
@@ -20,15 +21,18 @@ import {
 } from '@/db/schema';
 import { type CheckoutOrderRefDto, CheckoutStartedDto, CheckoutStatusDto } from '../dto/entity/checkout.dto';
 import type {
-  BindCheckoutIntentDto,
   CancelCheckoutDto,
+  ChangeCheckoutAddressDto,
+  ChangeCheckoutContactDto,
   CompleteCheckoutDto,
+  FindOpenCheckoutDto,
   StartCheckoutDto,
 } from '../dto/request/checkout-request.dto';
 import { CheckoutsDomainRepository } from '../repositories/checkouts.repository';
 
-// How long the shopper has to pay; the payment intent is given the same deadline
+// How long the shopper has to pay; every payment intent opened for the checkout is given the same deadline
 const CHECKOUT_TTL_MS = 10 * 60 * 1000;
+const EXPIRE_BATCH = 100;
 // orders.customer_phone is varchar(20)
 const CUSTOMER_PHONE_MAX = 20;
 
@@ -54,7 +58,9 @@ export class CheckoutsDomainService {
     private readonly communicationsService: PartyCommunicationsDomainService,
   ) {}
 
-  // Freezes the shopper's carts at the chosen stores into one checkout awaiting one payment
+  // Freezes the shopper's carts at the chosen stores into one checkout. No payment is opened here: a payment intent is
+  // created for the checkout when the shopper presses Pay, and a checkout may have several (a retry, another gateway)
+  // until one of them pays it
   async start(dto: StartCheckoutDto, headers: NatsHeaders): Promise<CheckoutStartedDto> {
     const party = await this.partiesRepository.findById(dto.partyId);
     if (!party) throw new NotFoundException('Customer not found.');
@@ -69,9 +75,6 @@ export class CheckoutsDomainService {
       phone: phone?.value ?? null,
       email: email?.value ?? null,
     };
-
-    const existing = await this.repository.findByKey(dto.partyId, dto.checkoutKey);
-    if (existing) return this.reuse(existing, customer);
 
     const sites = dto.siteIds?.length ? dto.sites.filter((site) => dto.siteIds?.includes(site.siteId)) : dto.sites;
     const carts = await this.cartsService.findForCheckoutAtSites(
@@ -101,64 +104,93 @@ export class CheckoutsDomainService {
       });
     }
 
-    const deliveryAddress = dto.addressId ? await this.resolveAddress(dto.partyId, dto.addressId) : null;
+    if (dto.addressId) await this.assertAddress(dto.partyId, dto.addressId);
     const lines = available.map(({ store, row }) => toFrozenLine(store, row));
     const totalAmount = lines.reduce((sum, line) => sum + line.lineTotal, 0n);
 
+    // The cart's fingerprint: the same cart reaches the same open checkout, any edit makes a new one
+    const checkoutKey = cartFingerprint(dto.currencyCode, lines);
+
     this.logger.log(`checkouts.start — party: ${dto.partyId}, stores: ${carts.length}, lines: ${lines.length}`);
-    return this.repository
-      .transaction(async () => {
-        const checkout = await this.repository.create({
-          appId: dto.appId,
-          partyId: dto.partyId,
-          currencyCode: dto.currencyCode,
-          totalAmount,
-          gatewayCode: dto.gatewayCode,
-          checkoutKey: dto.checkoutKey,
-          customerName: party.displayName ?? null,
-          customerPhone: phone?.value.slice(0, CUSTOMER_PHONE_MAX) ?? null,
-          customerEmail: email?.value ?? null,
-          deliveryAddress,
-          notes: dto.notes ?? null,
-          expiresAt: new Date(Date.now() + CHECKOUT_TTL_MS),
+    return this.database.runInTransaction(async () => {
+      // One start per party at a time, so two presses cannot both find no open checkout
+      await this.repository.lockParty(dto.partyId);
+      const now = new Date();
+      await this.repository.expireStaleForParty(dto.partyId, now);
+
+      const open = await this.repository.findOpenByParty(dto.partyId);
+      // The same cart: the checkout already open for it, with its own timer, address and contact
+      if (open && open.checkoutKey === checkoutKey) {
+        this.logger.log(`checkouts.start — reusing open checkout ${open.id} for the same cart`);
+        return CheckoutStartedDto.from(
+          open,
+          await this.repository.findLines(open.id),
+          { name: open.customerName, phone: open.customerPhone, email: open.customerEmail },
+          true,
+        );
+      }
+      // A different cart: the open checkout is replaced, but only the one core cleared (no payment under way, none
+      // paid at its gateway). Any other means it changed since core looked
+      if (open && open.id !== dto.replaceCheckoutId) {
+        throw new ConflictException({
+          label: 'Checkout In Progress',
+          detail: 'You have another checkout open. Reload the page and check out again.',
         });
-        const frozen = await this.repository.createLines(lines.map((line) => ({ ...line, checkoutId: checkout.id })));
-        return CheckoutStartedDto.from(checkout, frozen, customer);
-      })
-      .catch(async (error: unknown) => {
-        // Two submits with the same key raced past the lookup above; the unique key lets one through, and the other
-        // answers with the checkout that one opened
-        const winner = await this.repository.findByKey(dto.partyId, dto.checkoutKey);
-        if (!winner) throw error;
-        return this.reuse(winner, customer);
+      }
+      if (open) {
+        await this.repository.update(open.id, { status: CheckoutStatusValues.CANCELLED, expiresAt: now });
+      }
+
+      const checkout = await this.repository.create({
+        appId: dto.appId,
+        partyId: dto.partyId,
+        currencyCode: dto.currencyCode,
+        totalAmount,
+        partyAddressId: dto.addressId ?? null,
+        checkoutKey,
+        customerName: party.displayName ?? null,
+        customerPhone: phone?.value.slice(0, CUSTOMER_PHONE_MAX) ?? null,
+        customerEmail: email?.value ?? null,
+        expiresAt: new Date(now.getTime() + CHECKOUT_TTL_MS),
       });
+      if (open) {
+        await this.repository.update(open.id, { replacedByCheckoutId: checkout.id });
+        this.logger.log(`checkouts.start — checkout ${open.id} replaced by ${checkout.id} (the cart changed)`);
+      }
+      const frozen = await this.repository.createLines(lines.map((line) => ({ ...line, checkoutId: checkout.id })));
+      return CheckoutStartedDto.from(checkout, frozen, customer);
+    });
   }
 
-  // Answers a repeated checkout with the one its key already opened
-  private async reuse(checkout: Checkout, customer: CheckoutCustomerDto): Promise<CheckoutStartedDto> {
-    if (checkout.status === CheckoutStatusValues.CANCELLED) {
-      throw new ConflictException({
-        label: 'Checkout Ended',
-        detail: 'This checkout has ended without payment. Reload the page to check out again.',
-      });
-    }
-    this.logger.log(`checkouts.start — reusing checkout ${checkout.id} for the same key`);
-    return CheckoutStartedDto.from(checkout, await this.repository.findLines(checkout.id), customer, true);
+  // The party's open checkout, if its window is still open — what core checks before a new one replaces it, and what
+  // the storefront's "checkout in progress" card shows
+  async findOpen(dto: FindOpenCheckoutDto): Promise<{ checkout: CheckoutStatusDto | null }> {
+    const open = await this.repository.findOpenByParty(dto.partyId);
+    if (!open || open.expiresAt.getTime() <= Date.now()) return { checkout: null };
+    return { checkout: CheckoutStatusDto.from(open, await this.repository.findLines(open.id), []) };
   }
 
-  // Stamps the payment opened for a checkout, so a late event for it still finds the checkout
-  async bindIntent(dto: BindCheckoutIntentDto): Promise<CheckoutStatusDto> {
-    const checkout = await this.requireById(dto.checkoutId);
-    if (checkout.paymentIntentId && checkout.paymentIntentId !== dto.paymentIntentId) {
-      throw new ConflictException({
-        label: 'Checkout Already Paying',
-        detail: 'Another payment was already opened for this checkout.',
+  // Expires the open checkouts whose window closed unpaid. A checkout ends only by its own deadline: one payment
+  // intent ending says nothing about it, since another may still be open
+  async expireStale(limit = EXPIRE_BATCH): Promise<{ cancelled: number }> {
+    const now = new Date();
+    const candidates = await this.repository.findExpired(now, limit);
+    let cancelled = 0;
+    for (const candidate of candidates) {
+      const done = await this.database.runInTransaction(async () => {
+        const checkout = await this.repository.findByIdForUpdate(candidate.id);
+        // Re-read under the lock: a payment may have landed between the scan and here
+        if (!checkout || checkout.status !== CheckoutStatusValues.OPEN || checkout.expiresAt >= now) return false;
+        await this.repository.update(checkout.id, {
+          // Expired, not cancelled: nobody ended it, its window closed (expires_at says when)
+          status: CheckoutStatusValues.EXPIRED,
+        });
+        return true;
       });
+      if (done) cancelled++;
     }
-    const bound = checkout.paymentIntentId
-      ? checkout
-      : await this.repository.update(checkout.id, { paymentIntentId: dto.paymentIntentId });
-    return this.statusOf(bound);
+    if (cancelled > 0) this.logger.log(`Expired ${cancelled} unpaid checkout(s)`);
+    return { cancelled };
   }
 
   // Records the captured payment and turns the checkout into one paid order per store, all in one transaction.
@@ -168,20 +200,32 @@ export class CheckoutsDomainService {
       const checkout = await this.repository.findByIdForUpdate(dto.checkoutId);
       if (!checkout) throw new NotFoundException('Checkout not found.');
 
-      if (checkout.status === CheckoutStatusValues.CONVERTED) {
-        if (checkout.paymentIntentId === dto.paymentIntentId) return this.statusOf(checkout);
+      // Paid already: by this payment intent (a repeat — answer as before), or by another one, whose money core refunds
+      if (checkout.status === CheckoutStatusValues.CONVERTED || checkout.status === CheckoutStatusValues.PAID) {
+        const lines = await this.repository.findLines(checkout.id);
+        if (lines[0]) await this.enterStore(lines[0].siteId, lines[0].legalEntityId);
+        const paidBy = await this.repository.findPaidPaymentIntentIds(checkout.id);
+        if (paidBy.includes(dto.paymentIntentId)) {
+          return CheckoutStatusDto.from(checkout, lines, await this.repository.findOrders(checkout.id));
+        }
         this.logger.error(
-          `complete REFUSED — checkout ${checkout.id} already paid by intent ${checkout.paymentIntentId}, second intent ${dto.paymentIntentId}`,
+          `complete REFUSED — checkout ${checkout.id} already paid by ${paidBy.join(', ') || 'another payment'}, second intent ${dto.paymentIntentId}`,
         );
         throw new ConflictException({
           label: 'Already Paid',
           detail: 'This checkout was already paid by another payment. Refund the duplicate.',
         });
       }
-      if (checkout.paymentIntentId && checkout.paymentIntentId !== dto.paymentIntentId) {
+
+      // Replaced by a newer checkout before this payment landed: the party moved on to the newer cart, so the payment is
+      // refused, and core refunds it in full. A checkout cancelled any other way still becomes its orders (below)
+      if (checkout.replacedByCheckoutId) {
+        this.logger.error(
+          `complete REFUSED — checkout ${checkout.id} was replaced by ${checkout.replacedByCheckoutId}; intent ${dto.paymentIntentId} paid it late`,
+        );
         throw new ConflictException({
-          label: 'Already Paid',
-          detail: 'This checkout is bound to another payment.',
+          label: 'Checkout Replaced',
+          detail: 'This checkout was replaced by a newer one before its payment landed. Refund the payment.',
         });
       }
 
@@ -207,27 +251,26 @@ export class CheckoutsDomainService {
       }
 
       // A payment that lands after the window closed still buys the goods; the orders carry a flag for staff
-      const wasCancelled = checkout.status === CheckoutStatusValues.CANCELLED;
+      const wasCancelled =
+        checkout.status === CheckoutStatusValues.CANCELLED || checkout.status === CheckoutStatusValues.EXPIRED;
+      // The window closed when the money landed; status PAID says that is what the time means
       const paidAt = new Date(dto.paidAt);
-      await this.repository.update(checkout.id, {
-        status: CheckoutStatusValues.PAID,
-        paymentIntentId: dto.paymentIntentId,
-        paidAt,
-        ...(wasCancelled ? { cancelledAt: null, cancellationReason: null } : {}),
-      });
+      await this.repository.update(checkout.id, { status: CheckoutStatusValues.PAID, expiresAt: paidAt });
 
       const lines = await this.repository.findLines(checkout.id);
+      // The address as it stands now, read once for every store's order
+      const deliveryAddress = await this.deliveryAddressOf(checkout);
       const orders: CheckoutOrderRefDto[] = [];
       for (const share of groupByStore(lines)) {
         await this.enterStore(share.siteId, share.legalEntityId);
         const order = await this.ordersService.createPaid({
           partyId: checkout.partyId,
           currencyCode: checkout.currencyCode,
-          type: checkout.deliveryAddress ? OrderTypeValues.DELIVERY : OrderTypeValues.TAKEAWAY,
+          type: deliveryAddress ? OrderTypeValues.DELIVERY : OrderTypeValues.TAKEAWAY,
           customerName: checkout.customerName,
           customerPhone: checkout.customerPhone,
-          deliveryAddress: checkout.deliveryAddress,
-          notes: checkout.notes,
+          deliveryAddress,
+          notes: null,
           lines: share.lines.map((line) => ({
             offeringId: line.offeringId,
             offeringVariantId: line.offeringVariantId,
@@ -248,13 +291,18 @@ export class CheckoutsDomainService {
           checkout.partyId,
           share.lines.map((line) => ({ code: line.code, quantity: line.quantity })),
         );
-        orders.push({ siteId: share.siteId, orderId: order.id, orderNumber: order.orderNumber });
+        orders.push({
+          siteId: share.siteId,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          paymentIntentId: dto.paymentIntentId,
+        });
       }
 
       const converted = await this.repository.update(checkout.id, { status: CheckoutStatusValues.CONVERTED });
       if (wasCancelled) {
         this.logger.warn(
-          `Checkout ${checkout.id} paid after cancellation — ${orders.length} order(s) flagged for review`,
+          `Checkout ${checkout.id} paid after it ${checkout.status === CheckoutStatusValues.EXPIRED ? 'expired' : 'was cancelled'} — ${orders.length} order(s) flagged for review`,
         );
       } else {
         this.logger.log(`Checkout ${checkout.id} converted — ${orders.length} order(s), intent ${dto.paymentIntentId}`);
@@ -263,27 +311,70 @@ export class CheckoutsDomainService {
     });
   }
 
-  // Abandons an unpaid checkout; one bound to another payment, or already paid, is left alone
+  // Abandons an unpaid checkout. A payment intent's own expiry or cancellation no longer ends its checkout — another
+  // payment may still be open — so a cancel naming a payment intent is acknowledged and ignored; the checkout ends by its
+  // deadline (expireStale)
   async cancel(dto: CancelCheckoutDto): Promise<CheckoutStatusDto> {
     return this.database.runInTransaction(async () => {
       const checkout = await this.repository.findByIdForUpdate(dto.checkoutId);
       if (!checkout) throw new NotFoundException('Checkout not found.');
+      const lines = await this.repository.findLines(checkout.id);
 
-      if (dto.paymentIntentId && checkout.paymentIntentId && checkout.paymentIntentId !== dto.paymentIntentId) {
-        this.logger.warn(
-          `cancel skipped — checkout ${checkout.id} is bound to intent ${checkout.paymentIntentId}, not ${dto.paymentIntentId}`,
+      if (dto.paymentIntentId) {
+        this.logger.log(
+          `cancel ignored — checkout ${checkout.id}: payment ${dto.paymentIntentId} ended (${dto.reason})`,
         );
-        return this.statusOf(checkout);
+        return CheckoutStatusDto.from(checkout, lines, []);
       }
-      if (checkout.status !== CheckoutStatusValues.OPEN) return this.statusOf(checkout);
+      if (checkout.status !== CheckoutStatusValues.OPEN) return CheckoutStatusDto.from(checkout, lines, []);
 
+      // The window closes now rather than at its deadline; the status says the shopper closed it
       const cancelled = await this.repository.update(checkout.id, {
         status: CheckoutStatusValues.CANCELLED,
-        cancelledAt: new Date(),
-        cancellationReason: dto.reason,
+        expiresAt: new Date(),
       });
       this.logger.log(`Unpaid checkout ${checkout.id} cancelled — ${dto.reason}`);
-      return this.statusOf(cancelled);
+      return CheckoutStatusDto.from(cancelled, lines, []);
+    });
+  }
+
+  // Delivers one of the party's open checkouts to another of their saved addresses — the same checkout, its window
+  // unchanged. Its orders, made once it is paid, go to the address it holds then
+  async changeAddress(dto: ChangeCheckoutAddressDto): Promise<CheckoutStatusDto> {
+    return this.updateOpen(dto.checkoutId, dto.partyId, async () => {
+      await this.assertAddress(dto.partyId, dto.addressId);
+      return { partyAddressId: dto.addressId };
+    });
+  }
+
+  // Changes who an open checkout's orders are for: the name, phone and email it holds. The party's profile is not
+  // touched — this is for this order only
+  async changeContact(dto: ChangeCheckoutContactDto): Promise<CheckoutStatusDto> {
+    return this.updateOpen(dto.checkoutId, dto.partyId, async () => ({
+      customerName: dto.name.trim(),
+      customerPhone: dto.phone,
+      customerEmail: dto.email?.trim() || null,
+    }));
+  }
+
+  // Changes an open checkout under its row lock, so a payment completing at the same moment sees either the old or
+  // the new values, never half of each. A checkout paid, ended or past its window is refused
+  private async updateOpen(
+    checkoutId: string,
+    partyId: string,
+    change: () => Promise<Partial<Checkout>>,
+  ): Promise<CheckoutStatusDto> {
+    return this.database.runInTransaction(async () => {
+      const checkout = await this.repository.findByIdForUpdate(checkoutId);
+      if (!checkout || checkout.partyId !== partyId) throw new NotFoundException('Checkout not found.');
+      if (checkout.status !== CheckoutStatusValues.OPEN || checkout.expiresAt.getTime() <= Date.now()) {
+        throw new ConflictException({
+          label: 'Checkout Closed',
+          detail: 'This checkout can no longer be changed. Check out again from your cart.',
+        });
+      }
+      const updated = await this.repository.update(checkout.id, await change());
+      return CheckoutStatusDto.from(updated, await this.repository.findLines(checkout.id), []);
     });
   }
 
@@ -301,11 +392,18 @@ export class CheckoutsDomainService {
     return checkout;
   }
 
+  // The checkout with its lines and, once converted, its orders. Orders carry store-level read policies, so they are
+  // read inside a transaction moved into one of the checkout's stores; the organization policy then shows them all
   private async statusOf(checkout: Checkout): Promise<CheckoutStatusDto> {
-    const [lines, orders] = await Promise.all([
-      this.repository.findLines(checkout.id),
-      this.repository.findOrders(checkout.id),
-    ]);
+    const lines = await this.repository.findLines(checkout.id);
+    if (checkout.status !== CheckoutStatusValues.CONVERTED || !lines[0]) {
+      return CheckoutStatusDto.from(checkout, lines, []);
+    }
+    const first = lines[0];
+    const orders = await this.database.runInTransaction(async () => {
+      await this.enterStore(first.siteId, first.legalEntityId);
+      return this.repository.findOrders(checkout.id);
+    });
     return CheckoutStatusDto.from(checkout, lines, orders);
   }
 
@@ -317,8 +415,8 @@ export class CheckoutsDomainService {
     );
   }
 
-  // The party's own address as the single line the orders carry
-  private async resolveAddress(partyId: string, addressId: string): Promise<string> {
+  // Refuses an address that is not one of the party's own, live ones
+  private async assertAddress(partyId: string, addressId: string): Promise<void> {
     const address = await this.addressesRepository.findById(addressId);
     if (!address || address.partyId !== partyId || !address.isActive) {
       throw new BadRequestException({
@@ -327,6 +425,15 @@ export class CheckoutsDomainService {
         errors: [{ field: 'addressId', message: 'Address not found' }],
       });
     }
+  }
+
+  // The checkout's delivery address as one text, for the orders it becomes — the saved address as it stands now, even
+  // if the party has since retired it, since it is the one they chose. None when the checkout is for takeaway, or the
+  // address row is gone
+  private async deliveryAddressOf(checkout: Checkout): Promise<string | null> {
+    if (!checkout.partyAddressId) return null;
+    const address = await this.addressesRepository.findById(checkout.partyAddressId);
+    if (!address) return null;
     return [address.line1, address.line2, address.city, address.region, address.postalCode, address.countryCode]
       .filter((part): part is string => Boolean(part))
       .join(', ');
@@ -358,4 +465,18 @@ function groupByStore(lines: CheckoutLine[]): StoreShare[] {
     shares.set(line.siteId, share);
   }
   return [...shares.values()];
+}
+
+// The cart's fingerprint: a hash of the currency and every frozen line — its store, variant, quantity and price —
+// order-independent. The same cart gives the same key; any edit gives a new one
+function cartFingerprint(
+  currencyCode: string,
+  lines: { siteId: string; offeringVariantId: string; quantity: number; unitPrice: bigint }[],
+): string {
+  const parts = lines
+    .map((line) => `${line.siteId}:${line.offeringVariantId}:${line.quantity}:${line.unitPrice}`)
+    .sort();
+  return createHash('sha256')
+    .update([currencyCode.toUpperCase(), ...parts].join('|'))
+    .digest('hex');
 }

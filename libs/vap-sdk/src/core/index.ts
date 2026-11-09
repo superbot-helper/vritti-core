@@ -30,6 +30,8 @@ export {
 export {
   CHECKOUT_REFERENCE_TYPE,
   type Checkout,
+  type CheckoutContactInput,
+  type CheckoutCustomer,
   type CheckoutOperations,
   type CheckoutStartInput,
   type CheckoutStatus,
@@ -75,7 +77,7 @@ export {
   createWhatsappOtpOperations,
   type WhatsappOtpOperations,
 } from './domains/whatsapp-otp.js';
-export { PartyRollbackError, VapError } from './errors.js';
+export { PartyRollbackError, UNAVAILABLE_CODE, VapError } from './errors.js';
 export {
   type AuthFlows,
   createAuthFlows,

@@ -208,6 +208,23 @@ export function createPeopleOperations(client: ApolloClient, context: RequestCon
           .then((r) => requireData(r.data).updatePartyAddress as PartyAddress[]),
       );
     },
+    // Makes one of the party's addresses where orders go unless told otherwise (its primary shipping address); the
+    // previous default stops being one. Answers the address book
+    async setDefaultAddress(id: string): Promise<PartyAddress[]> {
+      requireParty();
+      const current = (await this.addresses()).find((address) => address.id === id);
+      if (!current) throw new VapError('That address is not in your address book.', 'Address Not Found', 404);
+      if (current.isDefault) return this.addresses();
+      return this.updateAddress(id, {
+        line1: current.line1,
+        line2: current.line2 ?? null,
+        city: current.city ?? null,
+        region: current.region ?? null,
+        postalCode: current.postalCode ?? null,
+        countryCode: current.countryCode,
+        isDefault: true,
+      });
+    },
     async removeAddress(id: string): Promise<PartyAddress[]> {
       requireParty();
       return run(() =>

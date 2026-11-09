@@ -16,14 +16,17 @@ export interface DialingCountry {
 }
 
 export const DEFAULT_COUNTRY: CountryCode = 'IN';
-export const DEFAULT_DIAL_CODE = `+${getCountryCallingCode(DEFAULT_COUNTRY)}`;
+// A literal, not getCountryCallingCode('IN'): a call here would run on import and keep the phone metadata in every
+// bundle that imports this package, phone screen or not
+export const DEFAULT_DIAL_CODE = '+91';
 
 // The flag emoji for an ISO 3166-1 alpha-2 code.
 export function countryFlag(iso: string): string {
   return String.fromCodePoint(...[...iso.toUpperCase()].map((letter) => 0x1f1a5 + letter.charCodeAt(0)));
 }
 
-export const DIALING_COUNTRIES: readonly DialingCountry[] = buildCountries();
+// Pure: a bundle that never shows a country picker drops it, and the metadata with it
+export const DIALING_COUNTRIES: readonly DialingCountry[] = /*#__PURE__*/ buildCountries();
 
 function buildCountries(): DialingCountry[] {
   const display = regionNames();

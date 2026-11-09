@@ -107,7 +107,7 @@ export class CheckoutCallbackService {
         `[checkout-callback] declined — intent=${paymentIntentId} code=${failure.code ?? '-'} reason=${failure.reason ?? '-'} ` +
           `source=${failure.source ?? '-'} step=${failure.step ?? '-'} gatewayOrder=${failure.providerOrderId ?? '-'} gatewayPayment=${failure.providerPaymentId ?? '-'}`,
       );
-      return this.redirectOr(FAILURE_PAGE, orgId, context, context?.intent.checkoutUrl, {
+      return this.redirectOr(FAILURE_PAGE, orgId, context, context?.intent.retryUrl, {
         payment: 'failed',
         message: failure.description?.slice(0, MESSAGE_MAX_LENGTH),
       });
@@ -131,7 +131,7 @@ export class CheckoutCallbackService {
         await this.cancelWebhookCheckQuietly(context.intent);
         return { kind: 'page', html: WEBHOOK_CHECK_CANCELLED_PAGE };
       }
-      return this.redirectOr(FAILURE_PAGE, orgId, context, context?.intent.checkoutUrl, { payment: 'cancelled' });
+      return this.redirectOr(FAILURE_PAGE, orgId, context, context?.intent.retryUrl, { payment: 'cancelled' });
     } catch (error: unknown) {
       this.logger.error(`[checkout-callback] cancel intent=${paymentIntentId} failed: ${errorMessage(error)}`);
       return { kind: 'page', html: FAILURE_PAGE };
@@ -154,7 +154,7 @@ export class CheckoutCallbackService {
           html: context.intent.status === 'SUCCEEDED' ? WEBHOOK_CHECK_PAID_PAGE : WEBHOOK_CHECK_FAILED_PAGE,
         };
       }
-      const target = context?.intent.checkoutUrl ?? context?.intent.returnUrl;
+      const target = context?.intent.retryUrl ?? context?.intent.returnUrl;
       return this.redirectOr(fallback, orgId, context, target, {});
     } catch (error: unknown) {
       this.logger.error(`[checkout-callback] revisit intent=${paymentIntentId} failed: ${errorMessage(error)}`);

@@ -1,3 +1,9 @@
+import {
+  type CheckoutMode,
+  CheckoutModeValues,
+  type PaymentMethodCode,
+  PaymentMethodValues,
+} from '@domain/gateways/gateway-transport';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -6,6 +12,7 @@ import {
   IsDateString,
   IsEmail,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsObject,
@@ -129,10 +136,6 @@ export class CreatePaymentIntentDto {
   @MaxLength(100)
   gatewayCode: string;
 
-  @IsOptional()
-  @IsUUID()
-  bankAccountId?: string;
-
   @IsEnum(PaymentChannelTypeValues)
   type: PaymentChannelType;
 
@@ -155,6 +158,11 @@ export class CreatePaymentIntentDto {
   @IsNotEmpty()
   @MaxLength(200)
   referenceId: string;
+
+  // The commerce checkout this payment pays for, when it pays one
+  @IsOptional()
+  @IsUUID()
+  checkoutId?: string;
 
   @IsOptional()
   @IsString()
@@ -199,11 +207,21 @@ export class CreatePaymentIntentDto {
   @MaxLength(100)
   mainAccountId?: string;
 
+  // The method the shopper picked on the hosted checkout page; the gateway's page opens on it. Not stored
+  @IsOptional()
+  @IsIn(PaymentMethodValues)
+  paymentMethod?: PaymentMethodCode;
+
+  // How the browser opens the gateway, from the gateway config; written into the launch payload. HOSTED when absent
+  @IsOptional()
+  @IsIn(CheckoutModeValues)
+  checkoutMode?: CheckoutMode;
+
   // Where the shopper goes back to on a failed or cancelled payment
   @IsOptional()
   @IsUrl(CHECKOUT_URL_OPTIONS)
   @MaxLength(2048)
-  checkoutUrl?: string;
+  retryUrl?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -271,9 +289,37 @@ export class RefundPaymentIntentDto {
   credentials: Record<string, string>;
 }
 
+// Asks the gateway whether an intent's order was paid and applies what it says, as a webhook would
+export class SyncPaymentIntentDto {
+  @IsUUID()
+  paymentIntentId: string;
+
+  @IsObject()
+  credentials: Record<string, string>;
+}
+
 export class PaymentIntentRefDto {
   @IsUUID()
   paymentIntentId: string;
+}
+
+// The payment intents opened for one commerce checkout
+export class CheckoutIntentsDto {
+  @IsUUID()
+  checkoutId: string;
+}
+
+// The intents opened for one thing being paid for, whatever it is — a checkout, an order, a booking
+export class ReferenceIntentsDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  referenceType: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  referenceId: string;
 }
 
 export class ExecuteTransfersDto {

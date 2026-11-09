@@ -9,7 +9,13 @@ import {
 } from '@vritti/api-sdk/exceptions';
 import { pluralize } from '@vritti/api-sdk/pluralize';
 import type { CreateResponseDto, SuccessResponseDto } from '@vritti/api-sdk/responses';
-import { type PaymentGatewayConfig, PaymentGatewayConfigKindValues, paymentGatewayConfigs } from '@/db/schema';
+import {
+  type PaymentCheckoutMode,
+  PaymentCheckoutModeValues,
+  type PaymentGatewayConfig,
+  PaymentGatewayConfigKindValues,
+  paymentGatewayConfigs,
+} from '@/db/schema';
 import { PaymentCredentialsCryptoService } from '@/services/payment-credentials-crypto.service';
 import { PaymentGatewayConfigDto } from '../dto/entity/payment-gateway-config.dto';
 import type { CreatePaymentGatewayConfigDto } from '../dto/request/create-payment-gateway-config.dto';
@@ -22,6 +28,7 @@ import {
   GATEWAY_CREDENTIAL_FIELDS,
   isSupportedGateway,
   requiresWebhookSecret,
+  supportsModalCheckout,
   webhookSigningCredential,
 } from '../gateway-credential-fields';
 import {
@@ -37,6 +44,8 @@ export interface DecryptedPaymentGatewayCredentials {
   gatewayAccountId: string;
   credentials: Record<string, string>;
   webhookSecret: string | null;
+  // How the shopper's browser opens this gateway's checkout
+  checkoutMode: PaymentCheckoutMode;
 }
 
 export interface PaymentWebhookTarget {
@@ -149,7 +158,6 @@ export class PaymentGatewayConfigDomainService {
     return row;
   }
 
-  // Updates the guarded own config; new credentials are re-validated and re-encrypted, absent ones kept
   // Updates the guarded platform row: the shared fields plus Vritti's fee
   async updatePlatform(
     existing: PaymentGatewayConfigDetail,
@@ -163,6 +171,21 @@ export class PaymentGatewayConfigDomainService {
 
     this.logger.log(`Updated platform payment gateway config ${existing.id}`);
     return { success: true, message: `Platform payment gateway ${row.gatewayCode} updated successfully.` };
+  }
+
+  // Changes how the guarded config's checkout opens for shoppers; nothing else on it changes
+  async updateCheckoutMode(
+    existing: PaymentGatewayConfigDetail,
+    checkoutMode: PaymentCheckoutMode,
+  ): Promise<SuccessResponseDto> {
+    assertCheckoutMode(existing.gatewayCode, checkoutMode);
+    const row = await this.configRepository.update(existing.id, { checkoutMode });
+
+    this.logger.log(`Set checkout mode ${checkoutMode} on payment gateway config ${existing.id}`);
+    return {
+      success: true,
+      message: `Payment gateway ${row.gatewayCode} now opens ${checkoutModeInWords(checkoutMode)}.`,
+    };
   }
 
   // Removes the guarded config, refused while payout accounts the caller can see pay out through it
@@ -187,6 +210,7 @@ export class PaymentGatewayConfigDomainService {
       gatewayAccountId: row.gatewayAccountId,
       credentials: JSON.parse(this.crypto.decrypt(row.credentials)) as Record<string, string>,
       webhookSecret: row.webhookSecret ? this.crypto.decrypt(row.webhookSecret) : null,
+      checkoutMode: row.checkoutMode,
     };
   }
 
@@ -250,6 +274,8 @@ export class PaymentGatewayConfigDomainService {
   ): Promise<PaymentGatewayConfig> {
     const validated = this.validateCredentials(dto.gatewayCode, dto.credentials);
     assertWebhookSecret(dto.gatewayCode, Boolean(dto.webhookSecret));
+    const checkoutMode = dto.checkoutMode ?? PaymentCheckoutModeValues.HOSTED;
+    assertCheckoutMode(dto.gatewayCode, checkoutMode);
     await this.assertNoConflicts(group, dto.gatewayCode);
 
     return this.configRepository.create({
@@ -262,6 +288,7 @@ export class PaymentGatewayConfigDomainService {
       gatewayAccountId: dto.gatewayAccountId,
       logoLightUrl: dto.logoLightUrl ?? null,
       logoDarkUrl: dto.logoDarkUrl ?? null,
+      checkoutMode,
       ...extra,
     });
   }
@@ -295,6 +322,11 @@ export class PaymentGatewayConfigDomainService {
     const secretAfter =
       dto.webhookSecret !== undefined ? Boolean(dto.webhookSecret) : !gatewayChanged && existing.webhookSecret !== null;
     assertWebhookSecret(gatewayCode, secretAfter);
+    // The mode sent, or the one on file while the gateway still takes it; a gateway that cannot open a window goes HOSTED
+    const checkoutMode =
+      dto.checkoutMode ??
+      (supportsModalCheckout(gatewayCode) ? existing.checkoutMode : PaymentCheckoutModeValues.HOSTED);
+    assertCheckoutMode(gatewayCode, checkoutMode);
     // The webhook proof stands for one URL, secret and account; any of them changing needs a fresh signed webhook
     const webhookProofLost = gatewayChanged || validated !== null || dto.webhookSecret !== undefined;
 
@@ -309,6 +341,7 @@ export class PaymentGatewayConfigDomainService {
         credentials: this.crypto.encrypt(JSON.stringify(validated.credentials)),
         verifiedAt: keysVerifiedAt,
       }),
+      ...(checkoutMode !== existing.checkoutMode && { checkoutMode }),
       ...(webhookProofLost && { webhookVerifiedAt: null }),
       ...(dto.webhookSecret !== undefined && {
         webhookSecret: dto.webhookSecret ? this.crypto.encrypt(dto.webhookSecret) : null,
@@ -395,4 +428,19 @@ function assertWebhookSecret(gatewayCode: string, hasSecret: boolean): void {
     detail: `${gatewayCode} signs its webhooks with a secret you set in its dashboard beside the webhook URL. Enter that same secret here.`,
     errors: [{ field: 'webhookSecret', message: 'Required' }],
   });
+}
+
+// Refuses MODAL on a gateway whose payment window cannot open on the store's page
+function assertCheckoutMode(gatewayCode: string, checkoutMode: PaymentCheckoutMode): void {
+  if (checkoutMode !== PaymentCheckoutModeValues.MODAL || supportsModalCheckout(gatewayCode)) return;
+  throw new BadRequestException({
+    label: 'Popup Checkout Not Available',
+    detail: `${gatewayCode} opens its checkout on its own page only. Choose the hosted page for it.`,
+    errors: [{ field: 'checkoutMode', message: 'Not available for this gateway' }],
+  });
+}
+
+// How a checkout mode reads in a success message
+function checkoutModeInWords(checkoutMode: PaymentCheckoutMode): string {
+  return checkoutMode === PaymentCheckoutModeValues.MODAL ? "in a popup on the store's page" : 'its own checkout page';
 }

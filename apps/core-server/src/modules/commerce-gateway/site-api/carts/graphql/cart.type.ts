@@ -65,6 +65,16 @@ export class CartCheckout {
   gateways: string[];
 }
 
+// A gateway the cart can be paid through, and its logo as uploaded to the gateway catalog in Vritti Cloud
+@ObjectType()
+export class CartGatewayLogo {
+  @Field(() => String, { description: 'The gateway code, e.g. razorpay.' })
+  gatewayCode: string;
+
+  @Field(() => String, { nullable: true, description: 'Its logo for light backgrounds; null when none is uploaded.' })
+  logoUrl: string | null;
+}
+
 @ObjectType()
 export class Cart {
   // The currency the lines were priced in — the one the caller asked for
@@ -85,6 +95,10 @@ export class Cart {
 
   @Field(() => CartCheckout)
   checkout: CartCheckout;
+
+  // Every gateway named in `sites[].gateways` and `checkout.gateways`, once, with its logo
+  @Field(() => [CartGatewayLogo], { description: 'Each gateway the cart can be paid through, with its logo.' })
+  gatewayLogos: CartGatewayLogo[];
 }
 
 @ObjectType()

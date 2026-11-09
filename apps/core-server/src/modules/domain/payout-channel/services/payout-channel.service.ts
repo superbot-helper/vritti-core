@@ -21,6 +21,8 @@ const SPECIFICITY = { app: 8, site: 4, channel: 2 } as const;
 export interface PayableGateway {
   gatewayCode: string;
   paymentGatewayConfigId: string;
+  // The catalog gateway's logo for light backgrounds, as uploaded in Vritti Cloud
+  logoUrl: string | null;
 }
 
 @Injectable()
@@ -131,6 +133,7 @@ export class PayoutChannelDomainService {
       .map((account) => ({
         gatewayCode: account.gatewayCode,
         paymentGatewayConfigId: account.paymentGatewayConfigId,
+        logoUrl: account.config.logoLightUrl ?? null,
       }));
   }
 }

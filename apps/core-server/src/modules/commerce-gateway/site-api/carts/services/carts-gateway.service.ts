@@ -83,6 +83,7 @@ export interface CartPayload {
   subtotal: { currency: string; value: string };
   itemCount: number;
   checkout: { gateways: string[] };
+  gatewayLogos: { gatewayCode: string; logoUrl: string | null }[];
 }
 
 // What commerce reports for one store: the lines priced through the app's channel there
@@ -235,6 +236,7 @@ export class CartsGatewayService {
       subtotal: sumSubtotals(cartSites, currencyCode),
       itemCount: cartSites.reduce((count, site) => count + site.itemCount, 0),
       checkout: { gateways: commonGateways(payable) },
+      gatewayLogos: gatewayLogos(payable),
     };
   }
 
@@ -309,6 +311,15 @@ function sumSubtotals(sites: CartSitePayload[], currencyCode: string): { currenc
   const currency = currencyCode as CurrencyCode;
   const total = sites.reduce((sum, site) => sum + majorToMinor(site.subtotal.value, currency), 0n);
   return { currency: currencyCode, value: minorToMajor(total, currency) };
+}
+
+// Each gateway code the cart can pay through, once, with its catalog logo
+function gatewayLogos(sites: PayableGateway[][]): { gatewayCode: string; logoUrl: string | null }[] {
+  const logos = new Map<string, string | null>();
+  for (const gateway of sites.flat()) {
+    if (!logos.get(gateway.gatewayCode)) logos.set(gateway.gatewayCode, gateway.logoUrl);
+  }
+  return [...logos].map(([gatewayCode, logoUrl]) => ({ gatewayCode, logoUrl }));
 }
 
 // The gateway codes every store accepts through the same gateway account — the ones a single payment can be split

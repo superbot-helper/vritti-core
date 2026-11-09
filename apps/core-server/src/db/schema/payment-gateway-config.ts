@@ -11,7 +11,7 @@ import {
   varchar,
 } from '@vritti/api-sdk/drizzle-pg-core';
 import { coreSchema } from './core-schema';
-import { paymentGatewayConfigKindEnum } from './enums';
+import { paymentCheckoutModeEnum, paymentGatewayConfigKindEnum } from './enums';
 import { organizations } from './organizations';
 
 export const paymentGatewayConfigs = coreSchema.table(
@@ -30,6 +30,8 @@ export const paymentGatewayConfigs = coreSchema.table(
     // The catalog gateway's logos, copied from Vritti Cloud whenever the config is saved, for checkout to show
     logoLightUrl: varchar('logo_light_url', { length: 1000 }),
     logoDarkUrl: varchar('logo_dark_url', { length: 1000 }),
+    // How the gateway's checkout opens for shoppers: its own page (HOSTED) or a window on the store's page (MODAL)
+    checkoutMode: paymentCheckoutModeEnum('checkout_mode').notNull().default('HOSTED'),
     // When the stored API credentials last passed the gateway's check — every save verifies them first
     verifiedAt: timestamp('verified_at'),
     // When the first webhook signed with this config's secret reached its URL — the proof that the URL and secret

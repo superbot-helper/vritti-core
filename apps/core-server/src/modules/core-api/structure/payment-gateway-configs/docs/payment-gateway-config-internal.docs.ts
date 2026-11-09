@@ -1,6 +1,7 @@
 import { PaymentGatewayConfigDto } from '@domain/payment-gateway-config/dto/entity/payment-gateway-config.dto';
 import { CreatePaymentGatewayConfigDto } from '@domain/payment-gateway-config/dto/request/create-payment-gateway-config.dto';
 import { CreatePlatformPaymentGatewayConfigDto } from '@domain/payment-gateway-config/dto/request/create-platform-payment-gateway-config.dto';
+import { UpdatePaymentGatewayCheckoutModeDto } from '@domain/payment-gateway-config/dto/request/update-payment-gateway-checkout-mode.dto';
 import { UpdatePlatformPaymentGatewayConfigDto } from '@domain/payment-gateway-config/dto/request/update-platform-payment-gateway-config.dto';
 import { PaymentGatewayConfigVerificationResponseDto } from '@domain/payment-gateway-config/dto/response/payment-gateway-config-verification-response.dto';
 import { PaymentGatewayConfigsPageResponseDto } from '@domain/payment-gateway-config/dto/response/payment-gateway-configs-page-response.dto';
@@ -280,5 +281,23 @@ export function ApiGetWebhookCheckInternal() {
     ApiParam({ name: 'paymentIntentId', type: String, description: 'The verification payment' }),
     ApiResponse({ status: 200, description: 'Verification payment status.', type: WebhookCheckStatusResponseDto }),
     ApiResponse({ status: 400, description: "Not this config's verification payment." }),
+  );
+}
+
+export function ApiUpdatePaymentGatewayCheckoutModeInternal() {
+  return applyDecorators(
+    ApiOperation({
+      summary: "Set how an own gateway's checkout opens",
+      description:
+        "HOSTED sends the shopper to the gateway's own page; MODAL opens its payment window on the store's page. Only razorpay, cashfree and easebuzz take MODAL. Applies to payments opened from now on.",
+    }),
+    ...ORG_HEADERS,
+    ID,
+    ApiBody({ type: UpdatePaymentGatewayCheckoutModeDto }),
+    ApiResponse({ status: 200, description: 'Checkout mode saved.', type: SuccessResponseDto }),
+    ApiResponse({ status: 400, description: 'The gateway cannot open its checkout in a popup.' }),
+    UNAUTHORIZED,
+    MANAGED,
+    NOT_FOUND,
   );
 }

@@ -4,12 +4,15 @@ import type { PaymentTransferDto } from '@domain/payment-transfers/dto/entity/pa
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
+  CheckoutIntentsDto,
   ConfirmPaymentIntentDto,
   CreatePaymentIntentDto,
   ExecuteTransfersDto,
   ExpireStaleIntentsDto,
   PaymentIntentRefDto,
+  ReferenceIntentsDto,
   RefundPaymentIntentDto,
+  SyncPaymentIntentDto,
 } from '@/modules/payment-lifecycle/dto/payment-intent-requests.dto';
 import {
   type IntentWithEvents,
@@ -36,6 +39,13 @@ export class PaymentIntentsController {
     return this.lifecycle.confirm(dto);
   }
 
+  // Asks the gateway whether the intent's order was paid and applies the answer, as its webhook would
+  @MessagePattern({ cmd: 'payments.intents.sync' })
+  async sync(@Payload() dto: SyncPaymentIntentDto): Promise<IntentWithEvents> {
+    this.logger.log(`intents.sync — ${dto.paymentIntentId}`);
+    return this.lifecycle.sync(dto);
+  }
+
   @MessagePattern({ cmd: 'payments.intents.refund' })
   async refund(@Payload() dto: RefundPaymentIntentDto): Promise<{ providerRefundId: string; status: string }> {
     this.logger.log(`intents.refund — ${dto.paymentIntentId}`);
@@ -45,6 +55,18 @@ export class PaymentIntentsController {
   @MessagePattern({ cmd: 'payments.intents.get' })
   async get(@Payload() dto: PaymentIntentRefDto): Promise<PaymentIntentDto> {
     return this.lifecycle.get(dto.paymentIntentId);
+  }
+
+  // The intents opened for one checkout, newest first
+  @MessagePattern({ cmd: 'payments.intents.listByCheckout' })
+  async listByCheckout(@Payload() dto: CheckoutIntentsDto): Promise<PaymentIntentDto[]> {
+    return this.lifecycle.listByCheckout(dto.checkoutId);
+  }
+
+  // The intents opened for one thing being paid for, newest first
+  @MessagePattern({ cmd: 'payments.intents.listByReference' })
+  async listByReference(@Payload() dto: ReferenceIntentsDto): Promise<PaymentIntentDto[]> {
+    return this.lifecycle.listByReference(dto.referenceType, dto.referenceId);
   }
 
   @MessagePattern({ cmd: 'payments.intents.cancel' })

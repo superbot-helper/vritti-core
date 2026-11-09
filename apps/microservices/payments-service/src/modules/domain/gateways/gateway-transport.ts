@@ -5,6 +5,15 @@ export const GatewayCodeValues = {
   EASEBUZZ: 'easebuzz' as const,
 };
 
+// The ways a shopper can pay, as the hosted checkout page offers them; each gateway lists the ones it takes
+export const PaymentMethodValues = ['upi', 'card', 'netbanking', 'wallet'] as const;
+export type PaymentMethodCode = (typeof PaymentMethodValues)[number];
+
+// How the shopper's browser opens the gateway: HOSTED leaves the store for the gateway's own page, MODAL opens the
+// gateway's payment window on the store's page. Set on the organization's gateway config in core
+export const CheckoutModeValues = ['HOSTED', 'MODAL'] as const;
+export type CheckoutMode = (typeof CheckoutModeValues)[number];
+
 export type NormalizedPaymentStatus = 'created' | 'authorized' | 'captured' | 'refunded' | 'failed';
 
 export interface NormalizedPayment {
@@ -76,6 +85,10 @@ export interface CreateOrderInput {
   // The config's main account at the gateway. A gateway whose split must cover the whole amount sends what the legs
   // leave over to it; one that keeps the remainder in the main account on its own ignores it
   mainAccountId?: string;
+  // The method the shopper picked on the hosted checkout page; the gateway's page opens on it
+  method?: PaymentMethodCode;
+  // How the browser opens this order's checkout; HOSTED when left out. A gateway with one way to open ignores it
+  checkoutMode?: CheckoutMode;
 }
 
 export interface CreateOrderResult {
@@ -99,6 +112,7 @@ export interface GatewayDescriptor {
   code: string;
   credentialFields: string[];
   supportsSplit: boolean;
+  methods: PaymentMethodCode[];
 }
 
 export interface LinkedAccountAddress {
@@ -219,6 +233,8 @@ export interface RefundResult {
 export interface PaymentGatewayTransport {
   readonly code: string;
   readonly credentialFields: readonly string[];
+  // The methods its page takes, in the order the hosted checkout page offers them
+  readonly methods: readonly PaymentMethodCode[];
   readonly split?: GatewaySplitCapability;
   verifyCredentials(credentials: Record<string, string>): Promise<VerifyCredentialsResult>;
   createOrder(credentials: Record<string, string>, input: CreateOrderInput): Promise<CreateOrderResult>;

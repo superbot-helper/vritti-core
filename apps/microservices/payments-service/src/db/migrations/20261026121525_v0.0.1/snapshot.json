@@ -2,79 +2,44 @@
   "version": "8",
   "dialect": "postgres",
   "id": "542fb99d-b04a-4a07-92b4-83915a58592c",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "payments",
       "entityType": "schemas"
     },
     {
-      "values": [
-        "CREATED",
-        "AUTHORIZED",
-        "CAPTURED",
-        "FAILED",
-        "REFUNDED"
-      ],
+      "values": ["CREATED", "AUTHORIZED", "CAPTURED", "FAILED", "REFUNDED"],
       "name": "payment_attempt_status",
       "entityType": "enums",
       "schema": "payments"
     },
     {
-      "values": [
-        "APP",
-        "POS",
-        "B2B"
-      ],
+      "values": ["APP", "POS", "B2B"],
       "name": "payment_channel_type",
       "entityType": "enums",
       "schema": "payments"
     },
     {
-      "values": [
-        "PENDING",
-        "ACKED"
-      ],
+      "values": ["PENDING", "ACKED"],
       "name": "payment_event_status",
       "entityType": "enums",
       "schema": "payments"
     },
     {
-      "values": [
-        "CREATED",
-        "REQUIRES_ACTION",
-        "PROCESSING",
-        "SUCCEEDED",
-        "FAILED",
-        "CANCELED",
-        "EXPIRED"
-      ],
+      "values": ["CREATED", "REQUIRES_ACTION", "PROCESSING", "SUCCEEDED", "FAILED", "CANCELED", "EXPIRED"],
       "name": "payment_intent_status",
       "entityType": "enums",
       "schema": "payments"
     },
     {
-      "values": [
-        "CREATED",
-        "PENDING",
-        "PROCESSED",
-        "FAILED",
-        "REVERSED",
-        "PARTIALLY_REVERSED"
-      ],
+      "values": ["CREATED", "PENDING", "PROCESSED", "FAILED", "REVERSED", "PARTIALLY_REVERSED"],
       "name": "payment_transfer_status",
       "entityType": "enums",
       "schema": "payments"
     },
     {
-      "values": [
-        "RECEIVED",
-        "PROCESSED",
-        "IGNORED",
-        "FAILED"
-      ],
+      "values": ["RECEIVED", "PROCESSED", "IGNORED", "FAILED"],
       "name": "webhook_event_status",
       "entityType": "enums",
       "schema": "payments"
@@ -1701,14 +1666,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "intent_id"
-      ],
+      "columns": ["intent_id"],
       "schemaTo": "payments",
       "tableTo": "payment_intents",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "payment_allocations_intent_id_payment_intents_id_fkey",
@@ -1718,14 +1679,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "transfer_id"
-      ],
+      "columns": ["transfer_id"],
       "schemaTo": "payments",
       "tableTo": "payment_transfers",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "payment_allocations_transfer_id_payment_transfers_id_fkey",
@@ -1735,14 +1692,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "intent_id"
-      ],
+      "columns": ["intent_id"],
       "schemaTo": "payments",
       "tableTo": "payment_intents",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "payment_attempts_intent_id_payment_intents_id_fkey",
@@ -1752,14 +1705,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "intent_id"
-      ],
+      "columns": ["intent_id"],
       "schemaTo": "payments",
       "tableTo": "payment_intents",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "payment_events_intent_id_payment_intents_id_fkey",
@@ -1769,14 +1718,10 @@
     },
     {
       "nameExplicit": false,
-      "columns": [
-        "intent_id"
-      ],
+      "columns": ["intent_id"],
       "schemaTo": "payments",
       "tableTo": "payment_intents",
-      "columnsTo": [
-        "id"
-      ],
+      "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "payment_transfers_intent_id_payment_intents_id_fkey",
@@ -1785,9 +1730,7 @@
       "table": "payment_transfers"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "payment_allocations_pkey",
       "schema": "payments",
@@ -1795,9 +1738,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "payment_attempts_pkey",
       "schema": "payments",
@@ -1805,9 +1746,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "payment_events_pkey",
       "schema": "payments",
@@ -1815,9 +1754,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "payment_intents_pkey",
       "schema": "payments",
@@ -1825,9 +1762,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "payment_transfers_pkey",
       "schema": "payments",
@@ -1835,9 +1770,7 @@
       "entityType": "pks"
     },
     {
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "name": "webhook_events_pkey",
       "schema": "payments",
@@ -1846,10 +1779,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "organization_id",
-        "idempotency_key"
-      ],
+      "columns": ["organization_id", "idempotency_key"],
       "nullsNotDistinct": false,
       "name": "uq_payment_intents_org_idempotency_key",
       "entityType": "uniques",
@@ -1858,9 +1788,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "provider_transfer_id"
-      ],
+      "columns": ["provider_transfer_id"],
       "nullsNotDistinct": false,
       "name": "uq_payment_transfers_provider_transfer_id",
       "entityType": "uniques",
@@ -1869,10 +1797,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "intent_id",
-        "linked_account_id"
-      ],
+      "columns": ["intent_id", "linked_account_id"],
       "nullsNotDistinct": false,
       "name": "uq_payment_transfers_intent_linked_account",
       "entityType": "uniques",
@@ -1881,11 +1806,7 @@
     },
     {
       "nameExplicit": true,
-      "columns": [
-        "organization_id",
-        "gateway_code",
-        "dedupe_key"
-      ],
+      "columns": ["organization_id", "gateway_code", "dedupe_key"],
       "nullsNotDistinct": false,
       "name": "uq_webhook_events_org_gateway_dedupe",
       "entityType": "uniques",
@@ -1895,9 +1816,7 @@
     {
       "as": "PERMISSIVE",
       "for": "ALL",
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "using": "organization_id = (select current_setting('app.org_id', true)::uuid)",
       "withCheck": null,
       "name": "org_isolation",
@@ -1908,9 +1827,7 @@
     {
       "as": "PERMISSIVE",
       "for": "ALL",
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "using": "organization_id = (select current_setting('app.org_id', true)::uuid)",
       "withCheck": null,
       "name": "org_isolation",
@@ -1921,9 +1838,7 @@
     {
       "as": "PERMISSIVE",
       "for": "ALL",
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "using": "organization_id = (select current_setting('app.org_id', true)::uuid)",
       "withCheck": null,
       "name": "org_isolation",
@@ -1934,9 +1849,7 @@
     {
       "as": "PERMISSIVE",
       "for": "ALL",
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "using": "organization_id = (select current_setting('app.org_id', true)::uuid)",
       "withCheck": null,
       "name": "org_isolation",
@@ -1947,9 +1860,7 @@
     {
       "as": "PERMISSIVE",
       "for": "ALL",
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "using": "organization_id = (select current_setting('app.org_id', true)::uuid)",
       "withCheck": null,
       "name": "org_isolation",
@@ -1960,9 +1871,7 @@
     {
       "as": "PERMISSIVE",
       "for": "ALL",
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "using": "organization_id = (select current_setting('app.org_id', true)::uuid)",
       "withCheck": null,
       "name": "org_isolation",

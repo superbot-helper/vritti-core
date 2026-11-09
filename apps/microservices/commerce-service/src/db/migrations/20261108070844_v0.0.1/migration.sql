@@ -1,0 +1,1 @@
+ALTER TABLE "commerce"."checkouts" DROP COLUMN "paid_at";

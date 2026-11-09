@@ -12,6 +12,7 @@ import {
   IsUUID,
   Matches,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -94,17 +95,38 @@ export class KeyValueInput {
   value: string;
 }
 
+// A payment for anything the app sells (amount + reference), or for a checkout (checkoutId: the amount, reference and
+// stores come from the checkout)
 @InputType()
 export class CreatePaymentIntentInput {
-  @Field(() => MoneyInput)
+  @Field(() => ID, {
+    nullable: true,
+    description:
+      'Pays this checkout (from startCheckout): amount and reference are taken from it and must be left out. Pressing Pay again opens a new payment and cancels the previous one still waiting.',
+  })
+  @IsOptional()
+  @IsUUID()
+  checkoutId?: string;
+
+  @Field(() => MoneyInput, { nullable: true, description: 'Required unless checkoutId is given.' })
+  @ValidateIf((input: CreatePaymentIntentInput) => !input.checkoutId)
   @ValidateNested()
   @Type(() => MoneyInput)
-  amount: MoneyInput;
+  amount?: MoneyInput;
 
-  @Field(() => PaymentReferenceInput)
+  @Field(() => PaymentReferenceInput, { nullable: true, description: 'Required unless checkoutId is given.' })
+  @ValidateIf((input: CreatePaymentIntentInput) => !input.checkoutId)
   @ValidateNested()
   @Type(() => PaymentReferenceInput)
-  reference: PaymentReferenceInput;
+  reference?: PaymentReferenceInput;
+
+  @Field(() => String, {
+    nullable: true,
+    description: "The method the shopper chose, e.g. upi, card, netbanking, wallet; the gateway's page opens on it.",
+  })
+  @IsOptional()
+  @Matches(/^[a-z_]{2,30}$/, { message: 'paymentMethod must be a method code such as upi or card' })
+  paymentMethod?: string;
 
   @Field(() => String, { nullable: true })
   @IsOptional()
@@ -196,7 +218,8 @@ export class PaymentIntentRefInput {
   paymentIntentId: string;
 }
 
-// Checks out the party's cart — every store, or one — as one payment
+// Freezes the party's cart — every store, or one — into a checkout. No payment is opened: that is createPaymentIntent
+// with the checkout's id, when the shopper presses Pay
 @InputType()
 export class CheckoutStartInput {
   @Field(() => String, {
@@ -213,38 +236,45 @@ export class CheckoutStartInput {
   @IsUUID()
   siteId?: string;
 
-  @Field(() => String, { description: GATEWAY_CODE_DESCRIPTION })
-  @IsCode()
-  gatewayCode: string;
-
   @Field(() => ID, { nullable: true })
   @IsOptional()
   @IsUUID()
   addressId?: string;
 
-  @Field(() => String, { nullable: true })
+  @Field(() => String, {
+    nullable: true,
+    deprecationReason: 'Ignored: the checkout is keyed by the cart itself, so the same cart opens the same checkout.',
+  })
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
-  notes?: string;
+  @MaxLength(100)
+  idempotencyKey?: string;
+}
 
-  @Field(() => String)
+// Changes who the checkout's orders are for — the contact the checkout holds, not the party's profile
+@InputType()
+export class CheckoutContactInput {
+  @Field(() => ID)
+  @IsUUID()
+  checkoutId: string;
+
+  @Field(() => String, { description: 'The name the orders are for.' })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(100)
-  idempotencyKey: string;
+  @MaxLength(255)
+  name: string;
 
-  @Field(() => String, { nullable: true, description: RETURN_URL_DESCRIPTION })
-  @IsOptional()
-  @IsUrl(STOREFRONT_URL, { message: 'returnUrl must be an http(s) URL' })
-  @MaxLength(2048)
-  returnUrl?: string;
+  @Field(() => String, { description: 'In international form, e.g. +919876543210.' })
+  @IsString()
+  @Matches(/^\+[1-9]\d{6,14}$/, { message: 'phone must be an international number such as +919876543210' })
+  @MaxLength(20)
+  phone: string;
 
-  @Field(() => String, { nullable: true, description: CHECKOUT_URL_DESCRIPTION })
+  @Field(() => String, { nullable: true })
   @IsOptional()
-  @IsUrl(STOREFRONT_URL, { message: 'checkoutUrl must be an http(s) URL' })
-  @MaxLength(2048)
-  checkoutUrl?: string;
+  @IsEmail()
+  @MaxLength(200)
+  email?: string;
 }
 
 @InputType()
@@ -252,4 +282,16 @@ export class CheckoutRefInput {
   @Field(() => ID)
   @IsUUID()
   checkoutId: string;
+}
+
+// Delivers an open checkout to another of the party's saved addresses
+@InputType()
+export class CheckoutAddressInput {
+  @Field(() => ID)
+  @IsUUID()
+  checkoutId: string;
+
+  @Field(() => ID, { description: 'One of the party’s saved addresses.' })
+  @IsUUID()
+  addressId: string;
 }

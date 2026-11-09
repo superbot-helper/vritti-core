@@ -28,9 +28,15 @@ export const BOM_RULES = {
 } as const;
 
 export const orderSourceEnum = commerceSchema.enum('order_source', ['ONLINE', 'WALK_IN']);
-// OPEN: payable. PAID: the payment landed, orders being made. CONVERTED: one order per store exists. CANCELLED:
-// expired or cancelled unpaid — a late payment still converts it
-export const checkoutStatusEnum = commerceSchema.enum('checkout_status', ['OPEN', 'PAID', 'CONVERTED', 'CANCELLED']);
+// OPEN → PAID → CONVERTED; it ends unpaid as EXPIRED (its 30-minute window closed) or CANCELLED (the shopper cancelled
+// or replaced it) — a late payment still converts either, unless the checkout was replaced
+export const checkoutStatusEnum = commerceSchema.enum('checkout_status', [
+  'OPEN',
+  'PAID',
+  'CONVERTED',
+  'EXPIRED',
+  'CANCELLED',
+]);
 export const orderStatusEnum = commerceSchema.enum('order_status', [
   'AWAITING_PAYMENT',
   'PENDING',
@@ -72,6 +78,7 @@ export const CheckoutStatusValues = {
   OPEN: 'OPEN' as const,
   PAID: 'PAID' as const,
   CONVERTED: 'CONVERTED' as const,
+  EXPIRED: 'EXPIRED' as const,
   CANCELLED: 'CANCELLED' as const,
 };
 

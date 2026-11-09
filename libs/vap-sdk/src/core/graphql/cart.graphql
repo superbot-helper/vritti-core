@@ -1,0 +1,83 @@
+fragment MoneyFields on Money {
+  currency
+  value
+}
+
+fragment CartItemFields on CartItem {
+  id
+  catalogListingId
+  quantity
+  name
+  code
+  isAvailable
+  unitPrice {
+    ...MoneyFields
+  }
+  lineTotal {
+    ...MoneyFields
+  }
+}
+
+fragment CartFields on Cart {
+  currencyCode
+  itemCount
+  subtotal {
+    ...MoneyFields
+  }
+  sites {
+    siteId
+    siteName
+    itemCount
+    subtotal {
+      ...MoneyFields
+    }
+    gateways
+    items {
+      ...CartItemFields
+    }
+  }
+  checkout {
+    gateways
+  }
+  gatewayLogos {
+    gatewayCode
+    logoUrl
+  }
+}
+
+query Cart($input: CartScopeInput!) {
+  cart(input: $input) {
+    ...CartFields
+  }
+}
+
+mutation AddToCart($input: AddCartItemInput!) {
+  addToCart(input: $input) {
+    ...CartFields
+  }
+}
+
+mutation UpdateCartItem($input: UpdateCartItemInput!) {
+  updateCartItem(input: $input) {
+    ...CartFields
+  }
+}
+
+mutation RemoveFromCart($input: CartItemRefInput!) {
+  removeFromCart(input: $input) {
+    ...CartFields
+  }
+}
+
+mutation ClearCart($input: CartScopeInput!) {
+  clearCart(input: $input) {
+    ...CartFields
+  }
+}
+
+query CartQuantities {
+  cartQuantities {
+    code
+    quantity
+  }
+}

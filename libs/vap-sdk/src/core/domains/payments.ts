@@ -38,6 +38,12 @@ export type PaymentIntent = {
   amount: Money;
   reference: PaymentReference;
   description: string | null;
+  // The gateway it goes through, e.g. "razorpay"
+  gatewayCode: string;
+  // The method chosen before paying (upi, card, netbanking, wallet), then the one actually paid with
+  method: string | null;
+  // The checkout it pays, when it pays one
+  checkoutId: string | null;
   checkout: PaymentCheckout | null;
   failure: PaymentFailure | null;
   paidAt: string | null;
@@ -45,9 +51,8 @@ export type PaymentIntent = {
   createdAt: string;
 };
 
-export type CreatePaymentIntentInput = {
-  amount: Money;
-  reference: PaymentReference;
+// What every payment takes, whatever it is for
+type PaymentIntentBase = {
   description?: string;
   customer?: { name?: string; email?: string; phone?: string };
   idempotencyKey: string;
@@ -55,9 +60,17 @@ export type CreatePaymentIntentInput = {
   channel?: PaymentChannel;
   // The gateway to charge through, by its code, e.g. "razorpay"; which account is resolved from the store's payouts
   gatewayCode: string;
+  // The method the shopper chose, e.g. "upi"; the gateway's page opens on it
+  paymentMethod?: string;
   returnUrl?: string;
   checkoutUrl?: string;
 };
+
+// A payment for anything the app sells, or for a checkout from `checkout.start` — whose amount, reference and stores
+// come from the checkout. Paying a checkout again opens a new payment and cancels the earlier one still waiting
+export type CreatePaymentIntentInput =
+  | (PaymentIntentBase & { amount: Money; reference: PaymentReference; checkoutId?: never })
+  | (PaymentIntentBase & { checkoutId: string; amount?: never; reference?: never });
 
 export type GatewayResponse = { orderId: string; paymentId: string; signature: string };
 
@@ -103,6 +116,9 @@ export function toPaymentIntent(raw: PaymentIntentFieldsFragment, coreOrigin?: s
     amount: { currency: raw.amount.currency, value: raw.amount.value },
     reference: { type: raw.reference.type, id: raw.reference.id },
     description: raw.description,
+    gatewayCode: raw.gatewayCode,
+    method: raw.method ?? null,
+    checkoutId: raw.checkoutId ?? null,
     checkout: parseCheckout(raw.checkout, coreOrigin),
     failure: raw.failure ? { code: raw.failure.code, message: raw.failure.message } : null,
     paidAt: raw.paidAt,
@@ -132,8 +148,13 @@ export function createPaymentsOperations(client: ApolloClient, context: RequestC
             mutation: CREATE_PAYMENT_INTENT,
             variables: {
               input: {
-                amount: { currency: input.amount.currency, value: input.amount.value },
-                reference: { type: input.reference.type, id: input.reference.id },
+                ...(input.amount && input.reference
+                  ? {
+                      amount: { currency: input.amount.currency, value: input.amount.value },
+                      reference: { type: input.reference.type, id: input.reference.id },
+                    }
+                  : { checkoutId: input.checkoutId }),
+                paymentMethod: input.paymentMethod,
                 description: input.description,
                 customer: input.customer,
                 idempotencyKey: input.idempotencyKey,

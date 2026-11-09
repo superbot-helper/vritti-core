@@ -1,0 +1,52 @@
+fragment PaymentIntentFields on PaymentIntent {
+  id
+  status
+  amount {
+    ...MoneyFields
+  }
+  reference {
+    type
+    id
+  }
+  description
+  gatewayCode
+  method
+  checkoutId
+  checkout {
+    gateway
+    payload
+    callbackPath
+    cancelPath
+  }
+  failure {
+    code
+    message
+  }
+  paidAt
+  expiresAt
+  createdAt
+}
+
+mutation CreatePaymentIntent($input: CreatePaymentIntentInput!) {
+  createPaymentIntent(input: $input) {
+    ...PaymentIntentFields
+  }
+}
+
+mutation ConfirmPayment($input: ConfirmPaymentInput!) {
+  confirmPayment(input: $input) {
+    ...PaymentIntentFields
+  }
+}
+
+query PaymentIntent($input: PaymentIntentRefInput!) {
+  paymentIntent(input: $input) {
+    ...PaymentIntentFields
+  }
+}
+
+mutation CancelPaymentIntent($input: PaymentIntentRefInput!) {
+  cancelPaymentIntent(input: $input) {
+    ...PaymentIntentFields
+  }
+}

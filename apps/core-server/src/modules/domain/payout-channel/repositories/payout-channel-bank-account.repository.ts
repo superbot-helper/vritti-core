@@ -15,7 +15,7 @@ import {
 
 // A switched-on payout account with what decides whether its gateway config may take payments yet
 export interface SwitchedOnPayoutAccount extends PayoutAccount {
-  config: Pick<PaymentGatewayConfig, 'kind' | 'gatewayCode' | 'verifiedAt' | 'webhookVerifiedAt'>;
+  config: Pick<PaymentGatewayConfig, 'kind' | 'gatewayCode' | 'verifiedAt' | 'webhookVerifiedAt' | 'logoLightUrl'>;
 }
 
 export interface PayoutChannelScope {
@@ -119,6 +119,7 @@ export class PayoutChannelBankAccountDomainRepository extends PrimaryBaseReposit
           gatewayCode: paymentGatewayConfigs.gatewayCode,
           verifiedAt: paymentGatewayConfigs.verifiedAt,
           webhookVerifiedAt: paymentGatewayConfigs.webhookVerifiedAt,
+          logoLightUrl: paymentGatewayConfigs.logoLightUrl,
         },
       })
       .from(payoutChannels)

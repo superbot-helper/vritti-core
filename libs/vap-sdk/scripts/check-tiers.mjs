@@ -26,11 +26,12 @@ const FORBIDDEN = [
   [/from '[^']*\.\.\/(server|payload)\//g, 'a higher tier'],
 ];
 
-function tsFiles(dir) {
+// Every source file under a folder; `.ts` only unless `pattern` says otherwise
+function tsFiles(dir, pattern = /\.ts$/) {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) return tsFiles(full);
-    return entry.endsWith('.ts') ? [full] : [];
+    if (statSync(full).isDirectory()) return tsFiles(full, pattern);
+    return pattern.test(entry) ? [full] : [];
   });
 }
 
@@ -69,6 +70,39 @@ const PLUGIN_FORBIDDEN = [
 for (const relative of PLUGIN_FILES) {
   const source = readFileSync(join(SRC, relative), 'utf8');
   for (const [pattern, why] of PLUGIN_FORBIDDEN) {
+    for (const match of source.matchAll(pattern)) {
+      offences.push(`  ${relative} imports ${why} — ${match[0]}`);
+    }
+  }
+}
+
+// The checkout page's client components: every checkout-ui file except the server pages and the server barrels runs in
+// the browser, so React is fine here and a server-only module is not
+const CHECKOUT_UI_CLIENT_FILES = tsFiles(join(SRC, 'next/checkout-ui'), /\.tsx?$/)
+  .map((file) => file.slice(SRC.length + 1))
+  .filter(
+    (file) =>
+      !file.startsWith('next/checkout-ui/pages/') &&
+      file !== 'next/checkout-ui/index.ts' &&
+      file !== 'next/checkout-ui/card.ts',
+  );
+const CHECKOUT_UI_FORBIDDEN = [
+  [/from '(node:[^']+)'/g, 'a Node builtin'],
+  [/from '(pg)'/g, 'the Postgres driver'],
+  [/from '(payload[^']*)'/g, 'Payload'],
+  [/from '(next\/(headers|cache))'/g, 'a server-only Next module'],
+  [/from '(@vritti\/vap-sdk\/(payload|server))'/g, 'a server tier of this package'],
+  [
+    /from '(?:\.\.\/)+(party|visitor-session|payload-adapter|workspace|state)\.js'/g,
+    'a server module of the Next tier',
+  ],
+  [/from '[^']*\/pages\/[^']*'/g, 'a server page'],
+  [/from '(@vritti\/quantum-ui\/(hooks|Form))'/g, 'a Quantum entry that imports react-router-dom'],
+  [/^'use server'/gm, "the 'use server' directive"],
+];
+for (const relative of CHECKOUT_UI_CLIENT_FILES) {
+  const source = readFileSync(join(SRC, relative), 'utf8');
+  for (const [pattern, why] of CHECKOUT_UI_FORBIDDEN) {
     for (const match of source.matchAll(pattern)) {
       offences.push(`  ${relative} imports ${why} — ${match[0]}`);
     }

@@ -74,6 +74,18 @@ export class PaymentIntent {
   @Field(() => String, { nullable: true })
   description?: string | null;
 
+  @Field(() => String, { description: 'The gateway the payment goes through, e.g. razorpay.' })
+  gatewayCode: string;
+
+  @Field(() => String, {
+    nullable: true,
+    description: 'The payment method: the one the shopper chose before paying, then the one they actually paid with.',
+  })
+  method?: string | null;
+
+  @Field(() => ID, { nullable: true, description: 'The checkout this payment is for, when it pays one.' })
+  checkoutId?: string | null;
+
   @Field(() => PaymentCheckout, { nullable: true })
   checkout?: PaymentCheckout | null;
 
@@ -94,13 +106,14 @@ export enum CheckoutStatus {
   OPEN = 'OPEN',
   PAID = 'PAID',
   CONVERTED = 'CONVERTED',
+  EXPIRED = 'EXPIRED',
   CANCELLED = 'CANCELLED',
 }
 
 registerEnumType(CheckoutStatus, {
   name: 'CheckoutStatus',
   description:
-    'OPEN: awaiting payment. PAID: the payment landed, orders being made. CONVERTED: one order per store exists. CANCELLED: expired or cancelled unpaid.',
+    'OPEN: awaiting payment. PAID: the payment landed, orders being made. CONVERTED: one order per store exists. EXPIRED: its 30-minute window closed unpaid. CANCELLED: the shopper cancelled it.',
 });
 
 // One store's share of a checkout
@@ -129,7 +142,22 @@ export class CheckoutStoreOrder {
   orderNumber: string;
 }
 
-// The cart frozen for one payment — every store, or one — and what it has become
+// Who the checkout's orders are for, as the checkout holds them: copied from the party when it opened, changed with
+// changeCheckoutContact. The gateway's page is prefilled from these
+@ObjectType()
+export class CheckoutCustomer {
+  @Field(() => String, { nullable: true })
+  name: string | null;
+
+  @Field(() => String, { nullable: true, description: 'In international form, e.g. +919876543210.' })
+  phone: string | null;
+
+  @Field(() => String, { nullable: true })
+  email: string | null;
+}
+
+// The cart frozen at checkout — every store, or one — and what it has become. Payment intents are opened for it with
+// createPaymentIntent(checkoutId); one of them pays it
 @ObjectType()
 export class Checkout {
   @Field(() => ID)
@@ -147,10 +175,31 @@ export class Checkout {
   @Field(() => [CheckoutStoreShare])
   sites: CheckoutStoreShare[];
 
+  @Field(() => String, {
+    description:
+      'ISO 8601. When the checkout closes if it is not paid; once closed (EXPIRED, CANCELLED, PAID), when it did.',
+  })
+  expiresAt: string;
+
+  @Field(() => String, { nullable: true, description: 'ISO 8601. When it was paid.' })
+  paidAt: string | null;
+
+  @Field(() => ID, {
+    nullable: true,
+    description: 'The party’s saved address the orders are delivered to; null for takeaway.',
+  })
+  partyAddressId: string | null;
+
+  @Field(() => CheckoutCustomer, { description: 'Who the orders are for; the gateway’s page is prefilled from this.' })
+  customer: CheckoutCustomer;
+
   // Empty until the payment lands
   @Field(() => [CheckoutStoreOrder])
   orders: CheckoutStoreOrder[];
 
-  @Field(() => PaymentIntent, { nullable: true })
+  @Field(() => PaymentIntent, {
+    nullable: true,
+    description: 'The payment that paid it, else the latest one opened for it; null until Pay is pressed.',
+  })
   paymentIntent: PaymentIntent | null;
 }

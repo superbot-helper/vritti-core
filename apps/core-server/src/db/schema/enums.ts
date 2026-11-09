@@ -116,6 +116,15 @@ export const PaymentGatewayConfigKindValues = {
   ORG: 'ORG' as const,
 };
 
+// How a gateway's checkout opens in the shopper's browser: HOSTED leaves the store for the gateway's own page, MODAL
+// opens the gateway's payment window on the store's page
+export const paymentCheckoutModeEnum = coreSchema.enum('payment_checkout_mode', ['HOSTED', 'MODAL']);
+export type PaymentCheckoutMode = (typeof paymentCheckoutModeEnum.enumValues)[number];
+export const PaymentCheckoutModeValues = {
+  HOSTED: 'HOSTED' as const,
+  MODAL: 'MODAL' as const,
+};
+
 // External services an organization can provision — features declare the ones they depend on
 export const serviceTypeEnum = coreSchema.enum('service_type', ['GITEA']);
 export type ServiceType = (typeof serviceTypeEnum.enumValues)[number];

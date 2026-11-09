@@ -1,0 +1,67 @@
+fragment CheckoutFields on Checkout {
+  id
+  status
+  currencyCode
+  total {
+    ...MoneyFields
+  }
+  sites {
+    siteId
+    legalEntityId
+    subtotal {
+      ...MoneyFields
+    }
+  }
+  expiresAt
+  paidAt
+  partyAddressId
+  customer {
+    name
+    phone
+    email
+  }
+  orders {
+    siteId
+    orderId
+    orderNumber
+  }
+  paymentIntent {
+    ...PaymentIntentFields
+  }
+}
+
+mutation StartCheckout($input: CheckoutStartInput!) {
+  startCheckout(input: $input) {
+    ...CheckoutFields
+  }
+}
+
+query Checkout($input: CheckoutRefInput!) {
+  checkout(input: $input) {
+    ...CheckoutFields
+  }
+}
+
+mutation CancelCheckout($input: CheckoutRefInput!) {
+  cancelCheckout(input: $input) {
+    ...CheckoutFields
+  }
+}
+
+mutation ChangeCheckoutAddress($input: CheckoutAddressInput!) {
+  changeCheckoutAddress(input: $input) {
+    ...CheckoutFields
+  }
+}
+
+mutation ChangeCheckoutContact($input: CheckoutContactInput!) {
+  changeCheckoutContact(input: $input) {
+    ...CheckoutFields
+  }
+}
+
+query ActiveCheckout {
+  activeCheckout {
+    ...CheckoutFields
+  }
+}

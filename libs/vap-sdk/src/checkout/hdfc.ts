@@ -44,6 +44,7 @@ export function hdfcCheckoutForm(checkout: PaymentCheckout, opts: OpenCheckoutOp
 export function hdfc(): CheckoutPlugin {
   return {
     gateways: ['hdfc-razorpay'],
+    methods: ['upi', 'card', 'netbanking'],
     async open(checkout, opts) {
       const form = hdfcCheckoutForm(checkout, opts);
       try {

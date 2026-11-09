@@ -18,7 +18,14 @@ export type OtpSignInPorts = {
   writeCookie: (
     name: string,
     value: string,
-    options: { httpOnly: true; sameSite: 'strict'; path: '/'; maxAge?: number; expires?: Date; secure: boolean },
+    options: {
+      httpOnly: true;
+      sameSite: 'strict' | 'lax';
+      path: '/';
+      maxAge?: number;
+      expires?: Date;
+      secure: boolean;
+    },
   ) => Promise<void> | void;
   clearCookie: (name: string) => Promise<void> | void;
   redirect: (to: string) => never;
@@ -115,9 +122,12 @@ export function createOtpSignInActions<L extends LocalParty = LocalParty>(option
       const { local } = await auth.signInWithVerifiedPhone(input, hooks);
       const session = await issueSessionToken({ payload, req: { payload }, collection, user: local });
 
+      // Lax, not Strict: a shopper sent back by a payment gateway arrives on a navigation that started on another
+      // site, and a Strict cookie is withheld from it — the checkout would see nobody signed in. Lax still keeps the
+      // cookie off cross-site POSTs, and Next's server actions check the request's origin besides
       await ports.writeCookie(session.name, session.value, {
         httpOnly: true,
-        sameSite: 'strict',
+        sameSite: 'lax',
         path: '/',
         expires: session.expiresAt,
         secure: await ports.isSecure(),

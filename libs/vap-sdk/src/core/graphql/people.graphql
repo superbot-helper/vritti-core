@@ -1,0 +1,128 @@
+fragment PersonFields on Person {
+  id
+  displayName
+  firstName
+  lastName
+  email
+  phone
+  isActive
+}
+
+fragment PersonCommunicationFields on PersonCommunication {
+  id
+  channel
+  value
+  isPrimary
+  isActive
+}
+
+query PeopleByCommunication($input: FindPeopleByCommunicationInput!) {
+  peopleByCommunication(input: $input) {
+    ...PersonFields
+  }
+}
+
+mutation CreatePerson($input: CreatePersonInput!) {
+  createPerson(input: $input) {
+    ...PersonFields
+  }
+}
+
+mutation AddPersonCommunication($input: AddPersonCommunicationInput!) {
+  addPersonCommunication(input: $input) {
+    ...PersonCommunicationFields
+  }
+}
+
+fragment WishlistItemFields on WishlistItem {
+  id
+  catalogListingId
+  name
+  code
+  isAvailable
+  createdAt
+  price {
+    ...MoneyFields
+  }
+}
+
+query Wishlist($input: WishlistQueryInput!) {
+  wishlist(input: $input) {
+    ...WishlistItemFields
+  }
+}
+
+mutation AddToWishlist($input: WishlistRefInput!) {
+  addToWishlist(input: $input) {
+    alreadyExists
+    wishlist {
+      ...WishlistItemFields
+    }
+  }
+}
+
+mutation RemoveFromWishlist($input: WishlistRefInput!) {
+  removeFromWishlist(input: $input) {
+    ...WishlistItemFields
+  }
+}
+
+query WishlistCodes {
+  wishlistCodes
+}
+
+fragment PartyProfileFields on Person {
+  id
+  displayName
+  firstName
+  lastName
+  email
+  phone
+}
+
+query PartyProfile {
+  partyProfile {
+    ...PartyProfileFields
+  }
+}
+
+mutation UpdatePartyProfile($input: UpdatePartyProfileInput!) {
+  updatePartyProfile(input: $input) {
+    ...PartyProfileFields
+  }
+}
+
+fragment PartyAddressFields on PartyAddress {
+  id
+  line1
+  line2
+  city
+  region
+  postalCode
+  countryCode
+  isDefault
+}
+
+query PartyAddresses {
+  partyAddresses {
+    ...PartyAddressFields
+  }
+}
+
+mutation AddPartyAddress($input: PartyAddressInput!) {
+  addPartyAddress(input: $input) {
+    ...PartyAddressFields
+  }
+}
+
+mutation UpdatePartyAddress($input: UpdatePartyAddressInput!) {
+  updatePartyAddress(input: $input) {
+    ...PartyAddressFields
+  }
+}
+
+mutation RemovePartyAddress($input: PartyAddressRefInput!) {
+  removePartyAddress(input: $input) {
+    ...PartyAddressFields
+  }
+}

@@ -7,18 +7,28 @@ import {
   type OpenCheckoutOptions,
   type PaymentCheckout,
 } from './index.js';
-import { asRecord, asText, type HostedForm, loadScript, requireBrowser, submitHostedForm } from './shared.js';
+import {
+  asRecord,
+  asText,
+  checkoutModeOf,
+  type HostedForm,
+  loadScript,
+  requireBrowser,
+  submitHostedForm,
+} from './shared.js';
 
 // Razorpay's checkout — `@vritti/vap-sdk/razorpay`.
 //
-// `embedded` (default) posts a form to Razorpay's hosted page; the result goes to core's callback, which verifies it
-// and returns the shopper to the store. `modal` opens checkout.js on the page and resolves with the response, which
-// the store hands to `confirmPaymentAction`.
+// `embedded` posts a form to Razorpay's hosted page; the result goes to core's callback, which verifies it and returns
+// the shopper to the store. `modal` opens checkout.js on the page and resolves with the response, which the store
+// hands to `confirmPaymentAction`. The organization's gateway config in core decides which (its checkout mode, carried
+// in the payload); the plugin's `mode` only covers a payment opened before that setting existed.
 
 export const RAZORPAY_EMBEDDED_CHECKOUT_URL = 'https://api.razorpay.com/v1/checkout/embedded';
 const RAZORPAY_SCRIPT = 'https://checkout.razorpay.com/v1/checkout.js';
 
 export type RazorpayPluginOptions = {
+  // Used only when the payment's payload does not say (opened before the gateway config's checkout mode existed)
   mode?: 'embedded' | 'modal';
 };
 
@@ -111,7 +121,8 @@ export async function openRazorpayModal(
   opts: OpenCheckoutOptions = {},
 ): Promise<GatewayResponse> {
   const Razorpay = await loadRazorpay();
-  const base = checkout.options;
+  // The payload's checkout mode is for the plugin, not checkout.js; its display config (one method) goes through
+  const { checkout_mode: _mode, ...base } = checkout.options;
 
   return new Promise<GatewayResponse>((resolve, reject) => {
     let settled = false;
@@ -158,10 +169,12 @@ export async function openRazorpayModal(
 
 // The Razorpay plugin
 export function razorpay(options: RazorpayPluginOptions = {}): CheckoutPlugin {
-  const mode = options.mode ?? 'embedded';
   return {
     gateways: ['razorpay'],
+    methods: ['upi', 'card', 'netbanking', 'wallet'],
     async open(checkout, opts) {
+      const configured = checkoutModeOf(checkout.options);
+      const mode = configured ? (configured === 'MODAL' ? 'modal' : 'embedded') : (options.mode ?? 'embedded');
       if (mode === 'embedded') {
         submitEmbeddedCheckout(embeddedCheckout(checkout, opts));
         return { kind: 'redirected' };

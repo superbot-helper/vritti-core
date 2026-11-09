@@ -23,10 +23,10 @@ export interface PaymentIntentResponseDto {
   appId: string | null;
   partyId: string | null;
   reference: { type: string; id: string };
+  checkoutId?: string | null;
   description: string | null;
   configId: string;
   gatewayCode: string;
-  bankAccountId: string | null;
   type: PaymentChannelType;
   idempotencyKey: string;
   receipt: string;
@@ -36,12 +36,14 @@ export interface PaymentIntentResponseDto {
   status: PaymentIntentStatusValue;
   providerOrderId: string | null;
   providerPaymentId: string | null;
-  checkout: Record<string, unknown> | null;
+  // What the browser needs to open the gateway's page or popup
+  launch: Record<string, unknown> | null;
   method: string | null;
   customer: { name?: string; email?: string; phone?: string } | null;
   metadata: Record<string, string> | null;
   returnUrl?: string | null;
-  checkoutUrl?: string | null;
+  // Where the shopper goes back to after a failed or cancelled payment
+  retryUrl?: string | null;
   failureCode: string | null;
   failureMessage: string | null;
   succeededAt: string | null;

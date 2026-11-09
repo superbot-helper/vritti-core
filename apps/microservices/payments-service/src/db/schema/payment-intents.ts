@@ -1,5 +1,16 @@
 import { sql } from '@vritti/api-sdk/drizzle-orm';
-import { bigint, char, index, jsonb, text, timestamp, unique, uuid, varchar } from '@vritti/api-sdk/drizzle-pg-core';
+import {
+  bigint,
+  char,
+  index,
+  jsonb,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from '@vritti/api-sdk/drizzle-pg-core';
 import { paymentChannelTypeEnum, paymentIntentStatusEnum } from './enums';
 import { paymentsSchema } from './payments-schema';
 import { organizationIdColumn, orgIsolationPolicy } from './workspace-scope';
@@ -23,12 +34,14 @@ export const paymentIntents = paymentsSchema.table(
     partyId: uuid('party_id'),
     configId: uuid('config_id').notNull(),
     gatewayCode: varchar('gateway_code', { length: 100 }).notNull(),
-    bankAccountId: uuid('bank_account_id'),
     type: paymentChannelTypeEnum('type').notNull(),
     // What is being paid for, as the caller names it — an order, a booking, a donation. Opaque to payments:
     // it is handed back on every event so the owner can act on it
     referenceType: varchar('reference_type', { length: 100 }).notNull(),
     referenceId: varchar('reference_id', { length: 200 }).notNull(),
+    // The commerce checkout this payment pays for, when it pays one. No foreign key — the row lives in commerce. A
+    // checkout can have several payments (a failed one, a retry, another gateway); only one of them can pay it
+    checkoutId: uuid('checkout_id'),
     description: varchar('description', { length: 500 }),
     idempotencyKey: varchar('idempotency_key', { length: 100 }).notNull(),
     receipt: varchar('receipt', { length: 40 }).notNull(),
@@ -37,8 +50,9 @@ export const paymentIntents = paymentsSchema.table(
     status: paymentIntentStatusEnum('status').notNull().default('CREATED'),
     providerOrderId: varchar('provider_order_id', { length: 100 }),
     providerPaymentId: varchar('provider_payment_id', { length: 100 }),
-    // What the client launcher needs to open the gateway's checkout — public values only (key id, order id)
-    checkout: jsonb('checkout').$type<Record<string, unknown>>(),
+    // What the browser needs to open the gateway's page or popup — public values only (key id, order id, session,
+    // checkout mode). Not commerce's checkout
+    launch: jsonb('launch').$type<Record<string, unknown>>(),
     method: varchar('method', { length: 30 }),
     fee: bigint('fee', { mode: 'bigint' }),
     tax: bigint('tax', { mode: 'bigint' }),
@@ -46,7 +60,7 @@ export const paymentIntents = paymentsSchema.table(
     metadata: jsonb('metadata').$type<Record<string, string>>(),
     // Where core's hosted checkout callback sends the shopper after a payment, and back to on a failure or cancel
     returnUrl: varchar('return_url', { length: 2048 }),
-    checkoutUrl: varchar('checkout_url', { length: 2048 }),
+    retryUrl: varchar('retry_url', { length: 2048 }),
     failureCode: varchar('failure_code', { length: 100 }),
     failureMessage: text('failure_message'),
     succeededAt: timestamp('succeeded_at', { withTimezone: true }),
@@ -61,8 +75,21 @@ export const paymentIntents = paymentsSchema.table(
     unique('uq_payment_intents_org_idempotency_key').on(table.organizationId, table.idempotencyKey),
     index('idx_payment_intents_org_status').on(table.organizationId, table.status),
     index('idx_payment_intents_provider_order').on(table.providerOrderId),
+    // One intent per gateway order within an account, so a webhook or a read-back can only ever land on one payment
+    uniqueIndex('uq_payment_intents_provider_order')
+      .on(table.configId, table.providerOrderId)
+      .where(sql`provider_order_id IS NOT NULL`),
     index('idx_payment_intents_config').on(table.configId),
     index('idx_payment_intents_reference').on(table.organizationId, table.referenceType, table.referenceId),
+    index('idx_payment_intents_checkout').on(table.organizationId, table.checkoutId),
+    // A checkout has at most one active payment: Pay cancels the one still waiting before it opens another
+    uniqueIndex('uq_payment_intents_one_active_per_checkout')
+      .on(table.organizationId, table.checkoutId)
+      .where(sql`checkout_id IS NOT NULL AND status IN ('CREATED', 'REQUIRES_ACTION', 'PROCESSING')`),
+    // Whatever is paid for has at most one active payment: paying again for the same reference replaces the waiting one
+    uniqueIndex('uq_payment_intents_one_active_per_reference')
+      .on(table.organizationId, table.referenceType, table.referenceId)
+      .where(sql`status IN ('CREATED', 'REQUIRES_ACTION', 'PROCESSING')`),
     index('idx_payment_intents_expiry').on(table.status, table.expiresAt),
     orgIsolationPolicy(),
   ],
